@@ -1,0 +1,27 @@
+{
+  "name": "@archlens/shared",
+  "version": "1.0.0",
+  "description": "Shared Firebase configuration and construction constants for ArchLens",
+  "main": "index.js",
+  "type": "module",
+  "types": "firebase.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.js",
+      "default": "./index.js"
+    },
+    "./firebase": {
+      "types": "./firebase.d.ts",
+      "default": "./firebase.ts"
+    },
+    "./constants": "./constants.js"
+  },
+  "keywords": [
+    "firebase",
+    "construction",
+    "estimator",
+    "shared"
+  ],
+  "author": "ArchLens Team",
+  "license": "MIT"
+}

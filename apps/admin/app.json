@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "entryPoint": "./index.js",
+    "name": "ArchLens Admin",
+    "slug": "archlens-admin",
+    "version": "1.0.0",
+    "scheme": "archlens-admin",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTabletMode": true,
+      "bundleIdentifier": "com.archlens.admin"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.archlens.admin"
+    },
+    "web": {}
+  }
+}

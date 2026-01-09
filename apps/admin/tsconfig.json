@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "paths": {
+      "@archlens/shared": ["../../packages/shared/index.js"],
+      "@archlens/shared/firebase": ["../../packages/shared/firebase.js"]
+    }
+  },
+  "extends": "expo/tsconfig.base",
+  "include": ["src"],
+  "exclude": ["node_modules", "**/*.spec.ts"]
+}
