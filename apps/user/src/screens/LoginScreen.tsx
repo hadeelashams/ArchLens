@@ -127,7 +127,7 @@ const styles = StyleSheet.create({
     boxShadow: '0 10px 15px rgba(0, 0, 0, 0.2)',
     elevation: 12,
   },
-  card: { flex: 1, backgroundColor: '#ffffff', borderRadius: 22``, overflow: 'hidden', flexDirection: 'row' },
+  card: { flex: 1, backgroundColor: '#ffffff', borderRadius: `22`, overflow: 'hidden', flexDirection: 'row' },
   formSection: { 
     flex: 2, // Increased flex to allow text to fit better
     padding: 25, 
