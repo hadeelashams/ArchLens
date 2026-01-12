@@ -7,8 +7,8 @@
   "types": "firebase.d.ts",
   "exports": {
     ".": {
-      "types": "./index.js",
-      "default": "./index.js"
+      "types": "./firebase.d.ts",
+      "default": "./firebase.ts"
     },
     "./firebase": {
       "types": "./firebase.d.ts",
