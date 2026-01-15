@@ -1,235 +1,461 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  View, Text, TouchableOpacity, StyleSheet, Alert, Modal, 
-  TextInput, Dimensions, ActivityIndicator, Platform, ScrollView 
+  View, Text, TouchableOpacity, StyleSheet, Modal, 
+  TextInput, ScrollView, Platform, Dimensions, FlatList, ActivityIndicator, Alert 
 } from 'react-native';
-import { auth, db, createDocument, updateDocument, deleteDocument } from '@archlens/shared';
-import { signOut } from 'firebase/auth';
+import { db, createDocument, updateDocument, deleteDocument, CONSTRUCTION_HIERARCHY } from '@archlens/shared';
 import { collection, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore';
-import { MaterialIcons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
+import { Feather, MaterialIcons } from '@expo/vector-icons';
+import { signOut } from 'firebase/auth';
+import { auth } from '@archlens/shared';
 
 const { width } = Dimensions.get('window');
-const isWeb = Platform.OS === 'web';
+const BLUE_ARCH = '#2b3348';
+const BG_LIGHT = '#ffffff';
 
 export default function DashboardScreen() {
-  const [groupedMaterials, setGroupedMaterials] = useState<any>({});
-  const [totalCount, setTotalCount] = useState(0);
+  // --- DATA STATE ---
+  const [materials, setMaterials] = useState<any[]>([]);
+  const [filteredMaterials, setFilteredMaterials] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saveLoading, setSaveLoading] = useState(false);
+
+  // --- UI STATE ---
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterCategory, setFilterCategory] = useState('All');
   const [isModalVisible, setModalVisible] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  // Form State
-  const [category, setCategory] = useState('');
-  const [type, setType] = useState('');
+  // --- FORM STATE ---
+  const [selCategory, setSelCategory] = useState<string | null>(null);
+  const [selSubCategory, setSelSubCategory] = useState<string | null>(null);
+  const [selType, setSelType] = useState<string | null>(null);
+  
+  // Inputs
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
   const [unit, setUnit] = useState('');
-  const [qtyPerSqFt, setQtyPerSqFt] = useState('');
+  
+  // FIX: New State for Wall Dimensions
+  const [dimensions, setDimensions] = useState(''); 
 
+  // 1. Fetch Data
   useEffect(() => {
-    const q = query(collection(db, 'materials'), orderBy('category', 'asc'));
+    const q = query(collection(db, 'materials'), orderBy('updatedAt', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const flatData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setTotalCount(flatData.length);
-
-      const grouped = flatData.reduce((acc: any, item: any) => {
-        const cat = item.category || 'Uncategorized';
-        const typ = item.type || 'General';
-        if (!acc[cat]) acc[cat] = {};
-        if (!acc[cat][typ]) acc[cat][typ] = [];
-        acc[cat][typ].push(item);
-        return acc;
-      }, {});
-
-      setGroupedMaterials(grouped);
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setMaterials(data);
+      setFilteredMaterials(data);
       setLoading(false);
     });
     return unsubscribe;
   }, []);
 
-  const handleLogout = async () => {
-    if (isWeb) {
-      if (window.confirm("Logout from Admin Panel?")) await signOut(auth);
+  // 2. Filter Logic
+  useEffect(() => {
+    let result = materials;
+    if (filterCategory !== 'All') {
+      result = result.filter(m => m.category === filterCategory);
+    }
+    if (searchQuery) {
+      result = result.filter(m => 
+        m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (m.subCategory && m.subCategory.toLowerCase().includes(searchQuery.toLowerCase()))
+      );
+    }
+    setFilteredMaterials(result);
+  }, [searchQuery, filterCategory, materials]);
+
+  // --- FIXED HIERARCHY PARSERS ---
+
+  /**
+   * FIX: Universal parser that doesn't rely on specific keys like 'styles' or 'classifications'.
+   * It attempts to find any object-based children to populate the Sub-Category list.
+   */
+  const getSubOptions = (category: string) => {
+    if (!category) return [];
+    const root = CONSTRUCTION_HIERARCHY[category as keyof typeof CONSTRUCTION_HIERARCHY];
+    if (!root) return [];
+
+    // 1. Check known keys (Priority)
+    if ('classifications' in root) return Object.keys(root.classifications);
+    if ('styles' in root) return Object.keys(root.styles);
+    if ('types' in root && !Array.isArray(root.types)) return Object.keys(root.types);
+    if ('areas' in root) return Object.keys(root.areas);
+
+    // 2. Fallback: Return any top-level keys that are objects (Generic Handler)
+    return Object.keys(root).filter(key => {
+      const val = (root as any)[key];
+      return typeof val === 'object' && val !== null;
+    });
+  };
+
+  /**
+   * FIX: Universal leaf parser. It digs into the sub-category to find the list of types.
+   * Handles both Arrays (simple lists) and Objects (complex definitions).
+   */
+  const getLeafOptions = (category: string, sub: string) => {
+    if (!category || !sub) return [];
+    const root = CONSTRUCTION_HIERARCHY[category as keyof typeof CONSTRUCTION_HIERARCHY] as any;
+    if (!root) return [];
+
+    // Find the specific sub-node
+    let subNode = 
+      root.classifications?.[sub] || 
+      root.styles?.[sub] || 
+      root.areas?.[sub] || 
+      root.finishingTypes?.[sub] ||
+      root.types?.[sub] ||
+      root[sub]; // Generic fallback
+
+    if (!subNode) return [];
+
+    // If it's an Array, return it directly
+    if (Array.isArray(subNode)) return subNode;
+    
+    // If it's an object with a 'types' array
+    if (subNode.types && Array.isArray(subNode.types)) return subNode.types;
+
+    // If it's an object, return its keys
+    if (typeof subNode === 'object') return Object.keys(subNode);
+
+    return [];
+  };
+
+  // Helper to check if current category needs dimensions
+  const isWallCategory = () => {
+    return selCategory?.toLowerCase().includes('wall');
+  };
+
+  // 3. CRUD Operations
+  const handleSave = async () => {
+    if (!selCategory || !name || !price) {
+      Alert.alert("Missing Fields", "Please fill Category, Name, and Price.");
       return;
     }
-    Alert.alert("Logout", "Sign out?", [{ text: "Cancel" }, { text: "Logout", onPress: () => signOut(auth) }]);
-  };
 
-  const openModal = (item?: any) => {
-    if (item) {
-      setEditingId(item.id);
-      setCategory(item.category);
-      setType(item.type);
-      setName(item.name);
-      setPrice(item.pricePerUnit.toString());
-      setUnit(item.unit);
-      setQtyPerSqFt(item.quantityPerSqFt.toString());
-    } else {
-      setEditingId(null);
-      setCategory(''); setType(''); setName(''); setPrice(''); setUnit(''); setQtyPerSqFt('');
+    if (isWallCategory() && !dimensions) {
+      Alert.alert("Missing Dimension", "Wall materials require dimensions (LxWxH) for volume calculation.");
+      return;
     }
-    setModalVisible(true);
-  };
 
-  const handleSave = async () => {
-    if (!category || !type || !name || !price || !unit || !qtyPerSqFt) return Alert.alert("Error", "Fill all fields");
+    // FIX: Hierarchy Depth Logic
+    // If hierarchy is shallow (Foundation), 'selType' might be null. 
+    // We use 'selSubCategory' as the type in that case to avoid empty fields.
+    const finalType = selType || selSubCategory || 'Standard';
 
-    const materialData = {
-      category: category.trim(),
-      type: type.trim(),
+    const payload = {
+      category: selCategory,
+      subCategory: selSubCategory || '',
+      type: finalType, 
       name: name.trim(),
       pricePerUnit: parseFloat(price),
       unit: unit.trim(),
-      quantityPerSqFt: parseFloat(qtyPerSqFt),
+      // FIX: Save dimensions for walls
+      dimensions: isWallCategory() ? dimensions.trim() : null, 
       updatedAt: serverTimestamp()
     };
 
     setSaveLoading(true);
     try {
-      if (editingId) await updateDocument('materials', editingId, materialData);
-      else await createDocument('materials', materialData);
+      if (editingId) {
+        await updateDocument('materials', editingId, payload);
+      } else {
+        await createDocument('materials', payload);
+      }
       setModalVisible(false);
-    } catch (e) { Alert.alert("Error", "Save failed"); }
-    finally { setSaveLoading(false); }
+      resetForm();
+    } catch (e: any) {
+      Alert.alert("Error", e.message);
+    } finally {
+      setSaveLoading(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (Platform.OS === 'web') {
+      if (confirm("Delete this material?")) await deleteDocument('materials', id);
+    } else {
+      Alert.alert("Delete", "Are you sure?", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: () => deleteDocument('materials', id) }
+      ]);
+    }
+  };
+
+  const resetForm = () => {
+    setEditingId(null);
+    setSelCategory(null); setSelSubCategory(null); setSelType(null);
+    setName(''); setPrice(''); setUnit(''); setDimensions('');
+  };
+
+  const openEdit = (item: any) => {
+    setEditingId(item.id);
+    setSelCategory(item.category);
+    setSelSubCategory(item.subCategory);
+    setSelType(item.type);
+    setName(item.name);
+    setPrice(item.pricePerUnit.toString());
+    setUnit(item.unit);
+    setDimensions(item.dimensions || '');
+    setModalVisible(true);
+  };
+
+  const SelectorGroup = ({ label, options, selected, onSelect }: any) => {
+    if (!options || options.length === 0) return null;
+    return (
+      <View style={styles.selectorContainer}>
+        <Text style={styles.label}>{label}</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipScroll}>
+          {options.map((opt: string) => (
+            <TouchableOpacity 
+              key={opt} 
+              style={[styles.chip, selected === opt && styles.chipActive]}
+              onPress={() => onSelect(opt)}
+            >
+              <Text style={[styles.chipText, selected === opt && styles.chipTextActive]}>{opt}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+    );
   };
 
   return (
-    <ScrollView style={styles.mainScroll} contentContainerStyle={styles.centerContainer}>
-      <View style={styles.responsiveContent}>
-        
-        {/* TOP STATS ROW */}
-        <View style={styles.statsRow}>
-          <View style={styles.statCard}>
-            <Text style={styles.statVal}>{totalCount}</Text>
-            <Text style={styles.statLab}>Total Materials</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statVal}>{Object.keys(groupedMaterials).length}</Text>
-            <Text style={styles.statLab}>Categories</Text>
-          </View>
-          <TouchableOpacity style={[styles.statCard, styles.addStatCard]} onPress={() => openModal()}>
-            <MaterialIcons name="add-circle" size={32} color="white" />
-            <Text style={styles.addStatText}>Add Item</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.statCard, styles.logoutStatCard]} onPress={handleLogout}>
-            <MaterialIcons name="power-settings-new" size={24} color="#ef4444" />
-            <Text style={styles.logoutStatText}>Logout</Text>
-          </TouchableOpacity>
+    <View style={styles.container}>
+      
+      {/* SIDEBAR */}
+      <View style={styles.sidebar}>
+        <View style={styles.logoArea}>
+          <Text style={styles.logoText}>ARCH LENS</Text>
+          <Text style={styles.logoSub}>ADMIN CONSOLE</Text>
         </View>
-
-        <Text style={styles.sectionHeader}>Material Rate Master</Text>
-
-        {loading ? <ActivityIndicator size="large" color="#0d9488" /> : (
-          Object.keys(groupedMaterials).map((catName) => (
-            <View key={catName} style={styles.categoryCard}>
-              <LinearGradient colors={['#315b76', '#4a7a96']} style={styles.catHeader}>
-                <Text style={styles.catTitle}>{catName.toUpperCase()}</Text>
-              </LinearGradient>
-
-              {Object.keys(groupedMaterials[catName]).map((typeName) => (
-                <View key={typeName} style={styles.typeBox}>
-                  <Text style={styles.typeTitle}>{typeName}</Text>
-                  
-                  {/* DATA TABLE HEADERS */}
-                  <View style={styles.tableHeader}>
-                    <Text style={[styles.hText, {flex: 3}]}>Material Name</Text>
-                    <Text style={[styles.hText, {flex: 1}]}>Unit</Text>
-                    <Text style={[styles.hText, {flex: 1}]}>Rate</Text>
-                    <Text style={[styles.hText, {flex: 1, textAlign: 'right'}]}>Actions</Text>
-                  </View>
-
-                  {groupedMaterials[catName][typeName].map((item: any) => (
-                    <View key={item.id} style={styles.row}>
-                      <Text style={[styles.rText, {flex: 3, fontWeight: '600'}]}>{item.name}</Text>
-                      <Text style={[styles.rText, {flex: 1}]}>{item.unit}</Text>
-                      <Text style={[styles.rText, {flex: 1, color: '#0d9488', fontWeight: 'bold'}]}>₹{item.pricePerUnit}</Text>
-                      <View style={styles.rowActions}>
-                        <TouchableOpacity onPress={() => openModal(item)}><MaterialIcons name="edit" size={20} color="#315b76" /></TouchableOpacity>
-                        <TouchableOpacity onPress={() => deleteDocument('materials', item.id)}><MaterialIcons name="delete" size={20} color="#ef4444" /></TouchableOpacity>
-                      </View>
-                    </View>
-                  ))}
-                </View>
-              ))}
-            </View>
-          ))
-        )}
+        <TouchableOpacity style={styles.logoutBtn} onPress={() => signOut(auth)}>
+          <MaterialIcons name="logout" size={20} color="#cbd5e1" />
+          <Text style={styles.logoutText}>Sign Out</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* MODAL (Responsive Width) */}
+      {/* MAIN CONTENT */}
+      <View style={styles.mainContent}>
+        
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.pageTitle}>Material Rate Master</Text>
+          <View style={styles.headerActions}>
+            <View style={styles.searchBox}>
+              <Feather name="search" size={18} color="#64748b" />
+              <TextInput 
+                style={styles.searchInput} 
+                placeholder="Search materials..." 
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+              />
+            </View>
+            <TouchableOpacity style={styles.primaryBtn} onPress={() => { resetForm(); setModalVisible(true); }}>
+              <Feather name="plus" size={18} color="#fff" />
+              <Text style={styles.btnText}>Add Material</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Filters */}
+        <View style={styles.filterRow}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {['All', ...Object.keys(CONSTRUCTION_HIERARCHY)].map(cat => (
+              <TouchableOpacity 
+                key={cat} 
+                style={[styles.filterChip, filterCategory === cat && styles.filterChipActive]}
+                onPress={() => setFilterCategory(cat)}
+              >
+                <Text style={[styles.filterText, filterCategory === cat && { color: '#fff' }]}>{cat}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+
+        {/* Data Table */}
+        <View style={styles.tableContainer}>
+          <View style={styles.tableHeader}>
+            <Text style={[styles.th, { flex: 2 }]}>MATERIAL</Text>
+            <Text style={[styles.th, { flex: 2 }]}>HIERARCHY (Cat / Sub)</Text>
+            <Text style={[styles.th, { flex: 1.5 }]}>PRICE DETAILS</Text>
+            <Text style={[styles.th, { flex: 0.5, textAlign: 'right' }]}>EDIT</Text>
+          </View>
+
+          {loading ? <ActivityIndicator style={{ margin: 50 }} size="large" color={BLUE_ARCH} /> : (
+            <FlatList
+              data={filteredMaterials}
+              keyExtractor={item => item.id}
+              renderItem={({ item }) => (
+                <View style={styles.tr}>
+                  <View style={{ flex: 2 }}>
+                    <Text style={[styles.td, { fontWeight: '600', color: '#1e293b' }]}>{item.name}</Text>
+                    {/* Display Dimensions if available */}
+                    {item.dimensions && (
+                       <Text style={{fontSize: 11, color: '#64748b'}}>Dim: {item.dimensions} (in)</Text>
+                    )}
+                  </View>
+                  
+                  <View style={{ flex: 2 }}>
+                    <View style={styles.badge}><Text style={styles.badgeText}>{item.category}</Text></View>
+                    <Text style={styles.subText}>
+                      {item.subCategory} {item.type !== item.subCategory ? `› ${item.type}` : ''}
+                    </Text>
+                  </View>
+                  
+                  <Text style={[styles.td, { flex: 1.5, fontWeight: 'bold', color: '#059669' }]}>
+                    ₹{item.pricePerUnit} <Text style={{fontSize: 10, color: '#94a3b8'}}>/{item.unit}</Text>
+                  </Text>
+                  
+                  <View style={[styles.td, { flex: 0.5, flexDirection: 'row', justifyContent: 'flex-end', gap: 15 }]}>
+                    <TouchableOpacity onPress={() => openEdit(item)}><Feather name="edit-2" size={18} color={BLUE_ARCH} /></TouchableOpacity>
+                    <TouchableOpacity onPress={() => handleDelete(item.id)}><Feather name="trash-2" size={18} color="#ef4444" /></TouchableOpacity>
+                  </View>
+                </View>
+              )}
+            />
+          )}
+        </View>
+      </View>
+
+      {/* --- ADD/EDIT MODAL --- */}
       <Modal visible={isModalVisible} animationType="fade" transparent>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{editingId ? 'Edit Material' : 'Add New Material'}</Text>
-            <TextInput style={styles.input} placeholder="Category (e.g. Wall)" value={category} onChangeText={setCategory} />
-            <TextInput style={styles.input} placeholder="Type (e.g. Brick)" value={type} onChangeText={setType} />
-            <TextInput style={styles.input} placeholder="Material Name" value={name} onChangeText={setName} />
-            <View style={{flexDirection: 'row', gap: 10}}>
-              <TextInput style={[styles.input, {flex: 1}]} placeholder="Rate" value={price} onChangeText={setPrice} keyboardType="numeric" />
-              <TextInput style={[styles.input, {flex: 1}]} placeholder="Unit" value={unit} onChangeText={setUnit} />
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{editingId ? 'Edit Material' : 'New Material'}</Text>
+              <TouchableOpacity onPress={() => setModalVisible(false)}><Feather name="x" size={24} color="#64748b" /></TouchableOpacity>
             </View>
-            <TextInput style={styles.input} placeholder="Qty Constant (e.g. 0.45)" value={qtyPerSqFt} onChangeText={setQtyPerSqFt} keyboardType="numeric" />
-            
-            <View style={styles.modalBtns}>
-              <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.cancelBtn}><Text>Cancel</Text></TouchableOpacity>
-              <TouchableOpacity onPress={handleSave} style={styles.saveBtn} disabled={saveLoading}>
-                {saveLoading ? <ActivityIndicator color="#fff" /> : <Text style={{color: '#fff', fontWeight: 'bold'}}>Save Material</Text>}
-              </TouchableOpacity>
-            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              
+              {/* 1. Root Category */}
+              <SelectorGroup 
+                label="1. Root Category" 
+                options={Object.keys(CONSTRUCTION_HIERARCHY)} 
+                selected={selCategory} 
+                onSelect={(val: string) => {
+                  setSelCategory(val); setSelSubCategory(null); setSelType(null);
+                }} 
+              />
+
+              {/* 2. Sub-Category Selector */}
+              {selCategory && (
+                <SelectorGroup 
+                  label="2. Classification" 
+                  options={getSubOptions(selCategory)} 
+                  selected={selSubCategory} 
+                  onSelect={(val: string) => {
+                    setSelSubCategory(val); setSelType(null);
+                  }} 
+                />
+              )}
+
+              {/* 3. Type Selector */}
+              {/* Only show if options exist. Foundation might not have this layer. */}
+              {selCategory && selSubCategory && getLeafOptions(selCategory, selSubCategory).length > 0 && (
+                <SelectorGroup 
+                  label="3. Specific Type" 
+                  options={getLeafOptions(selCategory, selSubCategory)} 
+                  selected={selType} 
+                  onSelect={setSelType} 
+                />
+              )}
+
+              {/* 4. Details */}
+              <Text style={styles.label}>4. Material Details</Text>
+              <TextInput 
+                style={styles.input} 
+                placeholder="Material Name (e.g. Red Brick / 20mm Aggregates)" 
+                value={name} 
+                onChangeText={setName} 
+              />
+              
+              {/* FIX: Conditional Wall Dimensions Input */}
+              {isWallCategory() && (
+                <View style={{ marginTop: 10 }}>
+                   <Text style={[styles.label, {color: '#d97706'}]}>Wall Block Size (L x W x H)</Text>
+                   <TextInput 
+                     style={[styles.input, { borderColor: '#fcd34d', backgroundColor: '#fffbeb' }]} 
+                     placeholder="e.g. 9 x 4 x 3 (Inches)" 
+                     value={dimensions} 
+                     onChangeText={setDimensions} 
+                   />
+                   <Text style={{fontSize: 11, color: '#94a3b8', marginTop: 4}}>Required for wall volume calculation.</Text>
+                </View>
+              )}
+
+              <View style={{ flexDirection: 'row', gap: 15, marginTop: 15 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.label}>Price (₹)</Text>
+                  <TextInput style={styles.input} placeholder="0.00" keyboardType="numeric" value={price} onChangeText={setPrice} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.label}>Unit</Text>
+                  <TextInput style={styles.input} placeholder="e.g. Bag, Nos, Cft" value={unit} onChangeText={setUnit} />
+                </View>
+              </View>
+
+            </ScrollView>
+
+            <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={saveLoading}>
+              {saveLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>Save Material</Text>}
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
-    </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  mainScroll: { flex: 1, backgroundColor: '#f0f4f8' },
-  centerContainer: { alignItems: 'center', paddingVertical: 20 },
-  responsiveContent: { 
-    width: isWeb ? 1100 : width * 0.95, // Center content on Web
-    paddingHorizontal: isWeb ? 20 : 5 
-  },
-  
-  // Stats Row
-  statsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 15, marginBottom: 30 },
-  statCard: { 
-    flex: 1, minWidth: isWeb ? 200 : '45%', 
-    backgroundColor: '#fff', padding: 20, borderRadius: 16, 
-    elevation: 4, alignItems: 'center', justifyContent: 'center' 
-  },
-  statVal: { fontSize: 24, fontWeight: 'bold', color: '#315b76' },
-  statLab: { fontSize: 12, color: '#64748b', marginTop: 5, fontWeight: '600' },
-  addStatCard: { backgroundColor: '#315b76' },
-  addStatText: { color: '#fff', fontWeight: 'bold', marginTop: 5 },
-  logoutStatCard: { borderLeftWidth: 4, borderLeftColor: '#ef4444' },
-  logoutStatText: { color: '#ef4444', fontWeight: 'bold', fontSize: 12, marginTop: 5 },
+  container: { flex: 1, flexDirection: 'row', backgroundColor: BG_LIGHT },
+  sidebar: { width: 180, backgroundColor: BLUE_ARCH, paddingVertical: 30, paddingHorizontal: 20, justifyContent: 'space-between' },
+  logoArea: { marginBottom: 40 },
+  logoText: { color: '#fff', fontSize: 20, fontWeight: '900', letterSpacing: 1 },
+  logoSub: { color: '#94a3b8', fontSize: 12, marginTop: 5, letterSpacing: 2 },
+  logoutBtn: { flexDirection: 'row', alignItems: 'center', padding: 12 },
+  logoutText: { color: '#cbd5e1', marginLeft: 12 },
 
-  sectionHeader: { fontSize: 22, fontWeight: 'bold', color: '#1e293b', marginBottom: 20, marginLeft: 5 },
-  
-  // Category Cards
-  categoryCard: { backgroundColor: '#fff', borderRadius: 20, overflow: 'hidden', marginBottom: 25, elevation: 3 },
-  catHeader: { padding: 15 },
-  catTitle: { color: '#fff', fontWeight: 'bold', letterSpacing: 1, fontSize: 14 },
-  
-  typeBox: { padding: 15, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-  typeTitle: { fontSize: 16, fontWeight: 'bold', color: '#315b76', marginBottom: 10 },
+  mainContent: { flex: 1, padding: 30 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  pageTitle: { fontSize: 28, fontWeight: 'bold', color: '#1e293b' },
+  headerActions: { flexDirection: 'row', gap: 15 },
+  searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 8, paddingHorizontal: 15, width: 300, borderWidth: 1, borderColor: '#e2e8f0' },
+  searchInput: { flex: 1, paddingVertical: 12, marginLeft: 10, outlineStyle: 'none' } as any,
+  primaryBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: BLUE_ARCH, paddingHorizontal: 20, borderRadius: 8, gap: 8 },
+  btnText: { color: '#fff', fontWeight: 'bold' },
 
-  // Table Styles
-  tableHeader: { flexDirection: 'row', backgroundColor: '#f8fafc', padding: 10, borderRadius: 8 },
-  hText: { fontSize: 11, fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase' },
-  row: { flexDirection: 'row', padding: 12, alignItems: 'center', borderBottomWidth: 0.5, borderBottomColor: '#f1f5f9' },
-  rText: { fontSize: 14, color: '#334155' },
-  rowActions: { flex: 1, flexDirection: 'row', justifyContent: 'flex-end', gap: 15 },
+  filterRow: { marginBottom: 20, height: 40 },
+  filterChip: { paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#fff', borderRadius: 20, marginRight: 10, borderWidth: 1, borderColor: '#e2e8f0' },
+  filterChipActive: { backgroundColor: BLUE_ARCH, borderColor: BLUE_ARCH },
+  filterText: { fontSize: 13, color: '#64748b', fontWeight: '600' },
 
-  // Modal Responsive
+  tableContainer: { flex: 1, backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', overflow: 'hidden' },
+  tableHeader: { flexDirection: 'row', backgroundColor: '#f1f5f9', padding: 15, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
+  th: { fontSize: 12, fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase' },
+  tr: { flexDirection: 'row', padding: 15, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', alignItems: 'center' } as any,
+  td: { fontSize: 14, color: '#334155' },
+  badge: { backgroundColor: '#e0f2fe', alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, marginBottom: 2 },
+  badgeText: { color: '#0369a1', fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },
+  subText: { fontSize: 12, color: '#94a3b8' },
+
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-  modalContent: { backgroundColor: '#fff', width: isWeb ? 500 : '90%', borderRadius: 24, padding: 30 },
-  modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 20, color: '#315b76' },
-  input: { borderBottomWidth: 1.5, borderBottomColor: '#e2e8f0', padding: 12, marginBottom: 15, fontSize: 15 },
-  modalBtns: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 10 },
-  cancelBtn: { padding: 15 },
-  saveBtn: { backgroundColor: '#0d9488', paddingVertical: 12, paddingHorizontal: 25, borderRadius: 10 }
+  modalContent: { backgroundColor: '#fff', width: 600, borderRadius: 16, padding: 30, maxHeight: '95%', ...Platform.select({ web: { boxShadow: '0 10px 25px rgba(0,0,0,0.1)' } }) },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#1e293b' },
+  
+  selectorContainer: { marginBottom: 20 },
+  chipScroll: { gap: 8 },
+  chip: { paddingVertical: 8, paddingHorizontal: 15, backgroundColor: '#f8fafc', borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0' },
+  chipActive: { backgroundColor: BLUE_ARCH, borderColor: BLUE_ARCH },
+  chipText: { fontSize: 13, color: '#475569' },
+  chipTextActive: { color: '#fff', fontWeight: '600' },
+
+  label: { fontSize: 13, fontWeight: '600', color: '#475569', marginBottom: 8, marginTop: 10 },
+  input: { backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, padding: 12, fontSize: 14, outlineStyle: 'none' } as any,
+  
+  saveBtn: { backgroundColor: BLUE_ARCH, padding: 15, borderRadius: 8, alignItems: 'center', marginTop: 25 },
+  saveBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
 });

@@ -59,8 +59,7 @@ function AppContent() {
             name="Dashboard" 
             component={DashboardScreen} 
             options={{ 
-              title: 'ArchLens Admin Panel', 
-              headerShown: true,
+              
               headerLeft: () => null // Removes back arrow after login
             }}
           />

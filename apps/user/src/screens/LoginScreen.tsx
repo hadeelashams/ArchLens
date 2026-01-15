@@ -1,17 +1,31 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Dimensions, ActivityIndicator } from 'react-native';
+import { 
+  View, 
+  Text, 
+  TextInput, 
+  TouchableOpacity, 
+  StyleSheet, 
+  Alert, 
+  Dimensions, 
+  ActivityIndicator, 
+  ImageBackground,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform
+} from 'react-native';
+// KEEPING YOUR EXACT LINKS
 import { auth } from '@archlens/shared';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { getUserById } from '../services/userService';
-import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 export default function LoginScreen({ navigation }: any) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false); // New state for hide/show
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -22,8 +36,6 @@ export default function LoginScreen({ navigation }: any) {
     setLoading(true);
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
-      
-      // Verify user exists in Firestore
       const userProfile = await getUserById(userCredential.user.uid);
       if (!userProfile) {
         await auth.signOut();
@@ -31,153 +43,203 @@ export default function LoginScreen({ navigation }: any) {
         return;
       }
     } catch (error: any) {
-      let message = "Invalid email or password. Please check your details.";
-      Alert.alert("Login Failed", message);
+      Alert.alert("Login Failed", "Invalid email or password.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <View style={styles.container}>
-      <LinearGradient colors={['#60889c', '#315b76']} style={styles.fullBackground} />
-      <Text style={styles.mainTitle}>ARCH LENS</Text>
-      <Text style={{ fontSize: 15, fontFamily: 'sans', opacity: 0.7, bottom: 75, color: '#ffffff' }}>
-      Smart Estimation & Plan Analysis Platform
-</Text>
+    <KeyboardAvoidingView 
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={styles.container}
+    >
+      <ScrollView contentContainerStyle={{ flexGrow: 1 }} bounces={false}>
+        
+        <ImageBackground 
+          source={{ uri: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=2070&auto=format&fit=crop' }} 
+          style={styles.headerImage}
+        >
+          <View style={styles.curveWrapper}>
+            <View style={styles.whiteCurve} />
+          </View>
+        </ImageBackground>
 
+        <View style={styles.formContent}>
+          {/* TITLE - Gap reduced significantly by negative marginTop */}
+          <Text style={styles.archLensTitle}>ARCH LENS</Text>
+          <Text style={styles.descriptionHeader}>Plan Your Home</Text>
 
-      <View style={styles.shadowWrapper}>
-        <View style={styles.card}>
-          {/* Sloped decorative background on the right */}
-          <LinearGradient
-            colors={['#abe4e4', '#ffffff']}
-            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-          />
-
-          <View style={styles.formSection}>
-            {/* BRAND TEXT MOVED HERE */}
-           
-            <View style={styles.headerGroup}>
-              <Text style={styles.title}>Welcome Back</Text>
-              <Text style={styles.subtitle}>User Login</Text>
+          <View style={styles.inputContainer}>
+            
+            {/* Email Label & Box */}
+            <Text style={styles.label}>Email Address</Text>
+            <View style={styles.inputBox}>
+              <MaterialIcons name="email" size={20} color="#335c77" />
+              <TextInput
+                style={styles.inputField}
+                placeholder="name@example.com"
+                placeholderTextColor="#94a3b8"
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                keyboardType="email-address"
+              />
             </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Email Address</Text>
-              <View style={styles.inputWrapper}>
-                <TextInput
-                  style={styles.input}
-                  placeholder="name@example.com"
-                  placeholderTextColor="#94a3b8"
-                  value={email}
-                  onChangeText={setEmail}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
+            {/* Password Label & Box */}
+            <Text style={styles.label}>Password</Text>
+            <View style={styles.inputBox}>
+              <MaterialIcons name="lock" size={20} color="#335c77" />
+              <TextInput
+                style={styles.inputField}
+                placeholder="Enter password"
+                placeholderTextColor="#94a3b8"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword} // Toggle logic
+              />
+              <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                <MaterialIcons 
+                  name={showPassword ? "visibility" : "visibility-off"} 
+                  size={20} 
+                  color="#94a3b8" 
                 />
-                <MaterialIcons name="email" size={18} color="#64748b" />
-              </View>
+              </TouchableOpacity>
             </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Password</Text>
-              <View style={styles.inputWrapper}>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter password"
-                  placeholderTextColor="#94a3b8"
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry
-                />
-                <MaterialIcons name="lock" size={18} color="#64748b" />
-              </View>
-            </View>
-
-            <TouchableOpacity style={styles.loginButton} onPress={handleLogin} disabled={loading}>
-              <LinearGradient colors={['#315b76', '#60889c']} style={styles.buttonGradient}>
-                {loading ? <ActivityIndicator color="white" /> : <Text style={styles.loginButtonText}>Login</Text>}
-              </LinearGradient>
+            <TouchableOpacity 
+              style={styles.getStartedBtn} 
+              onPress={handleLogin} 
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <Text style={styles.btnText}>Login</Text>
+              )}
             </TouchableOpacity>
 
-            <View style={styles.signupContainer}>
-                <Text style={styles.signupText}>New user?</Text>
-                <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-                  <Text style={styles.signupLink}> Create Account</Text>
-                </TouchableOpacity>
-            </View>
+            <TouchableOpacity 
+                style={styles.registerLink}
+                onPress={() => navigation.navigate('Register')}
+            >
+              <Text style={styles.registerText}>
+                New user? <Text style={styles.registerBold}>Create Account</Text>
+              </Text>
+            </TouchableOpacity>
           </View>
-          
-          {/* Empty section to maintain the sloped layout structure */}
-          
         </View>
-      </View>
-    </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  fullBackground: { position: 'absolute', width: '100%', height: '100%' },
-
-  shadowWrapper: {
-    width: width * 0.85,
-    height: 460,
-    backgroundColor: 'transparent',
-    boxShadow: '0 10px 15px rgba(0, 0, 0, 0.2)',
-    elevation: 12,
+  container: {
+    flex: 1,
+    backgroundColor: '#ffffff',
   },
-  card: { flex: 1, backgroundColor: '#ffffff', borderRadius: `22`, overflow: 'hidden', flexDirection: 'row' },
-  formSection: { 
-    flex: 2, // Increased flex to allow text to fit better
-    padding: 25, 
-    justifyContent: 'center', 
-    zIndex: 10 
+  headerImage: {
+    width: '100%',
+    height: height * 0.45, // Slightly reduced image height
+    justifyContent: 'flex-end',
   },
- 
-  mainTitle: {
-      fontSize: 26,
-      fontWeight: 'bold',
-      color: '#ffffff',
-      bottom: 70,
-      letterSpacing: 2,
-      marginVertical: 8,
-      textAlign: 'center',
-      fontFamily: 'serif',
-    },
-  brandText: { 
-    fontSize: 24, 
-    fontWeight: '900', 
-    color: '#0d9488', // Teal color for branding
-    letterSpacing: 1,
-    marginBottom: 60 
+  curveWrapper: {
+    height: 100,
+    width: '100%',
+    overflow: 'hidden',
+    alignItems: 'center',
   },
-  headerGroup: {
-    marginTop: -40,    // Moves the section higher up
-    marginBottom: 40,  // Adds space before the input fields
+  whiteCurve: {
+    backgroundColor: '#ffffff',
+    height: 200,
+    width: width * 1.4,
+    borderTopLeftRadius: width,
+    borderTopRightRadius: width,
+    position: 'absolute',
+    bottom: -100, // Pushes the curve center up
   },
-  title: { 
-    fontSize: 20, 
-    fontWeight: 'bold', 
-    color: '#194f60',
+  formContent: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    paddingHorizontal: 35,
+    marginTop: -55, // Increased negative margin to pull Arch Lens closer to image
+  },
+  archLensTitle: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#335c77',
+    fontFamily: Platform.OS === 'ios' ? 'Times New Roman' : 'serif',
+    letterSpacing: 2,
+    marginBottom: 0,
+  },
+  descriptionHeader: {
+    fontSize: 15,
+    color: '#7d7d7d',
     textAlign: 'center',
-    marginBottom: 6
+    opacity: 0.8,
+    fontWeight: '500',
+    marginTop: 2,
+    marginBottom: 25,
   },
-  subtitle: {
-  fontSize: 14,
-  fontWeight: '600',
-  textAlign: 'center',
-  color: '#64748b',
-},
-
-  inputGroup: { marginBottom: 20 },
-  label: { color: '#64748b', fontSize: 13, marginBottom: 4, fontWeight: '600' },
-  inputWrapper: { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1.5, borderBottomColor: '#e2e8f0', paddingBottom: 5 },
-  input: { flex: 1, color: '#334155', fontSize: 15 },
-  loginButton: { marginTop: 20, borderRadius: 12, overflow: 'hidden' },
-  buttonGradient: { paddingVertical: 14, alignItems: 'center' },
-  loginButtonText: { color: 'white', fontSize: 16, fontWeight: 'bold' },
-  signupContainer: { marginTop: 20, flexDirection: 'row' },
-  signupText: { color: '#94a3b8', fontSize: 12 },
-  signupLink: { color: '#0d433b', fontSize: 12, fontWeight: 'bold' },
+  inputContainer: {
+    width: '100%',
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#335c77',
+    marginBottom: 8,
+    marginLeft: 2,
+  },
+  inputBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    paddingHorizontal: 15,
+    height: 55,
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+  },
+  inputField: {
+    flex: 1,
+    marginLeft: 10,
+    fontSize: 15,
+    color: '#1e293b',
+  },
+  getStartedBtn: {
+    backgroundColor: '#335c77',
+    height: 50,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 10,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  btnText: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: 'bold',
+    fontFamily: Platform.OS === 'ios' ? 'Times New Roman' : 'serif',
+  },
+  registerLink: {
+    marginTop: 20,
+    alignItems: 'center',
+  },
+  registerText: {
+    color: '#94a3b8',
+    fontSize: 14,
+  },
+  registerBold: {
+    color: '#335c77',
+    fontWeight: 'bold',
+  }
 });

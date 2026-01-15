@@ -46,7 +46,7 @@ function AppContent() {
                     <Stack.Screen 
                         name="Home" 
                         component={HomeScreen} 
-                        options={{ title: 'ArchLens', headerShown: true }} 
+                         
                     />
                 ) : (
                     // --- GUEST / AUTH SESSIONS ---

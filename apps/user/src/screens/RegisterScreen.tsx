@@ -1,18 +1,36 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Dimensions, ActivityIndicator } from 'react-native';
+import { 
+  View, 
+  Text, 
+  TextInput, 
+  TouchableOpacity, 
+  StyleSheet, 
+  Alert, 
+  Dimensions, 
+  ActivityIndicator, 
+  ImageBackground,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform
+} from 'react-native';
+
+// Keeping your exact logic imports
 import { auth } from '@archlens/shared';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { setDocument } from '@archlens/shared';
-import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 export default function RegisterScreen({ navigation }: any) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  
+  // Visibility states
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const handleRegister = async () => {
     if (!email.trim() || !password || !confirmPassword) {
@@ -30,10 +48,8 @@ export default function RegisterScreen({ navigation }: any) {
 
     setLoading(true);
     try {
-      // Create auth user
       const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
       
-      // Store user profile in Firestore with uid as document ID
       await setDocument('users', userCredential.user.uid, {
         uid: userCredential.user.uid,
         email: userCredential.user.email || email.trim(),
@@ -41,7 +57,7 @@ export default function RegisterScreen({ navigation }: any) {
         role: 'user'
       });
       
-      Alert.alert("Success", "Account created! You can now login.", [
+      Alert.alert("Success", "Account created successfully!", [
         { text: "OK", onPress: () => navigation.navigate('Login') }
       ]);
     } catch (error: any) {
@@ -52,103 +68,220 @@ export default function RegisterScreen({ navigation }: any) {
   };
 
   return (
-    <View style={styles.container}>
-      <LinearGradient colors={['#59a0a0', '#59a0a0']} style={styles.fullBackground} />
-
-      <View style={styles.shadowWrapper}>
-        <View style={styles.card}>
-          {/* Sloped Background (Left side for Register) */}
-          <LinearGradient
-            colors={['#abe4e4', '#ffffff']}
-            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-            style={styles.slopeBackground}
-          />
-
-          <View style={styles.welcomeTextSection}>
-            <Text style={styles.welcomeBackText}>ARCH{"\n"}LENS</Text>
+    <KeyboardAvoidingView 
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={styles.container}
+    >
+      <ScrollView contentContainerStyle={{ flexGrow: 1 }} bounces={false}>
+        
+        {/* Header Image - Matching Login */}
+        <ImageBackground 
+          source={{ uri: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=2070&auto=format&fit=crop' }} 
+          style={styles.headerImage}
+        >
+          <View style={styles.curveWrapper}>
+            <View style={styles.whiteCurve} />
           </View>
+        </ImageBackground>
 
-          <View style={styles.formSection}>
-            <Text style={styles.title}>User Register</Text>
+        <View style={styles.formContent}>
+          {/* Brand Header */}
+          <Text style={styles.archLensTitle}>ARCH LENS</Text>
+          <Text style={styles.descriptionHeader}>Join Our Community</Text>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Email Address</Text>
-              <View style={styles.inputWrapper}>
-                <TextInput
-                  style={styles.input}
-                  placeholder="name@example.com"
-                  placeholderTextColor="#94a3b8"
-                  value={email}
-                  onChangeText={setEmail}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                />
-                <MaterialIcons name="email" size={18} color="#64748b" />
-              </View>
+          <View style={styles.inputContainer}>
+            
+            {/* Email Field */}
+            <Text style={styles.label}>Email Address</Text>
+            <View style={styles.inputBox}>
+              <MaterialIcons name="email" size={20} color="#335c77" />
+              <TextInput
+                style={styles.inputField}
+                placeholder="name@example.com"
+                placeholderTextColor="#94a3b8"
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                keyboardType="email-address"
+              />
             </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Password</Text>
-              <View style={styles.inputWrapper}>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Create password"
-                  placeholderTextColor="#94a3b8"
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry
+            {/* Password Field */}
+            <Text style={styles.label}>Password</Text>
+            <View style={styles.inputBox}>
+              <MaterialIcons name="lock" size={20} color="#335c77" />
+              <TextInput
+                style={styles.inputField}
+                placeholder="Create password"
+                placeholderTextColor="#94a3b8"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+              />
+              <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                <MaterialIcons 
+                  name={showPassword ? "visibility" : "visibility-off"} 
+                  size={20} 
+                  color="#94a3b8" 
                 />
-                <MaterialIcons name="lock" size={18} color="#64748b" />
-              </View>
+              </TouchableOpacity>
             </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Confirm Password</Text>
-              <View style={styles.inputWrapper}>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Repeat password"
-                  placeholderTextColor="#94a3b8"
-                  value={confirmPassword}
-                  onChangeText={setConfirmPassword}
-                  secureTextEntry
+            {/* Confirm Password Field */}
+            <Text style={styles.label}>Confirm Password</Text>
+            <View style={styles.inputBox}>
+              <MaterialIcons name="verified-user" size={20} color="#335c77" />
+              <TextInput
+                style={styles.inputField}
+                placeholder="Repeat password"
+                placeholderTextColor="#94a3b8"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry={!showConfirmPassword}
+              />
+              <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
+                <MaterialIcons 
+                  name={showConfirmPassword ? "visibility" : "visibility-off"} 
+                  size={20} 
+                  color="#94a3b8" 
                 />
-                <MaterialIcons name="verified-user" size={18} color="#64748b" />
-              </View>
+              </TouchableOpacity>
             </View>
 
-            <TouchableOpacity style={styles.registerButton} onPress={handleRegister} disabled={loading}>
-              <LinearGradient colors={['#126a5e', '#1a656e']} style={styles.buttonGradient}>
-                {loading ? <ActivityIndicator color="white" /> : <Text style={styles.registerButtonText}>Sign Up</Text>}
-              </LinearGradient>
+            {/* Register Button */}
+            <TouchableOpacity 
+              style={styles.actionBtn} 
+              onPress={handleRegister} 
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <Text style={styles.btnText}>Sign Up</Text>
+              )}
             </TouchableOpacity>
 
-            <TouchableOpacity style={{ marginTop: 15 }} onPress={() => navigation.navigate('Login')}>
-              <Text style={styles.loginLink}>Back to Login</Text>
+            {/* Login Redirect */}
+            <TouchableOpacity 
+                style={styles.loginLink}
+                onPress={() => navigation.navigate('Login')}
+            >
+              <Text style={styles.loginText}>
+                Already have an account? <Text style={styles.loginBold}>Login</Text>
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
-      </View>
-    </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  fullBackground: { position: 'absolute', width: '100%', height: '100%' },
-  shadowWrapper: { width: width * 0.88, height: 550, backgroundColor: 'transparent', boxShadow: '0 10px 15px rgba(0, 0, 0, 0.2)', elevation: 12 },
-  card: { flex: 1, backgroundColor: '#ffffff', borderRadius: 24, overflow: 'hidden', flexDirection: 'row' },
-  slopeBackground: { position: 'absolute', left: -110, top: -50, bottom: -70, width: '45%', transform: [{ rotate: '14deg' }] },
-  formSection: { flex: 2, padding: 25, justifyContent: 'center', zIndex: 10 },
-  welcomeTextSection: { flex: 1, justifyContent: 'center', alignItems: 'flex-start', paddingLeft: 20, zIndex: 10 },
-  title: { fontSize: 26, fontWeight: 'bold', color: '#194f60', marginBottom: 20 },
-  welcomeBackText: { fontSize: 22, fontWeight: '900', color: '#0d9488' },
-  inputGroup: { marginBottom: 15 },
-  label: { color: '#64748b', fontSize: 12, marginBottom: 4, fontWeight: '600' },
-  inputWrapper: { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1.5, borderBottomColor: '#e2e8f0', paddingBottom: 5 },
-  input: { flex: 1, color: '#334155', fontSize: 14 },
-  registerButton: { marginTop: 15, borderRadius: 12, overflow: 'hidden' },
-  buttonGradient: { paddingVertical: 14, alignItems: 'center' },
-  registerButtonText: { color: 'white', fontSize: 16, fontWeight: 'bold' },
-  loginLink: { textAlign: 'center', color: '#0d433b', fontSize: 12, fontWeight: 'bold' }
+  container: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+  },
+  headerImage: {
+    width: '100%',
+    height: height * 0.35, // Adjusted slightly for registration fields
+    justifyContent: 'flex-end',
+  },
+  curveWrapper: {
+    height: 80,
+    width: '100%',
+    overflow: 'hidden',
+    alignItems: 'center',
+  },
+  whiteCurve: {
+    backgroundColor: '#ffffff',
+    height: 200,
+    width: width * 1.4,
+    borderTopLeftRadius: width,
+    borderTopRightRadius: width,
+    position: 'absolute',
+    bottom: -120, 
+  },
+  formContent: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    paddingHorizontal: 35,
+    marginTop: -40, 
+  },
+  archLensTitle: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#335c77',
+    fontFamily: Platform.OS === 'ios' ? 'Times New Roman' : 'serif',
+    letterSpacing: 2,
+  },
+  descriptionHeader: {
+    fontSize: 15,
+    color: '#7d7d7d',
+    textAlign: 'center',
+    opacity: 0.8,
+    fontWeight: '500',
+    marginTop: 2,
+    marginBottom: 20,
+  },
+  inputContainer: {
+    width: '100%',
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#335c77',
+    marginBottom: 8,
+    marginLeft: 2,
+  },
+  inputBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    paddingHorizontal: 15,
+    height: 55,
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+  },
+  inputField: {
+    flex: 1,
+    marginLeft: 10,
+    fontSize: 15,
+    color: '#1e293b',
+  },
+  actionBtn: {
+    backgroundColor: '#335c77',
+    height: 50,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 10,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  btnText: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: 'bold',
+    fontFamily: Platform.OS === 'ios' ? 'Times New Roman' : 'serif',
+  },
+  loginLink: {
+    marginTop: 20,
+    marginBottom: 30,
+    alignItems: 'center',
+  },
+  loginText: {
+    color: '#94a3b8',
+    fontSize: 14,
+  },
+  loginBold: {
+    color: '#335c77',
+    fontWeight: 'bold',
+  }
 });

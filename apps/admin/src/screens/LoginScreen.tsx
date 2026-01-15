@@ -62,11 +62,11 @@ export default function LoginScreen({ navigation }: any) {
 
   return (
     <View style={styles.container}>
-      <LinearGradient colors={['#59a0a0', '#59a0a0']} style={styles.fullBackground} />
+      <LinearGradient colors={['#2b3348', '#2b3348']} style={[styles.fullBackground, { opacity: 0.01 }]} />
 
       <View style={styles.card}>
         <LinearGradient
-          colors={['#abe4e4', '#ffffff']}
+          colors={['#394051', '#2b3348']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.slopeBackground}
@@ -125,7 +125,7 @@ export default function LoginScreen({ navigation }: any) {
           </View>
 
           <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-            <LinearGradient colors={['#126a5e', '#1a656e']} style={styles.buttonGradient}>
+            <LinearGradient colors={['#2b3348', '#2b3348']} style={styles.buttonGradient}>
               <Text style={styles.loginButtonText}>Login</Text>
             </LinearGradient>
           </TouchableOpacity>
@@ -156,8 +156,11 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     flexDirection: 'row',
     elevation: 10,
-    borderWidth: 1,
-    borderColor: '#787878',
+    shadowColor: '#2b3348',
+    shadowOpacity: 0.6,
+    shadowRadius: 9,
+   
+    
   },
   slopeBackground: {
     position: 'absolute',
@@ -169,7 +172,7 @@ const styles = StyleSheet.create({
   welcomeTextSection: { flex: 2, left: 66, justifyContent: 'center', alignItems: 'center', paddingRight: 20, zIndex: 15 },
   logo: { width: 70, height: 60, marginBottom: 2 },
   title: { fontSize: 32, fontWeight: 'bold', color: '#194f60', marginBottom: 35 },
-  welcomeBackText: { fontSize: 20, left: 2, fontWeight: '900', color: '#0d9488', textAlign: 'center', letterSpacing: 1 },
+  welcomeBackText: { fontSize: 20, left: 2, fontWeight: '900', color: '#ffffff', textAlign: 'center', letterSpacing: 1 },
   inputGroup: { marginBottom: 20 },
   label: { color: '#64748b', fontSize: 13, marginBottom: 4, fontWeight: '600' },
   inputWrapper: {
@@ -186,5 +189,5 @@ const styles = StyleSheet.create({
   loginButton: { marginTop: 25, borderRadius: 12, overflow: 'hidden' },
   buttonGradient: { paddingVertical: 14, alignItems: 'center' },
   loginButtonText: { color: 'white', fontSize: 16, fontWeight: 'bold' },
-  signupLink: { color: '#0d433b', fontSize: 12, fontWeight: 'bold' },
+  signupLink: { color: '#e2e2e2', fontSize: 12, fontWeight: 'bold' },
 });
