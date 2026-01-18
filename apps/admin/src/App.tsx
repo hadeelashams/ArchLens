@@ -1,50 +1,35 @@
 import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { View, Text, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator } from 'react-native';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '@archlens/shared';
 import { FirestoreProvider } from './context/FirestoreContext';
 
+// Screens
 import LoginScreen from './screens/LoginScreen';
+import AdminHomeScreen from './screens/AdminHomeScreen';
 import DashboardScreen from './screens/DashboardScreen';
+import UsersScreen from './screens/UsersScreen';
 
 const Stack = createNativeStackNavigator();
 
 function AppContent() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<any>(null);
 
   useEffect(() => {
-    try {
-      // Listener that detects login/logout
-      const unsubscribe = onAuthStateChanged(auth, (u) => {
-        setUser(u);
-        setLoading(false);
-      });
-      return unsubscribe;
-    } catch (err) {
-      console.error('Auth error:', err);
-      setError(err);
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
       setLoading(false);
-    }
+    });
+    return unsubscribe;
   }, []);
-
-  if (error) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
-        <Text style={{ color: 'red', fontSize: 16, textAlign: 'center', padding: 20 }}>
-          System Error: {error.message}
-        </Text>
-      </View>
-    );
-  }
 
   if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
-        <ActivityIndicator size="large" color="#0d9488" />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1e293b' }}>
+        <ActivityIndicator size="large" color="#bae6fd" />
       </View>
     );
   }
@@ -53,24 +38,15 @@ function AppContent() {
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {user ? (
-          // 1. AUTHENTICATED STACK
-          // When 'user' is present, the app ONLY knows the Dashboard
-          <Stack.Screen 
-            name="Dashboard" 
-            component={DashboardScreen} 
-            options={{ 
-              
-              headerLeft: () => null // Removes back arrow after login
-            }}
-          />
+          // AUTHENTICATED ROUTES (Admin Only)
+          <>
+            <Stack.Screen name="AdminHome" component={AdminHomeScreen} />
+            <Stack.Screen name="Dashboard" component={DashboardScreen} />
+            <Stack.Screen name="Users" component={UsersScreen} />
+          </>
         ) : (
-          // 2. GUEST STACK
-          // When 'user' is null, the app ONLY knows the Login screen
-          // Registration is completely removed from here.
-          <Stack.Screen 
-            name="Login" 
-            component={LoginScreen} 
-          />
+          // PUBLIC ROUTES (Login)
+          <Stack.Screen name="Login" component={LoginScreen} />
         )}
       </Stack.Navigator>
     </NavigationContainer>
