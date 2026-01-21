@@ -5,6 +5,7 @@ import {
   getAuth,
   browserLocalPersistence
 } from 'firebase/auth';
+import { getAI, getGenerativeModel, GoogleAIBackend } from 'firebase/ai';
 import { Platform } from 'react-native';
 
 // Only import AsyncStorage on React Native
@@ -66,5 +67,19 @@ try {
 // 3. Initialize Firestore
 const db = getFirestore(app);
 
-export { app, auth, db };
+// 4. Initialize Gemini AI
+let ai: any = null;
+let geminiModel: any = null;
+
+try {
+  // Initialize Firebase AI backend with Gemini
+  ai = getAI(app, { backend: new GoogleAIBackend() });
+  
+  // Create a GenerativeModel instance for Gemini 2.5 Flash
+  geminiModel = getGenerativeModel(ai, { model: 'gemini-2.5-flash-lite' });
+} catch (error) {
+  console.warn('Gemini AI initialization warning:', error);
+}
+
+export { app, auth, db, ai, geminiModel };
 export default app;

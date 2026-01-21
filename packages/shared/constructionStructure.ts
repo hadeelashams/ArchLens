@@ -19,9 +19,9 @@ export const CONSTRUCTION_HIERARCHY = {
     label: "Foundation",
     // Standardized Key: subCategories (Represents Construction Method)
     subCategories: {
-      'RCC': ["Cement", "Steel (TMT Bar)", "River Sand", "M-Sand", "Aggregate (20mm)", "Aggregate (40mm)", "Binding Wire", "Cover Blocks"],
-      'PCC': ["Cement", "River Sand", "M-Sand", "Aggregate (40mm)"],
-      'Stone Masonry': ["Size Stone", "Rubble Stone", "Cement", "River Sand", "M-Sand"],
+      'RCC': ["Cement", "Steel (TMT Bar)", "Sand"],
+      'PCC': ["Cement", "River Sand", "Sand"],
+      'Stone Masonry': ["Size Stone", "Rubble Stone", "Cement", "Sand"],
     },
   },
   'Wall': {
@@ -35,7 +35,7 @@ export const CONSTRUCTION_HIERARCHY = {
   'Roof': {
     label: "Roof",
     subCategories: {
-      'RCC Slab': ["Cement", "Steel (TMT Bar)", "Aggregate (20mm)", "River Sand", "M-Sand", "Waterproofing Chemical"],
+      'RCC Slab': ["Cement", "Steel (TMT Bar)", "Sand", "Waterproofing Chemical"],
       'Sloped Roof': ["Clay Roof Tile", "Concrete Roof Tile", "Slate", "Timber/Wood", "Steel Truss"],
       'Metal Sheet': ["Galvanized Iron Sheet", "Polycarbonate Sheet", "Aluminium Sheet"],
     },
