@@ -15,6 +15,9 @@ import RegisterScreen from './screens/RegisterScreen';
 import HomeScreen from './screens/HomeScreen';
 import UploadPlanScreen from './screens/UploadPlanScreen'; 
 import PlanVerificationScreen from './screens/PlanVerificationScreen'; 
+import ConstructionLevelScreen from './screens/ConstructionLevelScreen'; 
+import FoundationScreen from './screens/FoundationScreen';
+
 import ProfileScreen from './screens/ProfileScreen';
 
 // NEW: Settings Detail Screen Imports
@@ -24,6 +27,7 @@ import NotificationsScreen from './screens/settings/NotificationsScreen';
 import SecurityScreen from './screens/settings/SecurityScreen';
 import HelpCenterScreen from './screens/settings/HelpCenterScreen';
 import PrivacyPolicyScreen from './screens/settings/PrivacyPolicyScreen';
+import EstimateResultScreen from './screens/EstimateResultScreen';
 
 // 1. Updated Stack Param List for TypeScript
 export type RootStackParamList = {
@@ -33,6 +37,9 @@ export type RootStackParamList = {
   Home: undefined;
   UploadPlan: undefined; 
   PlanVerification: { planImage: string }; 
+  ConstructionLevel: { totalArea: number };
+  EstimateResult: undefined;
+  FoundationDetails: undefined;
   Profile: undefined;
   // Detail Screens
   PersonalInfo: undefined;
@@ -72,6 +79,10 @@ function AppContent() {
             <Stack.Screen name="Home" component={HomeScreen} />
             <Stack.Screen name="UploadPlan" component={UploadPlanScreen} />
             <Stack.Screen name="PlanVerification" component={PlanVerificationScreen} />
+            <Stack.Screen name="ConstructionLevel" component={ConstructionLevelScreen} />
+            <Stack.Screen name="EstimateResult" component={EstimateResultScreen} />
+            <Stack.Screen name="FoundationDetails" component={FoundationScreen} />
+
             <Stack.Screen name="Profile" component={ProfileScreen} />
             
             {/* Connected the real screens here */}

@@ -287,11 +287,12 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
           <TouchableOpacity 
             style={styles.confirmButton} 
             onPress={() => {
-                // Here you would navigate to estimation or save
-                Alert.alert("Data Verified", `Proceeding with ${totalArea.toFixed(0)} sq.ft construction area.`);
+                navigation.navigate('ConstructionLevel', { 
+                  totalArea: totalArea
+                });
             }}
           >
-            <Text style={styles.confirmText}>Calculate Cost</Text>
+            <Text style={styles.confirmText}>Verify</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -305,8 +306,16 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' },
   loadingText: { marginTop: 15, fontSize: 18, color: '#1e293b', fontWeight: 'bold' },
   subLoadingText: { marginTop: 5, fontSize: 14, color: '#64748b' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, backgroundColor: '#fff', elevation: 2, borderBottomWidth: 1, borderColor: '#e2e8f0' },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: '#1e293b' },
+ header: { 
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  paddingHorizontal: 20,
+  paddingVertical: 15,
+  backgroundColor: '#F8F9FA'
+},
+
+  headerTitle: { fontSize: 18, fontWeight: '700', color: '#0f172a' },
   scrollContent: { padding: 20, paddingBottom: 100 },
   previewImage: { width: '100%', height: 250, borderRadius: 12, marginBottom: 20, backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#cbd5e1' },
   instructionText: { fontSize: 14, color: '#64748b', marginBottom: 15, fontStyle: 'italic' },
