@@ -19,6 +19,13 @@ export interface ProjectData {
   description?: string;
   location?: string;
   status: 'active' | 'archived' | 'completed';
+  
+  // --- NEW FIELDS ---
+  totalArea?: number;
+  rooms?: any[];        // Array of room objects containing dimensions
+  planImageUrl?: string; // URL if image is uploaded to storage
+  // ------------------
+
   createdAt?: any;
   updatedAt?: any;
 }

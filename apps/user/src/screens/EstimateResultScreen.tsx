@@ -9,10 +9,13 @@ import {
   Platform, 
   SafeAreaView, 
   StatusBar,
-  ActivityIndicator
+  ActivityIndicator,
+  Alert
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { auth } from '@archlens/shared';
+import { createEstimate } from '../services/projectService'; // Import Service
 
 const { width } = Dimensions.get('window');
 
@@ -24,9 +27,8 @@ const RATES = {
 };
 
 export default function EstimateResultScreen({ route, navigation }: any) {
-  // Get data passed from ConstructionLevelScreen
-  // Defaults provided in case of direct navigation for testing
-  const { totalArea = 1000, level = 'Standard' } = route.params || {};
+  // --- UPDATED: Receive ProjectID ---
+  const { totalArea = 1000, level = 'Standard', projectId } = route.params || {};
 
   const [loading, setLoading] = useState(true);
   const [costs, setCosts] = useState<any>(null);
@@ -43,7 +45,6 @@ export default function EstimateResultScreen({ route, navigation }: any) {
     const rate = RATES[level as keyof typeof RATES] || 2200;
     const total = totalArea * rate;
 
-    // Standard Industry Breakdown (approximate)
     setCosts({
       total: total,
       rate: rate,
@@ -53,12 +54,45 @@ export default function EstimateResultScreen({ route, navigation }: any) {
     });
   };
 
-  // Helper to format currency (Indian Rupee or USD based on preference, using generic comma format here)
   const formatCurrency = (amount: number) => {
     return amount.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   };
 
-  // Reused Card Component from HomeScreen
+  // --- NEW: Save Estimate Handler ---
+  const handleSaveEstimate = async () => {
+    if (!auth.currentUser) {
+        Alert.alert("Error", "User not authenticated");
+        return;
+    }
+
+    if (!projectId) {
+        Alert.alert("Warning", "No active project found. Estimate will not be linked.");
+        // We continue to save but without link, or you could return;
+    }
+
+    try {
+        // Save Summary Estimate
+        await createEstimate({
+            projectId: projectId || 'orphan_estimate',
+            userId: auth.currentUser.uid,
+            itemName: `Construction Estimate (${level})`,
+            category: 'Total Project Cost',
+            quantity: 1,
+            unit: 'Project',
+            unitCost: costs.total,
+            totalCost: costs.total,
+            notes: `Generated for ${totalArea} sq.ft built-up area`
+        });
+
+        Alert.alert("Success", "Estimate saved successfully!", [
+            { text: "Go to Home", onPress: () => navigation.navigate("Home") }
+        ]);
+
+    } catch (error: any) {
+        Alert.alert("Error", "Failed to save estimate: " + error.message);
+    }
+  };
+
   const CostCard = ({ title, amount, iconName, gradientColors, subtext }: any) => (
     <View style={styles.card}>
       <LinearGradient colors={gradientColors} style={styles.cardIconContainer}>
@@ -159,7 +193,7 @@ export default function EstimateResultScreen({ route, navigation }: any) {
                 subtext="Cement, Steel, Bricks, Finishings"
                 amount={costs.material}
                 iconName="cube-outline"
-                gradientColors={['#4F46E5', '#818cf8']} // Indigo
+                gradientColors={['#4F46E5', '#818cf8']} 
             />
 
             <CostCard 
@@ -167,7 +201,7 @@ export default function EstimateResultScreen({ route, navigation }: any) {
                 subtext="Contractor, Masonry, Plumbing"
                 amount={costs.labor}
                 iconName="account-hard-hat"
-                gradientColors={['#d97706', '#fbbf24']} // Amber
+                gradientColors={['#d97706', '#fbbf24']} 
             />
 
             <CostCard 
@@ -175,7 +209,7 @@ export default function EstimateResultScreen({ route, navigation }: any) {
                 subtext="Architecture, Approval, Electric"
                 amount={costs.services}
                 iconName="file-certificate-outline"
-                gradientColors={['#10b981', '#34d399']} // Emerald
+                gradientColors={['#10b981', '#34d399']} 
             />
 
           </View>
@@ -188,8 +222,9 @@ export default function EstimateResultScreen({ route, navigation }: any) {
             </Text>
           </View>
 
-          <TouchableOpacity style={styles.saveButton} onPress={() => navigation.navigate('Home')}>
-            <Text style={styles.saveButtonText}>Save Estimate</Text>
+          {/* SAVE BUTTON - MODIFIED */}
+          <TouchableOpacity style={styles.saveButton} onPress={handleSaveEstimate}>
+            <Text style={styles.saveButtonText}>Save to Project</Text>
             <Ionicons name="save-outline" size={20} color="#fff" style={{marginLeft: 8}}/>
           </TouchableOpacity>
 

@@ -55,11 +55,12 @@ export default function ProfileScreen({ navigation }: any) {
         </View>
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-          <LinearGradient colors={['#315b76', '#4a7c9b']} style={styles.userCard}>
+          <LinearGradient colors={['#315b76', '#2a4179']} start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}style={styles.userCard}>
             <View style={styles.avatarCircle}>
               <Text style={styles.avatarText}>{user?.email?.charAt(0).toUpperCase() || 'U'}</Text>
             </View>
-            <Text style={styles.userName}>{user?.displayName || "Arch Lens User"}</Text>
+            <Text style={styles.userName}>{user?.displayName || "Arch Lens "}</Text>
             <Text style={styles.userEmail}>{user?.email}</Text>
           </LinearGradient>
 

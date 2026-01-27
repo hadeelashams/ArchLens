@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   View, Text, TouchableOpacity, StyleSheet, TextInput, 
-  FlatList, ActivityIndicator, Alert, Image 
+  FlatList, ActivityIndicator, Alert, Image, Platform // 1. Added Platform import
 } from 'react-native';
 import { db } from '@archlens/shared'; 
 import { collection, onSnapshot, deleteDoc, doc } from 'firebase/firestore';
@@ -19,7 +19,6 @@ export default function UsersScreen({ navigation }: any) {
 
   // --- 1. FETCH USERS FROM FIREBASE ---
   useEffect(() => {
-    // Reference to the users collection
     const ref = collection(db, 'users');
     
     const unsubscribe = onSnapshot(ref, (snapshot) => {
@@ -28,12 +27,8 @@ export default function UsersScreen({ navigation }: any) {
         ...doc.data() 
       }));
 
-      // --- FILTER STEP: REMOVE ADMINS ---
-      // This line ensures that anyone with role 'admin' is hidden from the list
       const nonAdminUsers = data.filter((user: any) => user.role !== 'admin');
 
-      // --- SORT STEP: NEWEST FIRST ---
-      // We do this in JS to safely handle missing createdAt fields
       nonAdminUsers.sort((a: any, b: any) => {
         const dateA = a.createdAt?.seconds || 0;
         const dateB = b.createdAt?.seconds || 0;
@@ -55,7 +50,7 @@ export default function UsersScreen({ navigation }: any) {
     } else {
       const lowerQ = searchQuery.toLowerCase();
       const result = users.filter(u => 
-        (u.name && u.name.toLowerCase().includes(lowerQ)) ||
+        (u.displayName && u.displayName.toLowerCase().includes(lowerQ)) || // Changed name to displayName
         (u.email && u.email.toLowerCase().includes(lowerQ)) ||
         (u.phone && u.phone.includes(lowerQ))
       );
@@ -63,27 +58,46 @@ export default function UsersScreen({ navigation }: any) {
     }
   }, [searchQuery, users]);
 
-  // --- 3. DELETE USER ACTION ---
+  // --- 3. DELETE USER ACTION (FIXED) ---
+  const deleteUserLogic = async (userId: string) => {
+    try {
+      await deleteDoc(doc(db, 'users', userId));
+      // On web, Alerts are simple, so we don't always need a success alert, 
+      // but if you want one:
+      if (Platform.OS !== 'web') {
+        Alert.alert("Success", "User removed successfully.");
+      } else {
+        console.log("User deleted");
+      }
+    } catch (error: any) {
+      alert("Error: " + error.message);
+    }
+  };
+
   const handleDeleteUser = (userId: string, userName: string) => {
-    Alert.alert(
-      "Confirm Delete",
-      `Are you sure you want to remove ${userName || 'this user'}? This cannot be undone.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        { 
-          text: "Delete", 
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await deleteDoc(doc(db, 'users', userId));
-              Alert.alert("Success", "User removed successfully.");
-            } catch (error: any) {
-              Alert.alert("Error", error.message);
-            }
+    const nameDisplay = userName || 'this user';
+
+    // FIX: Check Platform. On Web, Alert.alert buttons don't work the same way.
+    if (Platform.OS === 'web') {
+      const confirmDelete = window.confirm(`Are you sure you want to remove ${nameDisplay}? This cannot be undone.`);
+      if (confirmDelete) {
+        deleteUserLogic(userId);
+      }
+    } else {
+      // Mobile (iOS/Android) Logic
+      Alert.alert(
+        "Confirm Delete",
+        `Are you sure you want to remove ${nameDisplay}? This cannot be undone.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          { 
+            text: "Delete", 
+            style: "destructive",
+            onPress: () => deleteUserLogic(userId)
           }
-        }
-      ]
-    );
+        ]
+      );
+    }
   };
 
   // --- HELPER: GET INITIALS ---
@@ -199,7 +213,8 @@ export default function UsersScreen({ navigation }: any) {
 
                   {/* COL 5: ACTIONS */}
                   <View style={styles.actionCell}>
-                    <TouchableOpacity onPress={() => handleDeleteUser(item.id, item.name)}>
+                    {/* FIX: Passed item.displayName instead of item.name */}
+                    <TouchableOpacity onPress={() => handleDeleteUser(item.id, item.displayName)}>
                       <Feather name="trash-2" size={18} color="#ef4444" />
                     </TouchableOpacity>
                   </View>

@@ -9,8 +9,7 @@ import {
   Dimensions, 
   Platform,
   SafeAreaView,
-  StatusBar,
-  Alert
+  StatusBar
 } from 'react-native';
 import { MaterialIcons, MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -70,7 +69,8 @@ const COMPONENT_DATA = [
 ];
 
 export default function ConstructionLevelScreen({ route, navigation }: any) {
-  const { totalArea } = route.params || { totalArea: 0 };
+  // --- UPDATED: Receive projectId ---
+  const { totalArea, projectId } = route.params || { totalArea: 0, projectId: null };
   const [activeTab, setActiveTab] = useState('Standard');
   const [searchText, setSearchText] = useState('');
 
@@ -81,14 +81,18 @@ export default function ConstructionLevelScreen({ route, navigation }: any) {
     return <MaterialIcons name={name} size={24} color="#FFF" />;
   };
 
-  // --- NEW: Handle Navigation Logic ---
   const handleCardPress = (item: any) => {
     if (item.title === 'Foundation') {
-      // Make sure this name matches what you put in App.tsx Stack.Screen
-      navigation.navigate('FoundationDetails'); 
+      // --- UPDATED: Pass projectId forward ---
+      navigation.navigate('FoundationDetails', { totalArea, projectId }); 
     } else {
-      // Optional: Alert for other screens not yet built
-      // Alert.alert("Coming Soon", `${item.title} screen is under construction.`);
+      // For demo purposes, we can navigate directly to result for other items
+      // assuming they skip the detailed sub-selection
+      navigation.navigate('EstimateResult', { 
+        totalArea, 
+        level: activeTab,
+        projectId 
+      });
     }
   };
 
@@ -97,7 +101,6 @@ export default function ConstructionLevelScreen({ route, navigation }: any) {
       <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
       <SafeAreaView style={styles.safeArea}>
       
-        {/* HEADER */}
         <View style={styles.header}>
           <TouchableOpacity 
             onPress={() => navigation.goBack()} 
@@ -105,7 +108,6 @@ export default function ConstructionLevelScreen({ route, navigation }: any) {
           >
              <Ionicons name="arrow-back" size={20} color="#315b76" />
           </TouchableOpacity>
-          
           <Text style={styles.headerTitle}>Construction Level</Text>
           <View style={{ width: 40 }} /> 
         </View>
@@ -159,10 +161,8 @@ export default function ConstructionLevelScreen({ route, navigation }: any) {
                 key={item.id} 
                 style={styles.card} 
                 activeOpacity={0.7}
-                // --- ADDED: Link to Foundation Screen ---
                 onPress={() => handleCardPress(item)} 
               >
-                
                 <LinearGradient 
                   colors={item.gradientColors as any} 
                   style={styles.cardIconContainer}

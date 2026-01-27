@@ -267,7 +267,7 @@ const styles = StyleSheet.create({
   cardContainer: { gap: 12 },
   
   // CARD STYLES
-  card: { backgroundColor: '#ffffff', borderRadius: 20, padding: 16, flexDirection: 'row', alignItems: 'center', shadowColor: '#94a3b8', shadowOffset: { width: 0,height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 3, borderWidth: 1, borderColor: '#f1f5f9' },
+  card: { backgroundColor: '#ffffff', borderRadius: 20, padding: 16, flexDirection: 'row', alignItems: 'center', shadowColor: '#94a3b8', shadowOffset: { width: 0,height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 1, borderWidth: 1, borderColor: '#f1f5f9' },
   cardIconContainer: { width: 52, height: 52, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
   cardTextContent: { flex: 1 },
   cardTitle: { fontSize: 16, fontWeight: '700', color: '#1e293b', marginBottom: 3 },

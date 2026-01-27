@@ -20,6 +20,9 @@ import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { setDocument } from '@archlens/shared';
 import { MaterialIcons } from '@expo/vector-icons';
 
+// Import for Database Timestamps
+import { serverTimestamp } from 'firebase/firestore'; 
+
 const { width, height } = Dimensions.get('window');
 
 export default function RegisterScreen({ navigation }: any) {
@@ -32,36 +35,90 @@ export default function RegisterScreen({ navigation }: any) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
+  // ADDED: State to hold error messages
+  const [errors, setErrors] = useState<{ email?: string; password?: string; confirmPassword?: string }>({});
+
+  // ADDED: Validation Logic function
+  const validateInputs = () => {
+    const newErrors: { email?: string; password?: string; confirmPassword?: string } = {};
+    let isValid = true;
+
+    // Email Check
+    if (!email.trim()) {
+      newErrors.email = 'Email address is required';
+      isValid = false;
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      newErrors.email = 'Please enter a valid email address';
+      isValid = false;
+    }
+
+    // Password Check
+    if (!password) {
+      newErrors.password = 'Password is required';
+      isValid = false;
+    } else if (password.length < 6) {
+      newErrors.password = 'Password must be at least 6 characters';
+      isValid = false;
+    }
+
+    // Confirm Password Check
+    if (!confirmPassword) {
+      newErrors.confirmPassword = 'Please confirm your password';
+      isValid = false;
+    } else if (password !== confirmPassword) {
+      newErrors.confirmPassword = 'Passwords do not match';
+      isValid = false;
+    }
+
+    setErrors(newErrors);
+    return isValid;
+  };
+
   const handleRegister = async () => {
-    if (!email.trim() || !password || !confirmPassword) {
-      Alert.alert("Error", "All fields are required");
-      return;
-    }
-    if (password !== confirmPassword) {
-      Alert.alert("Error", "Passwords do not match");
-      return;
-    }
-    if (password.length < 6) {
-      Alert.alert("Error", "Password must be at least 6 characters");
-      return;
+    // Clear previous errors
+    setErrors({});
+
+    // Check Validation first
+    if (!validateInputs()) {
+      return; 
     }
 
     setLoading(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
       
+      // Your existing document creation logic
       await setDocument('users', userCredential.user.uid, {
         uid: userCredential.user.uid,
         email: userCredential.user.email || email.trim(),
         displayName: email.trim().split('@')[0],
-        role: 'user'
+        role: 'user',
+        isActive: true,
+        createdAt: serverTimestamp() 
       });
       
       Alert.alert("Success", "Account created successfully!", [
         { text: "OK", onPress: () => navigation.navigate('Login') }
       ]);
     } catch (error: any) {
-      Alert.alert("Registration Failed", error.message);
+      console.log(error.code);
+      const newErrors: { email?: string; password?: string } = {};
+
+      // Map Firebase errors to specific fields
+      switch (error.code) {
+        case 'auth/email-already-in-use':
+          newErrors.email = 'This email is already in use.';
+          break;
+        case 'auth/invalid-email':
+          newErrors.email = 'Invalid email address.';
+          break;
+        case 'auth/weak-password':
+          newErrors.password = 'Password is too weak.';
+          break;
+        default:
+          Alert.alert("Registration Failed", error.message);
+      }
+      setErrors(newErrors);
     } finally {
       setLoading(false);
     }
@@ -74,7 +131,7 @@ export default function RegisterScreen({ navigation }: any) {
     >
       <ScrollView contentContainerStyle={{ flexGrow: 1 }} bounces={false}>
         
-        {/* Header Image - Matching Login */}
+        {/* Header Image */}
         <ImageBackground 
           source={{ uri: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=2070&auto=format&fit=crop' }} 
           style={styles.headerImage}
@@ -91,31 +148,41 @@ export default function RegisterScreen({ navigation }: any) {
 
           <View style={styles.inputContainer}>
             
-            {/* Email Field */}
+            {/* --- Email Field --- */}
             <Text style={styles.label}>Email Address</Text>
-            <View style={styles.inputBox}>
+            {/* Apply Error Style if error exists */}
+            <View style={[styles.inputBox, errors.email ? styles.inputFieldError : null]}>
               <MaterialIcons name="email" size={20} color="#335c77" />
               <TextInput
                 style={styles.inputField}
                 placeholder="name@example.com"
                 placeholderTextColor="#94a3b8"
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={(text) => {
+                  setEmail(text);
+                  if (errors.email) setErrors({...errors, email: undefined});
+                }}
                 autoCapitalize="none"
                 keyboardType="email-address"
               />
             </View>
+            {/* Display Email Error Text */}
+            {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
 
-            {/* Password Field */}
+
+            {/* --- Password Field --- */}
             <Text style={styles.label}>Password</Text>
-            <View style={styles.inputBox}>
+            <View style={[styles.inputBox, errors.password ? styles.inputFieldError : null]}>
               <MaterialIcons name="lock" size={20} color="#335c77" />
               <TextInput
                 style={styles.inputField}
                 placeholder="Create password"
                 placeholderTextColor="#94a3b8"
                 value={password}
-                onChangeText={setPassword}
+                onChangeText={(text) => {
+                  setPassword(text);
+                  if (errors.password) setErrors({...errors, password: undefined});
+                }}
                 secureTextEntry={!showPassword}
               />
               <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
@@ -126,17 +193,23 @@ export default function RegisterScreen({ navigation }: any) {
                 />
               </TouchableOpacity>
             </View>
+            {/* Display Password Error Text */}
+            {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
 
-            {/* Confirm Password Field */}
+
+            {/* --- Confirm Password Field --- */}
             <Text style={styles.label}>Confirm Password</Text>
-            <View style={styles.inputBox}>
+            <View style={[styles.inputBox, errors.confirmPassword ? styles.inputFieldError : null]}>
               <MaterialIcons name="verified-user" size={20} color="#335c77" />
               <TextInput
                 style={styles.inputField}
                 placeholder="Repeat password"
                 placeholderTextColor="#94a3b8"
                 value={confirmPassword}
-                onChangeText={setConfirmPassword}
+                onChangeText={(text) => {
+                  setConfirmPassword(text);
+                  if (errors.confirmPassword) setErrors({...errors, confirmPassword: undefined});
+                }}
                 secureTextEntry={!showConfirmPassword}
               />
               <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
@@ -147,6 +220,9 @@ export default function RegisterScreen({ navigation }: any) {
                 />
               </TouchableOpacity>
             </View>
+            {/* Display Confirm Password Error Text */}
+            {errors.confirmPassword && <Text style={styles.errorText}>{errors.confirmPassword}</Text>}
+
 
             {/* Register Button */}
             <TouchableOpacity 
@@ -184,7 +260,7 @@ const styles = StyleSheet.create({
   },
   headerImage: {
     width: '100%',
-    height: height * 0.35, // Adjusted slightly for registration fields
+    height: height * 0.35, 
     justifyContent: 'flex-end',
   },
   curveWrapper: {
@@ -242,15 +318,28 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 15,
     height: 55,
-    marginBottom: 15,
+    marginBottom: 8, // Slightly reduced bottom margin to fit error text closer
     borderWidth: 1,
     borderColor: '#f1f5f9',
+  },
+  // ADDED: Style for Error State (Red Border & Background)
+  inputFieldError: {
+    borderColor: '#ef4444', 
   },
   inputField: {
     flex: 1,
     marginLeft: 10,
     fontSize: 15,
     color: '#1e293b',
+  },
+  // ADDED: Style for Error Text Message
+  errorText: {
+    color: '#ef4444',
+    fontSize: 12,
+    marginBottom: 10,
+    marginLeft: 4,
+    marginTop: -4,
+    fontWeight: '500'
   },
   actionBtn: {
     backgroundColor: '#335c77',

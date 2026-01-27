@@ -143,7 +143,7 @@ const styles = StyleSheet.create({
   removeButton: { position: 'absolute', top: 10, right: 10, backgroundColor: 'rgba(255,255,255,0.8)', borderRadius: 20 },
   emptyState: { alignItems: 'center' },
   emptyStateText: { color: '#94a3b8', marginTop: 10, fontSize: 14 },
-  footer: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#F8F9FA', padding: 20, borderTopWidth: 1, borderTopColor: '#e2e8f0' },
+  footer: { position: 'absolute', bottom: 0, left: 0,  right: 0, backgroundColor: '#F8F9FA', padding: 20, borderTopWidth: 1, borderTopColor: '#e2e8f0' },
   proceedButton: { backgroundColor: '#315b76', height: 55, borderRadius: 12, justifyContent: 'center', alignItems: 'center', elevation: 4 },
   disabledButton: { backgroundColor: 'rgb(165, 176, 192)', elevation: 0 },
   proceedButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
