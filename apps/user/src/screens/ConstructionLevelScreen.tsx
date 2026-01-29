@@ -21,7 +21,7 @@ const COMPONENT_DATA = [
   {
     id: '1',
     title: 'Foundation',
-    description: 'Concrete grade M20, steel reinf...',
+    description: 'Excavation, RCC footing, and plinth beam',
     icon: 'home', 
     iconLib: 'MaterialIcons',
     gradientColors: ['#4F46E5', '#818cf8'], 
@@ -29,7 +29,7 @@ const COMPONENT_DATA = [
   {
     id: '2',
     title: 'Wall and Masonry',
-    description: 'Red clay bricks, cement mortar 1...',
+    description: 'Brickwork, blocks, and internal walls',
     icon: 'view-grid-plus', 
     iconLib: 'MaterialCommunityIcons',
     gradientColors: ['#3b82f6', '#60a5fa'],
@@ -45,7 +45,7 @@ const COMPONENT_DATA = [
   {
     id: '4',
     title: 'Plastering',
-    description: 'Internal gypsum, external sand f...',
+    description: 'Internal gypsum, external sand finish',
     icon: 'texture', 
     iconLib: 'MaterialIcons',
     gradientColors: ['#64748B', '#94a3b8'],
@@ -61,7 +61,7 @@ const COMPONENT_DATA = [
   {
     id: '6',
     title: 'Painting',
-    description: 'Premium emulsion, acrylic exter...',
+    description: 'Premium emulsion, acrylic exterior...',
     icon: 'format-paint', 
     iconLib: 'MaterialIcons',
     gradientColors: ['#10b981', '#34d399'],
@@ -69,8 +69,9 @@ const COMPONENT_DATA = [
 ];
 
 export default function ConstructionLevelScreen({ route, navigation }: any) {
-  // --- UPDATED: Receive projectId ---
-  const { totalArea, projectId } = route.params || { totalArea: 0, projectId: null };
+  // 1. UPDATED: Receive rooms from the PlanVerificationScreen
+  const { totalArea, projectId, rooms } = route.params || { totalArea: 0, projectId: null, rooms: [] };
+  
   const [activeTab, setActiveTab] = useState('Standard');
   const [searchText, setSearchText] = useState('');
 
@@ -82,12 +83,24 @@ export default function ConstructionLevelScreen({ route, navigation }: any) {
   };
 
   const handleCardPress = (item: any) => {
+    // 2. UPDATED: Logic to pass the Budget Tier (activeTab) to specific screens
     if (item.title === 'Foundation') {
-      // --- UPDATED: Pass projectId forward ---
-      navigation.navigate('FoundationDetails', { totalArea, projectId }); 
-    } else {
-      // For demo purposes, we can navigate directly to result for other items
-      // assuming they skip the detailed sub-selection
+      navigation.navigate('FoundationSelection', { 
+        totalArea, 
+        projectId, 
+        tier: activeTab // Passing the Economy/Standard/Luxury selection
+      }); 
+    } 
+    else if (item.title === 'Wall and Masonry') {
+      navigation.navigate('WallDetails', { 
+        totalArea, 
+        projectId, 
+        rooms,          // Passing AI detected rooms for wall length
+        tier: activeTab // Passing budget tier
+      });
+    } 
+    else {
+      // General Fallback for other components
       navigation.navigate('EstimateResult', { 
         totalArea, 
         level: activeTab,
@@ -128,7 +141,7 @@ export default function ConstructionLevelScreen({ route, navigation }: any) {
             />
           </View>
 
-          {/* TABS */}
+          {/* TABS - Budget Level Selection */}
           <View style={styles.tabContainer}>
             {['Economy', 'Standard', 'Luxury'].map((tab) => {
               const isActive = activeTab === tab;
@@ -156,7 +169,9 @@ export default function ConstructionLevelScreen({ route, navigation }: any) {
 
           {/* COMPONENT CARDS */}
           <View style={styles.cardsContainer}>
-            {COMPONENT_DATA.map((item) => (
+            {COMPONENT_DATA.filter(item => 
+              item.title.toLowerCase().includes(searchText.toLowerCase())
+            ).map((item) => (
               <TouchableOpacity 
                 key={item.id} 
                 style={styles.card} 
@@ -182,10 +197,21 @@ export default function ConstructionLevelScreen({ route, navigation }: any) {
             ))}
           </View>
           
-          <View style={{ height: 40 }} />
+          <View style={{ height: 100 }} /> 
         </ScrollView>
-
       </SafeAreaView>
+
+      {/* FLOATING ACTION BUTTON (CART) */}
+      <TouchableOpacity 
+        style={styles.fab} 
+        onPress={() => navigation.navigate('ProjectSummary', { projectId })}
+        activeOpacity={0.8}
+      >
+        <LinearGradient colors={['#315b76', '#2a4179']} style={styles.fabGradient}>
+            <Ionicons name="receipt-outline" size={26} color="#fff" />
+        </LinearGradient>
+      </TouchableOpacity>
+
     </View>
   );
 }
@@ -197,7 +223,7 @@ const styles = StyleSheet.create({
   
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingVertical: 15 },
   iconButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#f1f5f9', shadowColor: '#64748b', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 5 },
-  headerTitle: { fontSize: 20, fontWeight: '700', color: '#1e293b', fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif' },
+  headerTitle: { fontSize: 20, fontWeight: '700', color: '#1e293b' },
 
   searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 20, paddingHorizontal: 15, height: 52, marginBottom: 20, borderWidth: 1, borderColor: '#f1f5f9', shadowColor: '#64748b', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 5 },
   searchIcon: { marginRight: 10 },
@@ -219,4 +245,27 @@ const styles = StyleSheet.create({
   cardContent: { flex: 1, marginRight: 10 },
   cardTitle: { fontSize: 16, fontWeight: '700', color: '#1e293b', marginBottom: 4 },
   cardDesc: { fontSize: 13, color: '#64748B' },
+
+  // --- FLOATING ACTION BUTTON (CART) ---
+  fab: {
+    position: 'absolute',
+    bottom: 30,
+    right: 24,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    elevation: 10,
+    shadowColor: '#315b76',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    zIndex: 100, // Ensure it stays on top
+  },
+  fabGradient: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+  }
 });

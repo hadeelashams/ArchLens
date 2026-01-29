@@ -19,9 +19,9 @@ export const CONSTRUCTION_HIERARCHY = {
     label: "Foundation",
     // Standardized Key: subCategories (Represents Construction Method)
     subCategories: {
-      'RCC': ["Cement", "Steel (TMT Bar)", "Sand"],
-      'PCC': ["Cement", "River Sand", "Sand"],
-      'Stone Masonry': ["Size Stone", "Rubble Stone", "Cement", "Sand"],
+      'RCC': ["Cement", "Steel (TMT Bar)", "Sand","Aggregate"],
+      'PCC': ["Cement","Sand","Aggregate"],
+      'Stone Masonry': ["Stone", "Cement", "Sand"],
     },
   },
   'Wall': {

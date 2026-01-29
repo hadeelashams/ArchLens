@@ -16,12 +16,16 @@ import HomeScreen from './screens/HomeScreen';
 import UploadPlanScreen from './screens/UploadPlanScreen'; 
 import PlanVerificationScreen from './screens/PlanVerificationScreen'; 
 import ConstructionLevelScreen from './screens/ConstructionLevelScreen'; 
-import FoundationScreen from './screens/FoundationScreen';
+import ProjectSummaryScreen from './screens/ProjectSummaryScreen';
 
+// --- UPDATED FOUNDATION IMPORTS ---
+import FoundationSelection from './screens/FoundationSelection';
+import FoundationCost from './screens/FoundationCost';
+
+import WallScreen from './screens/WallScreen'; 
 import ProfileScreen from './screens/ProfileScreen';
 
-// NEW: Settings Detail Screen Imports
-// Make sure the paths match where you saved the files above!
+// Settings Screens
 import PersonalInfoScreen from './screens/settings/PersonalInfoScreen';
 import NotificationsScreen from './screens/settings/NotificationsScreen';
 import SecurityScreen from './screens/settings/SecurityScreen';
@@ -31,17 +35,38 @@ import EstimateResultScreen from './screens/EstimateResultScreen';
 
 // 1. Updated Stack Param List for TypeScript
 export type RootStackParamList = {
+  // Auth & Onboarding
   Onboarding: undefined;
   Login: undefined;
   Register: undefined;
+
+  // Main Flow
   Home: undefined;
   UploadPlan: undefined; 
   PlanVerification: { planImage: string }; 
-  ConstructionLevel: { totalArea: number };
-  EstimateResult: undefined;
-  FoundationDetails: undefined;
+  ConstructionLevel: { totalArea: number; projectId: string; rooms: any[] }; 
+  ProjectSummary: { projectId: string };
+  FoundationSelection: { totalArea: number; projectId: string }; 
+  
+  FoundationCost: { 
+    projectId: string; 
+    area: number | string; 
+    depth: string; 
+    activeMethod: string; 
+    selections: any; 
+  };
+
+  // Other Estimates
+  WallDetails: { totalArea: number; projectId: string; rooms: any[]; tier: string }; 
+  EstimateResult: { 
+    totalArea: number; 
+    level: string; 
+    projectId: string; 
+    foundationData?: any; // Added optional data props for result screen
+  };
+
+  // Settings & Profile
   Profile: undefined;
-  // Detail Screens
   PersonalInfo: undefined;
   Notifications: undefined;
   Security: undefined;
@@ -80,12 +105,17 @@ function AppContent() {
             <Stack.Screen name="UploadPlan" component={UploadPlanScreen} />
             <Stack.Screen name="PlanVerification" component={PlanVerificationScreen} />
             <Stack.Screen name="ConstructionLevel" component={ConstructionLevelScreen} />
+            <Stack.Screen name="ProjectSummary" component={ProjectSummaryScreen} />
+            
+            {/* --- UPDATED FOUNDATION SCREENS --- */}
+            <Stack.Screen name="FoundationSelection" component={FoundationSelection} />
+            <Stack.Screen name="FoundationCost" component={FoundationCost} />
+
+            <Stack.Screen name="WallDetails" component={WallScreen} />
             <Stack.Screen name="EstimateResult" component={EstimateResultScreen} />
-            <Stack.Screen name="FoundationDetails" component={FoundationScreen} />
 
             <Stack.Screen name="Profile" component={ProfileScreen} />
             
-            {/* Connected the real screens here */}
             <Stack.Screen name="PersonalInfo" component={PersonalInfoScreen} />
             <Stack.Screen name="Notifications" component={NotificationsScreen} />
             <Stack.Screen name="Security" component={SecurityScreen} />
