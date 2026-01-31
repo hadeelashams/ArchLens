@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons'; 
 import { StatusBar } from 'expo-status-bar';
-import { db, auth } from '@archlens/shared'; // Adjust import based on your project structure
+import { db, auth } from '@archlens/shared'; 
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 const { width } = Dimensions.get('window');
@@ -30,7 +30,8 @@ export default function FoundationCost({ route, navigation }: any) {
     lengthFt,
     widthFt,
     depthFt,
-    pccThicknessFt
+    pccThicknessFt,
+    rooms // Received from previous screen to pass forward
   } = route.params;
 
   const [saving, setSaving] = useState(false);
@@ -62,7 +63,6 @@ export default function FoundationCost({ route, navigation }: any) {
     const pcc_th_m = parseFloat(pccThicknessFt) * FT_TO_M;
     
     // Total Excavation
-    // Formula: Count * (L + 0.6m working space) * (W + 0.6m) * Depth
     const volExcavation = n * (l_m + 0.6) * (w_m + 0.6) * d_m;
     
     items.push({
@@ -78,8 +78,6 @@ export default function FoundationCost({ route, navigation }: any) {
     // 2. PCC BASE CALCULATION
     if (foundationConfig.hasPCC) {
       const volPCC = n * l_m * w_m * pcc_th_m;
-      
-      // Mix Ratio 1:4:8 (Cement:Sand:Agg) -> Sum = 13
       const dryVol = volPCC * 1.54;
       const cementVol = dryVol * (1/13);
       const sandVol = dryVol * (4/13);
@@ -88,9 +86,6 @@ export default function FoundationCost({ route, navigation }: any) {
       const matCement = getMat('PCC Base', 'Cement');
       const matSand = getMat('PCC Base', 'Sand');
       const aggSize = getAggSize('PCC Base');
-
-      // Cement Bags (1 bag = 0.035 m3 approx, but usually calculated by volume density 1440kg/m3 / 50kg)
-      // Approx 28.8 bags per m3 of cement volume
       const cementBags = Math.ceil(cementVol * 28.8);
 
       items.push({
@@ -125,17 +120,14 @@ export default function FoundationCost({ route, navigation }: any) {
     }
 
     // 3. MAIN LAYER (RCC vs STONE)
-    const layerHeight = 0.45; // Approx 1.5ft footing height
+    const layerHeight = 0.45; 
     const volMain = n * l_m * w_m * layerHeight;
 
     if (foundationConfig.mainLayer === 'RCC Footing') {
-      // RCC M20 (1:1.5:3) -> Sum = 5.5
       const dryVol = volMain * 1.54;
       const cementVol = dryVol * (1/5.5);
       const sandVol = dryVol * (1.5/5.5);
       const aggVol = dryVol * (3/5.5);
-      
-      // Steel @ 0.8% of Volume approx or 80kg/m3
       const steelKg = volMain * 80; 
 
       const matCement = getMat('RCC Footing', 'Cement');
@@ -183,7 +175,6 @@ export default function FoundationCost({ route, navigation }: any) {
         total: sandVol * (matSand.price || 1600)
       });
 
-      // Labor
       items.push({
         category: 'RCC Footing',
         name: 'Labor & Shuttering',
@@ -195,12 +186,9 @@ export default function FoundationCost({ route, navigation }: any) {
       });
 
     } else if (foundationConfig.mainLayer === 'Stone Masonry') {
-      // Stone Masonry Logic
-      // Mortar 1:6 (Cement:Sand)
       const mortarVol = volMain * MASONRY_MORTAR_RATIO;
-      const stoneVol = volMain * 1.1; // Bulk volume of stone (including voids before packing)
-
-      const dryMortar = mortarVol * 1.33; // Mortar bulking
+      const stoneVol = volMain * 1.1; 
+      const dryMortar = mortarVol * 1.33; 
       const cementVol = dryMortar * (1/7);
       const sandVol = dryMortar * (6/7);
 
@@ -251,37 +239,23 @@ export default function FoundationCost({ route, navigation }: any) {
 
     // 4. PLINTH BEAM (If Selected)
     if (foundationConfig.includePlinth) {
-      // Heuristic: Approx 1.2x Perimeter for grid beams
-      // Plinth Dimensions: 0.23m x 0.3m (9"x12") standard
       const approxPerimeter = Math.sqrt(area) * 4; 
-      const plinthLengthM = approxPerimeter * 1.25; // Add 25% for internal beams
+      const plinthLengthM = approxPerimeter * 1.25; 
       const volPlinth = plinthLengthM * 0.23 * 0.30;
-
-      // M20 Concrete
-      const dryVol = volPlinth * 1.54;
-      const cementVol = dryVol * (1/5.5);
-      const sandVol = dryVol * (1.5/5.5);
-      const aggVol = dryVol * (3/5.5);
-      
-      // Heavy Steel for Beams (110kg/m3)
       const steelKg = volPlinth * 110;
-
-      const matCement = getMat('Plinth Beam', 'Cement');
-      const matSteel = getMat('Plinth Beam', 'Steel (TMT Bar)');
-      const matSand = getMat('Plinth Beam', 'Sand');
       const aggSize = getAggSize('Plinth Beam');
 
-      // Add as a Lump Sum group or detailed? Detailed.
       items.push({
         category: 'Plinth Beam',
         name: 'Plinth Concrete Materials',
         desc: `Cem/Sand/Agg (${aggSize})`,
         qty: volPlinth.toFixed(1),
         unit: 'm³',
-        rate: 5500, // Composite material rate for estimation
+        rate: 5500, 
         total: volPlinth * 5500
       });
 
+      const matSteel = getMat('Plinth Beam', 'Steel (TMT Bar)');
       items.push({
         category: 'Plinth Beam',
         name: `Plinth Steel (${matSteel.name})`,
@@ -293,21 +267,25 @@ export default function FoundationCost({ route, navigation }: any) {
       });
     }
 
-    // Calculate Grand Total
     grandTotal = items.reduce((sum, i) => sum + i.total, 0);
-
     return { items, grandTotal };
 
   }, [area, numFootings, lengthFt, widthFt, depthFt, pccThicknessFt, selections, foundationConfig]);
 
+  // --- UPDATED SAVE HANDLER ---
   const handleSaveEstimate = async () => {
-    if (!auth.currentUser) return;
+    if (!auth.currentUser) {
+        Alert.alert("Error", "User not authenticated.");
+        return;
+    }
+    
     setSaving(true);
     try {
+      // 1. Save summary and line items to Firestore
       await addDoc(collection(db, 'estimates'), {
         projectId,
         userId: auth.currentUser.uid,
-        title: `${foundationConfig.mainLayer} System`,
+        itemName: `Foundation Estimate (${foundationConfig.mainLayer})`,
         category: 'Foundation',
         totalCost: calculation.grandTotal,
         lineItems: calculation.items,
@@ -315,15 +293,23 @@ export default function FoundationCost({ route, navigation }: any) {
         specifications: {
           depth: depthFt,
           footingCount: numFootings,
-          plinthIncluded: foundationConfig.includePlinth
+          plinthIncluded: foundationConfig.includePlinth,
+          method: foundationConfig.mainLayer
         },
         createdAt: serverTimestamp()
       });
       
-      Alert.alert("Success", "Estimate saved to project dashboard.");
-      navigation.navigate('ProjectSummary', { projectId }); // Assuming you have this screen
+      Alert.alert("Success", "Foundation estimate saved to project.");
+
+      // 2. Navigate back to Construction Level to continue the wizard
+      navigation.navigate('ConstructionLevel', { 
+        totalArea: parseFloat(area), 
+        projectId, 
+        rooms: rooms || [] 
+      });
+
     } catch (error: any) {
-      Alert.alert("Error", error.message);
+      Alert.alert("Save Error", error.message);
     } finally {
       setSaving(false);
     }
@@ -333,8 +319,6 @@ export default function FoundationCost({ route, navigation }: any) {
     <View style={styles.container}>
       <StatusBar style="dark" />
       <SafeAreaView style={styles.safeArea}>
-        
-        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.roundBtn}>
             <Ionicons name="arrow-back" size={20} color="#1e293b" />
@@ -344,8 +328,6 @@ export default function FoundationCost({ route, navigation }: any) {
         </View>
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-          
-          {/* Summary Card */}
           <View style={styles.summaryCard}>
             <View style={styles.summaryHeader}>
               <View>
@@ -356,9 +338,7 @@ export default function FoundationCost({ route, navigation }: any) {
                 <Text style={styles.methodBadgeText}>{foundationConfig.mainLayer}</Text>
               </View>
             </View>
-            
             <View style={styles.divider} />
-            
             <View style={styles.specRow}>
               <View style={styles.specItem}>
                 <Ionicons name="scan-outline" size={14} color="#94a3b8" />
@@ -375,11 +355,8 @@ export default function FoundationCost({ route, navigation }: any) {
             </View>
           </View>
 
-          {/* Detailed BOQ */}
           <Text style={styles.sectionTitle}>BILL OF QUANTITIES</Text>
-          
           <View style={styles.table}>
-            {/* Table Header */}
             <View style={styles.tableHeader}>
               <Text style={[styles.th, {flex: 2}]}>Item Description</Text>
               <Text style={[styles.th, {flex: 1, textAlign: 'center'}]}>Qty</Text>
@@ -403,14 +380,12 @@ export default function FoundationCost({ route, navigation }: any) {
             ))}
           </View>
 
-          {/* Disclaimer */}
           <View style={styles.disclaimer}>
             <Ionicons name="alert-circle-outline" size={18} color="#64748b" />
             <Text style={styles.disclaimerText}>
               Rates are derived from selected materials and standard market labor costs. Actuals may vary by +/- 10% based on site conditions.
             </Text>
           </View>
-
           <View style={{height: 100}} />
         </ScrollView>
 
@@ -428,7 +403,6 @@ export default function FoundationCost({ route, navigation }: any) {
             </>
           )}
         </TouchableOpacity>
-
       </SafeAreaView>
     </View>
   );
@@ -437,13 +411,10 @@ export default function FoundationCost({ route, navigation }: any) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
   safeArea: { flex: 1, paddingTop: Platform.OS === 'android' ? 35 : 0 },
-  
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 20 },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#1e293b' },
   roundBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', elevation: 2 },
-  
   scroll: { padding: 20 },
-
   summaryCard: { backgroundColor: '#1e293b', borderRadius: 20, padding: 20, marginBottom: 25, elevation: 5 },
   summaryHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   summaryLabel: { color: '#94a3b8', fontSize: 11, fontWeight: '700', letterSpacing: 1, marginBottom: 5 },
@@ -454,13 +425,10 @@ const styles = StyleSheet.create({
   specRow: { flexDirection: 'row', justifyContent: 'space-between' },
   specItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   specText: { color: '#cbd5e1', fontSize: 13, fontWeight: '500' },
-
   sectionTitle: { fontSize: 12, fontWeight: '800', color: '#64748b', marginBottom: 15, letterSpacing: 0.5 },
-
   table: { backgroundColor: '#fff', borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#e2e8f0' },
   tableHeader: { flexDirection: 'row', backgroundColor: '#f1f5f9', padding: 12, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
   th: { fontSize: 11, fontWeight: '700', color: '#64748b', textTransform: 'uppercase' },
-  
   tableRow: { flexDirection: 'row', padding: 15, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', alignItems: 'center' },
   itemName: { fontSize: 14, fontWeight: '700', color: '#334155', marginBottom: 2 },
   itemDesc: { fontSize: 11, color: '#94a3b8' },
@@ -468,10 +436,8 @@ const styles = StyleSheet.create({
   itemUnit: { fontSize: 10, color: '#94a3b8', fontWeight: '500' },
   itemPrice: { fontSize: 14, fontWeight: '700', color: '#10b981' },
   itemRate: { fontSize: 10, color: '#94a3b8', marginTop: 1 },
-
   disclaimer: { flexDirection: 'row', gap: 10, backgroundColor: '#FFF7ED', padding: 15, borderRadius: 12, marginTop: 20, borderWidth: 1, borderColor: '#FFEDD5' },
   disclaimerText: { flex: 1, fontSize: 11, color: '#C2410C', lineHeight: 16 },
-
   saveBtn: { position: 'absolute', bottom: 30, alignSelf: 'center', width: width * 0.85, backgroundColor: '#315b76', padding: 16, borderRadius: 16, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, elevation: 5 },
   saveBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 }
 });

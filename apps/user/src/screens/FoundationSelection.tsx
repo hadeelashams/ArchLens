@@ -11,7 +11,6 @@ import { collection, query, where, onSnapshot } from 'firebase/firestore';
 const { width } = Dimensions.get('window');
 
 // --- 1. UPDATED LAYER DEFINITIONS ---
-// "Aggregate" is removed here because it's now a manual selection, not from DB
 const LAYER_MATS: Record<string, string[]> = {
   'PCC Base': ['Cement', 'Sand'], 
   'RCC Footing': ['Cement', 'Steel (TMT Bar)', 'Sand'],
@@ -28,14 +27,15 @@ const AGGREGATE_OPTIONS: Record<string, string[]> = {
 };
 
 export default function FoundationSelection({ route, navigation }: any) {
-  const { totalArea: passedArea, projectId } = route.params || { totalArea: 0, projectId: null };
+  // --- UPDATED: Added 'tier' to params destructuring with a default ---
+  const { totalArea: passedArea, projectId, tier } = route.params || { totalArea: 0, projectId: null, tier: 'Standard' };
 
   const [loading, setLoading] = useState(true);
   const [materials, setMaterials] = useState<any[]>([]);
   
   // Layer State
   const [mainLayer, setMainLayer] = useState<'RCC Footing' | 'Stone Masonry'>('RCC Footing');
-  const [includePlinth, setIncludePlinth] = useState(true);
+  const [includePlinth, setIncludePlinth] = useState(false);
 
   // Input States
   const area = passedArea || 1000;
@@ -106,12 +106,13 @@ export default function FoundationSelection({ route, navigation }: any) {
       projectId,
       area,
       foundationConfig: { mainLayer, includePlinth, hasPCC: true },
-      selections: { ...selections, ...aggSelections }, // Merge DB selections with Aggregate choices
+      selections: { ...selections, ...aggSelections }, 
       numFootings: footingCount,
       lengthFt: fLength,
       widthFt: fWidth,
       depthFt: depth,
-      pccThicknessFt: pccThick
+      pccThicknessFt: pccThick,
+      tier // Passing tier forward if needed
     });
   };
 
@@ -122,12 +123,18 @@ export default function FoundationSelection({ route, navigation }: any) {
       <StatusBar style="dark" />
       <SafeAreaView style={styles.safeArea}>
         
+        {/* --- UPDATED HEADER WITH TIER BADGE --- */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.roundBtn}>
             <Ionicons name="arrow-back" size={20} color="#1e293b" />
           </TouchableOpacity>
+          
           <Text style={styles.headerTitle}>Foundation System</Text>
-          <View style={{ width: 40 }} />
+          
+          {/* Replaced empty Spacer with Tier Badge */}
+          <View style={styles.tierBadge}>
+            <Text style={styles.tierText}>{tier || 'Standard'}</Text>
+          </View>
         </View>
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
@@ -292,6 +299,12 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 20 },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#1e293b' },
   roundBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', elevation: 2 },
+  
+  // --- ADDED TIER STYLES ---
+  tierBadge: { backgroundColor: '#315b76', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 },
+  tierText: { color: '#fff', fontSize: 12, fontWeight: '800' },
+  // -------------------------
+
   scroll: { padding: 20 },
   
   paramsSection: { backgroundColor: '#fff', padding: 20, borderRadius: 20, marginBottom: 25, borderWidth: 1, borderColor: '#e2e8f0', elevation: 2 },
