@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, 
   Dimensions, SafeAreaView, Platform, TextInput, ActivityIndicator, Image, Switch 
 } from 'react-native';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'; 
+import { Ionicons } from '@expo/vector-icons'; 
 import { StatusBar } from 'expo-status-bar';
 import { db } from '@archlens/shared';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
@@ -23,11 +23,10 @@ const AGGREGATE_OPTIONS: Record<string, string[]> = {
   'PCC Base': ['20 mm', '40 mm'],
   'RCC Footing': ['20 mm', '10 mm'],
   'Plinth Beam': ['20 mm', '10 mm'],
-  'Stone Masonry': [] // No aggregate needed
+  'Stone Masonry': [] 
 };
 
 export default function FoundationSelection({ route, navigation }: any) {
-  // --- UPDATED: Added 'tier' to params destructuring with a default ---
   const { totalArea: passedArea, projectId, tier } = route.params || { totalArea: 0, projectId: null, tier: 'Standard' };
 
   const [loading, setLoading] = useState(true);
@@ -41,14 +40,14 @@ export default function FoundationSelection({ route, navigation }: any) {
   const area = passedArea || 1000;
   const [depth, setDepth] = useState('5'); 
   const [footingCount, setFootingCount] = useState(''); 
-  const [fLength, setFLength] = useState('5'); 
-  const [fWidth, setFWidth] = useState('5');   
-  const [pccThick, setPccThick] = useState('0.25'); 
+  
+  // --- MISSING INPUTS WERE HERE ---
+  const [fLength, setFLength] = useState('4'); // Default 4ft
+  const [fWidth, setFWidth] = useState('4');   // Default 4ft
+  const [pccThick, setPccThick] = useState('0.33'); // Default 4 inches (0.33ft)
 
-  // Selection State (Materials from DB)
   const [selections, setSelections] = useState<Record<string, any>>({});
   
-  // Aggregate State (Manual Dropdown Selection)
   const [aggSelections, setAggSelections] = useState<Record<string, string>>({
     'PCC Base': '40 mm',
     'RCC Footing': '20 mm',
@@ -88,15 +87,12 @@ export default function FoundationSelection({ route, navigation }: any) {
         if (type === 'Cement') return grade.includes('43') || grade.includes('ppc') || !grade.includes('53');
         if (type === 'Sand') return !name.includes('rcc');
       }
-
       if (layerName === 'RCC Footing' || layerName === 'Plinth Beam') {
         if (type === 'Cement') return grade.includes('53') || grade.includes('psc');
       }
-
       if (layerName === 'Stone Masonry') {
          if (type === 'Cement') return grade.includes('43') || grade.includes('ppc');
       }
-
       return true;
     });
   };
@@ -112,7 +108,7 @@ export default function FoundationSelection({ route, navigation }: any) {
       widthFt: fWidth,
       depthFt: depth,
       pccThicknessFt: pccThick,
-      tier // Passing tier forward if needed
+      tier 
     });
   };
 
@@ -123,15 +119,11 @@ export default function FoundationSelection({ route, navigation }: any) {
       <StatusBar style="dark" />
       <SafeAreaView style={styles.safeArea}>
         
-        {/* --- UPDATED HEADER WITH TIER BADGE --- */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.roundBtn}>
             <Ionicons name="arrow-back" size={20} color="#1e293b" />
           </TouchableOpacity>
-          
           <Text style={styles.headerTitle}>Foundation System</Text>
-          
-          {/* Replaced empty Spacer with Tier Badge */}
           <View style={styles.tierBadge}>
             <Text style={styles.tierText}>{tier || 'Standard'}</Text>
           </View>
@@ -139,19 +131,21 @@ export default function FoundationSelection({ route, navigation }: any) {
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
           
-          {/* 1. STRUCTURAL DIMENSIONS (Unchanged) */}
+          {/* --- 1. UPDATED STRUCTURAL DIMENSIONS SECTION --- */}
+          {/* Added inputs for Length, Width, and PCC Thickness */}
           <View style={styles.paramsSection}>
             <Text style={styles.sectionLabel}>STRUCTURAL DIMENSIONS</Text>
+            
+            {/* ROW 1: Area & Count */}
             <View style={styles.inputRow}>
                 <View style={styles.inputContainer}>
-                    <Text style={styles.inputLabel}>AI Detected Area</Text>
+                    <Text style={styles.inputLabel}>Area (sq.ft)</Text>
                     <View style={[styles.textInputWrapper, styles.readOnlyField]}>
                         <Text style={styles.readOnlyText}>{area}</Text>
-                        <Text style={styles.inputUnit}>sq.ft</Text>
                     </View>
                 </View>
                 <View style={styles.inputContainer}>
-                    <Text style={styles.inputLabel}>Footing Count</Text>
+                    <Text style={styles.inputLabel}>No. of Footings</Text>
                     <View style={styles.textInputWrapper}>
                         <TextInput 
                             style={styles.textInput}
@@ -163,11 +157,53 @@ export default function FoundationSelection({ route, navigation }: any) {
                     </View>
                 </View>
             </View>
+
+            {/* ROW 2: Footing Size (L x W) - NEW */}
+            <View style={[styles.inputRow, { marginTop: 15 }]}>
+                <View style={styles.inputContainer}>
+                    <Text style={styles.inputLabel}>Footing Length (ft)</Text>
+                    <View style={styles.textInputWrapper}>
+                        <TextInput 
+                          style={styles.textInput} 
+                          value={fLength} 
+                          onChangeText={setFLength} 
+                          keyboardType="numeric" 
+                          placeholder="e.g. 4"
+                        />
+                    </View>
+                </View>
+                <View style={styles.inputContainer}>
+                    <Text style={styles.inputLabel}>Footing Width (ft)</Text>
+                    <View style={styles.textInputWrapper}>
+                        <TextInput 
+                          style={styles.textInput} 
+                          value={fWidth} 
+                          onChangeText={setFWidth} 
+                          keyboardType="numeric" 
+                          placeholder="e.g. 4"
+                        />
+                    </View>
+                </View>
+            </View>
+
+            {/* ROW 3: Depth & PCC Thickness - NEW */}
             <View style={[styles.inputRow, { marginTop: 15 }]}>
                 <View style={styles.inputContainer}>
                     <Text style={styles.inputLabel}>Excavation Depth (ft)</Text>
                     <View style={styles.textInputWrapper}>
                         <TextInput style={styles.textInput} value={depth} onChangeText={setDepth} keyboardType="numeric" />
+                    </View>
+                </View>
+                <View style={styles.inputContainer}>
+                    <Text style={styles.inputLabel}>PCC Thickness (ft)</Text>
+                    <View style={styles.textInputWrapper}>
+                        <TextInput 
+                          style={styles.textInput} 
+                          value={pccThick} 
+                          onChangeText={setPccThick} 
+                          keyboardType="numeric" 
+                          placeholder="0.33"
+                        />
                     </View>
                 </View>
             </View>
@@ -210,7 +246,7 @@ export default function FoundationSelection({ route, navigation }: any) {
                 <Text style={styles.layerTitle}>{layerName.toUpperCase()}</Text>
               </View>
 
-              {/* A. Database Materials (Cement, Sand, Steel) */}
+              {/* A. Database Materials */}
               {LAYER_MATS[layerName]?.map(type => {
                 const filteredList = filterMaterialsForLayer(layerName, type, materials);
                 const selectionKey = `${layerName}_${type}`;
@@ -246,7 +282,7 @@ export default function FoundationSelection({ route, navigation }: any) {
                 );
               })}
 
-              {/* B. Aggregate Selection (Manual Dropdown Logic) */}
+              {/* B. Aggregate Selection */}
               {AGGREGATE_OPTIONS[layerName] && AGGREGATE_OPTIONS[layerName].length > 0 && (
                 <View style={styles.brandSelectionGroup}>
                   <Text style={styles.brandCategoryTitle}>Coarse Aggregate Size</Text>
@@ -300,10 +336,8 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#1e293b' },
   roundBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', elevation: 2 },
   
-  // --- ADDED TIER STYLES ---
   tierBadge: { backgroundColor: '#315b76', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 },
   tierText: { color: '#fff', fontSize: 12, fontWeight: '800' },
-  // -------------------------
 
   scroll: { padding: 20 },
   
@@ -328,7 +362,6 @@ const styles = StyleSheet.create({
   toggleTitle: { fontSize: 14, fontWeight: '700', color: '#1e293b' },
   toggleSub: { fontSize: 11, color: '#64748b', marginTop: 2 },
 
-  // --- LAYER STYLING ---
   layerSection: { marginBottom: 30, backgroundColor: '#fff', borderRadius: 20, padding: 15, borderWidth: 1, borderColor: '#e2e8f0' },
   layerHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 15, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   layerTitle: { fontSize: 13, fontWeight: '800', color: '#315b76', letterSpacing: 0.5 },
@@ -344,7 +377,6 @@ const styles = StyleSheet.create({
   brandPrice: { fontSize: 11, color: '#10b981', marginTop: 2, fontWeight: '700' },
   noMaterialText: { fontSize: 12, color: '#94a3b8', fontStyle: 'italic', marginLeft: 10 },
 
-  // --- AGGREGATE CHIPS ---
   aggOptionsRow: { flexDirection: 'row', gap: 10, paddingLeft: 5 },
   aggChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f1f5f9', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0' },
   aggChipActive: { backgroundColor: '#315b76', borderColor: '#315b76' },

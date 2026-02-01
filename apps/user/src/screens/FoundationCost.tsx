@@ -12,144 +12,131 @@ const { width } = Dimensions.get('window');
 
 // --- ENGINEERING CONSTANTS ---
 const FT_TO_M = 0.3048;           
-const DRY_MIX_FACTOR = 1.54;      
-const STEEL_DENSITY_KG_M3 = 7850; 
-const MASONRY_MORTAR_RATIO = 0.30; // 30% of masonry volume is mortar
-const MARKET_RATE_AGGREGATE = 1400; // ₹ per m³ (Default fallback)
-const MARKET_RATE_EXCAVATION = 450; // ₹ per m³
-const MARKET_RATE_LABOR_MASONRY = 3500; // ₹ per m³
-const MARKET_RATE_LABOR_RCC = 4200; // ₹ per m³ (includes shuttering)
+const CEMENT_BAGS_PER_M3 = 28.8;
+const DRY_VOL_MULTIPLIER_CONCRETE = 1.54; // 54% bulkage for dry mix
+const DRY_VOL_MULTIPLIER_MORTAR = 1.33;   // 33% for mortar
+const MASONRY_MORTAR_RATIO = 0.30;        // 30% of stone volume is mortar
+const MARKET_RATE_AGGREGATE = 1450;       // ₹ per m³
 
 export default function FoundationCost({ route, navigation }: any) {
   const { 
     projectId, 
     area, 
-    foundationConfig, // { mainLayer, includePlinth, hasPCC }
-    selections,       // { 'RCC Footing_Cement': {price...}, 'RCC Footing': '20mm' ... }
+    foundationConfig, 
+    selections, 
     numFootings,
     lengthFt,
     widthFt,
     depthFt,
     pccThicknessFt,
-    rooms // Received from previous screen to pass forward
+    tier 
   } = route.params;
 
   const [saving, setSaving] = useState(false);
 
-  // Helper to get Price and Name safely
+  // Helper to safely get material data from selections
   const getMat = (layer: string, type: string) => {
     const key = `${layer}_${type}`;
     const item = selections[key];
     return {
       price: item ? parseFloat(item.pricePerUnit) : 0,
       name: item ? item.name : 'Not Selected',
-      valid: !!item
+      exists: !!item
     };
   };
 
-  const getAggSize = (layer: string) => {
-    return selections[layer] || '20 mm';
-  };
+  const getAggSize = (layer: string) => selections[layer] || '20 mm';
 
   const calculation = useMemo(() => {
-    let items = [];
-    let grandTotal = 0;
-
+    let items: any[] = [];
+    
     // 1. DIMENSIONS & CONVERSION
     const n = parseInt(numFootings) || 0;
     const l_m = parseFloat(lengthFt) * FT_TO_M;
     const w_m = parseFloat(widthFt) * FT_TO_M;
-    const d_m = parseFloat(depthFt) * FT_TO_M;
-    const pcc_th_m = parseFloat(pccThicknessFt) * FT_TO_M;
+    const total_depth_m = parseFloat(depthFt) * FT_TO_M;
+    const pcc_h_m = parseFloat(pccThicknessFt) * FT_TO_M;
     
-    // Total Excavation
-    const volExcavation = n * (l_m + 0.6) * (w_m + 0.6) * d_m;
-    
-    items.push({
-      category: 'Site Work',
-      name: "Earthwork Excavation",
-      desc: `${n} pits x ${d_m.toFixed(1)}m depth`,
-      qty: volExcavation.toFixed(1),
-      unit: "m³",
-      rate: MARKET_RATE_EXCAVATION,
-      total: volExcavation * MARKET_RATE_EXCAVATION
-    });
+    // Height available for structure after PCC is laid
+    const structural_h_m = total_depth_m - pcc_h_m;
 
-    // 2. PCC BASE CALCULATION
+    // 2. PCC BASE CALCULATION (Mix 1:4:8)
     if (foundationConfig.hasPCC) {
-      const volPCC = n * l_m * w_m * pcc_th_m;
-      const dryVol = volPCC * 1.54;
-      const cementVol = dryVol * (1/13);
-      const sandVol = dryVol * (4/13);
-      const aggVol = dryVol * (8/13);
-      
-      const matCement = getMat('PCC Base', 'Cement');
+      const volPCC = n * l_m * w_m * pcc_h_m;
+      const dryVol = volPCC * DRY_VOL_MULTIPLIER_CONCRETE;
+      const cementBags = Math.ceil((dryVol * (1/13)) * CEMENT_BAGS_PER_M3);
+      const sandM3 = dryVol * (4/13);
+      const aggM3 = dryVol * (8/13);
+
+      const matCem = getMat('PCC Base', 'Cement');
       const matSand = getMat('PCC Base', 'Sand');
-      const aggSize = getAggSize('PCC Base');
-      const cementBags = Math.ceil(cementVol * 28.8);
 
       items.push({
-        category: 'PCC Layer',
-        name: `Cement (${matCement.name})`,
-        desc: 'For PCC 1:4:8 Base',
+        category: 'PCC Base',
+        name: `Cement (${matCem.name})`,
+        desc: 'Base Mix 1:4:8',
         qty: cementBags,
         unit: 'Bags',
-        rate: matCement.price || 400,
-        total: cementBags * (matCement.price || 400)
+        rate: matCem.price || 420,
+        total: cementBags * (matCem.price || 420)
       });
 
       items.push({
-        category: 'PCC Layer',
+        category: 'PCC Base',
         name: `Sand (${matSand.name})`,
-        desc: 'River/M-Sand',
-        qty: sandVol.toFixed(1),
+        desc: 'PCC Grade Sand',
+        qty: sandM3.toFixed(1),
         unit: 'm³',
         rate: matSand.price || 1500,
-        total: sandVol * (matSand.price || 1500)
+        total: sandM3 * (matSand.price || 1500)
       });
 
       items.push({
-        category: 'PCC Layer',
-        name: `Aggregate (${aggSize})`,
+        category: 'PCC Base',
+        name: `Aggregates (${getAggSize('PCC Base')})`,
         desc: 'Coarse Aggregate',
-        qty: aggVol.toFixed(1),
+        qty: aggM3.toFixed(1),
         unit: 'm³',
         rate: MARKET_RATE_AGGREGATE,
-        total: aggVol * MARKET_RATE_AGGREGATE
+        total: aggM3 * MARKET_RATE_AGGREGATE
       });
     }
 
     // 3. MAIN LAYER (RCC vs STONE)
-    const layerHeight = 0.45; 
-    const volMain = n * l_m * w_m * layerHeight;
-
     if (foundationConfig.mainLayer === 'RCC Footing') {
-      const dryVol = volMain * 1.54;
-      const cementVol = dryVol * (1/5.5);
-      const sandVol = dryVol * (1.5/5.5);
-      const aggVol = dryVol * (3/5.5);
-      const steelKg = volMain * 80; 
+      // Logic: Trapezoidal Footing (avg 1.5ft height) + Neck Column (remaining depth)
+      const footingH_m = 0.45; // 1.5ft
+      const pedestalH_m = Math.max(0, structural_h_m - footingH_m);
+      
+      const volFooting = n * l_m * w_m * footingH_m;
+      const volPedestal = n * (0.3 * 0.45) * pedestalH_m; // Standard 9"x18" neck column
+      const totalRCCVol = volFooting + volPedestal;
 
-      const matCement = getMat('RCC Footing', 'Cement');
+      const dryVol = totalRCCVol * DRY_VOL_MULTIPLIER_CONCRETE;
+      const cementBags = Math.ceil((dryVol * (1/5.5)) * CEMENT_BAGS_PER_M3); // M20 Mix
+      const sandM3 = dryVol * (1.5/5.5);
+      const aggM3 = dryVol * (3/5.5);
+      const steelKg = totalRCCVol * 95; // Avg reinforcement density
+
+      const matCem = getMat('RCC Footing', 'Cement');
       const matSteel = getMat('RCC Footing', 'Steel (TMT Bar)');
       const matSand = getMat('RCC Footing', 'Sand');
-      const aggSize = getAggSize('RCC Footing');
 
       items.push({
         category: 'RCC Footing',
-        name: `Cement (${matCement.name})`,
-        desc: 'M20 Grade Mix',
-        qty: Math.ceil(cementVol * 28.8),
+        name: `Cement (${matCem.name})`,
+        desc: 'M20 Grade (Footing + Neck)',
+        qty: cementBags,
         unit: 'Bags',
-        rate: matCement.price || 450,
-        total: Math.ceil(cementVol * 28.8) * (matCement.price || 450)
+        rate: matCem.price || 450,
+        total: cementBags * (matCem.price || 450)
       });
 
       items.push({
         category: 'RCC Footing',
         name: `Steel (${matSteel.name})`,
-        desc: 'Footing Mesh (Fe550)',
-        qty: steelKg.toFixed(0),
+        desc: 'Mesh & Starter Bars',
+        qty: Math.ceil(steelKg),
         unit: 'kg',
         rate: matSteel.price || 75,
         total: steelKg * (matSteel.price || 75)
@@ -157,135 +144,117 @@ export default function FoundationCost({ route, navigation }: any) {
 
       items.push({
         category: 'RCC Footing',
-        name: `Aggregate (${aggSize})`,
-        desc: 'Crushed Stone',
-        qty: aggVol.toFixed(1),
-        unit: 'm³',
-        rate: MARKET_RATE_AGGREGATE,
-        total: aggVol * MARKET_RATE_AGGREGATE
-      });
-
-      items.push({
-        category: 'RCC Footing',
         name: `Sand (${matSand.name})`,
-        desc: 'Concrete Sand',
-        qty: sandVol.toFixed(1),
+        desc: 'Concrete M-Sand',
+        qty: sandM3.toFixed(1),
         unit: 'm³',
         rate: matSand.price || 1600,
-        total: sandVol * (matSand.price || 1600)
+        total: sandM3 * (matSand.price || 1600)
       });
 
       items.push({
         category: 'RCC Footing',
-        name: 'Labor & Shuttering',
-        desc: 'Placement, Bending, Casting',
-        qty: volMain.toFixed(1),
+        name: `Aggregates (${getAggSize('RCC Footing')})`,
+        desc: 'Crushed Stone',
+        qty: aggM3.toFixed(1),
         unit: 'm³',
-        rate: MARKET_RATE_LABOR_RCC,
-        total: volMain * MARKET_RATE_LABOR_RCC
+        rate: MARKET_RATE_AGGREGATE,
+        total: aggM3 * MARKET_RATE_AGGREGATE
       });
 
     } else if (foundationConfig.mainLayer === 'Stone Masonry') {
-      const mortarVol = volMain * MASONRY_MORTAR_RATIO;
-      const stoneVol = volMain * 1.1; 
-      const dryMortar = mortarVol * 1.33; 
-      const cementVol = dryMortar * (1/7);
-      const sandVol = dryMortar * (6/7);
+      const volMasonry = n * l_m * w_m * structural_h_m;
+      const stoneM3 = volMasonry * 1.15; // 15% wastage/voids
+      const mortarVol = volMasonry * MASONRY_MORTAR_RATIO;
+      const dryMortar = mortarVol * DRY_VOL_MULTIPLIER_MORTAR;
+      const cementBags = Math.ceil((dryMortar * (1/7)) * CEMENT_BAGS_PER_M3); // 1:6 Mix
+      const sandM3 = dryMortar * (6/7);
 
       const matStone = getMat('Stone Masonry', 'Size Stone');
-      const matCement = getMat('Stone Masonry', 'Cement');
+      const matCem = getMat('Stone Masonry', 'Cement');
       const matSand = getMat('Stone Masonry', 'Sand');
 
       items.push({
         category: 'Stone Masonry',
         name: `Size Stone (${matStone.name})`,
-        desc: 'Hard Granite/Basalt',
-        qty: stoneVol.toFixed(1),
+        desc: 'Main Foundation Body',
+        qty: stoneM3.toFixed(1),
         unit: 'm³',
-        rate: matStone.price || 900,
-        total: stoneVol * (matStone.price || 900)
+        rate: matStone.price || 1100,
+        total: stoneM3 * (matStone.price || 1100)
       });
 
       items.push({
         category: 'Stone Masonry',
-        name: `Cement (${matCement.name})`,
-        desc: 'Mortar 1:6',
-        qty: Math.ceil(cementVol * 28.8),
+        name: `Cement (${matCem.name})`,
+        desc: 'Mortar Mix 1:6',
+        qty: cementBags,
         unit: 'Bags',
-        rate: matCement.price || 420,
-        total: Math.ceil(cementVol * 28.8) * (matCement.price || 420)
+        rate: matCem.price || 420,
+        total: cementBags * (matCem.price || 420)
       });
 
       items.push({
         category: 'Stone Masonry',
         name: `Sand (${matSand.name})`,
         desc: 'Masonry Sand',
-        qty: sandVol.toFixed(1),
+        qty: sandM3.toFixed(1),
         unit: 'm³',
         rate: matSand.price || 1500,
-        total: sandVol * (matSand.price || 1500)
-      });
-
-      items.push({
-        category: 'Stone Masonry',
-        name: 'Mason Labor',
-        desc: 'Skilled Masonry Work',
-        qty: volMain.toFixed(1),
-        unit: 'm³',
-        rate: MARKET_RATE_LABOR_MASONRY,
-        total: volMain * MARKET_RATE_LABOR_MASONRY
+        total: sandM3 * (matSand.price || 1500)
       });
     }
 
-    // 4. PLINTH BEAM (If Selected)
+    // 4. PLINTH BEAM CALCULATION
     if (foundationConfig.includePlinth) {
-      const approxPerimeter = Math.sqrt(area) * 4; 
-      const plinthLengthM = approxPerimeter * 1.25; 
-      const volPlinth = plinthLengthM * 0.23 * 0.30;
+      const perimeterM = (Math.sqrt(area) * 4) * 1.2; // perimeter + 20% for internal walls
+      const volPlinth = perimeterM * 0.23 * 0.30; // 9" x 12" beam
+      const dryVol = volPlinth * DRY_VOL_MULTIPLIER_CONCRETE;
+      
+      const cementBags = Math.ceil((dryVol * (1/5.5)) * CEMENT_BAGS_PER_M3);
+      const sandM3 = dryVol * (1.5/5.5);
+      const aggM3 = dryVol * (3/5.5);
       const steelKg = volPlinth * 110;
-      const aggSize = getAggSize('Plinth Beam');
+
+      // Fallback: If Plinth specific brand not selected, use RCC Footing brand
+      const matCem = getMat('Plinth Beam', 'Cement').exists ? getMat('Plinth Beam', 'Cement') : getMat('RCC Footing', 'Cement');
+      const matSteel = getMat('Plinth Beam', 'Steel (TMT Bar)').exists ? getMat('Plinth Beam', 'Steel (TMT Bar)') : getMat('RCC Footing', 'Steel (TMT Bar)');
+      const matSand = getMat('Plinth Beam', 'Sand').exists ? getMat('Plinth Beam', 'Sand') : getMat('RCC Footing', 'Sand');
 
       items.push({
         category: 'Plinth Beam',
-        name: 'Plinth Concrete Materials',
-        desc: `Cem/Sand/Agg (${aggSize})`,
+        name: 'Plinth Materials',
+        desc: `Cem (${matCem.name}) & Agg/Sand`,
         qty: volPlinth.toFixed(1),
         unit: 'm³',
-        rate: 5500, 
-        total: volPlinth * 5500
+        rate: 3800, // Aggregate + Sand + Cement weighted avg per m3
+        total: (cementBags * matCem.price) + (sandM3 * (matSand.price || 1600)) + (aggM3 * MARKET_RATE_AGGREGATE)
       });
 
-      const matSteel = getMat('Plinth Beam', 'Steel (TMT Bar)');
       items.push({
         category: 'Plinth Beam',
         name: `Plinth Steel (${matSteel.name})`,
-        desc: 'Main bars & Stirrups',
-        qty: steelKg.toFixed(0),
+        desc: 'Main & Stirrup Bars',
+        qty: Math.ceil(steelKg),
         unit: 'kg',
-        rate: matSteel.price || 75,
-        total: steelKg * (matSteel.price || 75)
+        rate: matSteel.price || 78,
+        total: steelKg * (matSteel.price || 78)
       });
     }
 
-    grandTotal = items.reduce((sum, i) => sum + i.total, 0);
+    const grandTotal = items.reduce((sum, i) => sum + i.total, 0);
     return { items, grandTotal };
 
   }, [area, numFootings, lengthFt, widthFt, depthFt, pccThicknessFt, selections, foundationConfig]);
 
-  // --- UPDATED SAVE HANDLER ---
   const handleSaveEstimate = async () => {
-    if (!auth.currentUser) {
-        Alert.alert("Error", "User not authenticated.");
-        return;
-    }
-    
+    if (!auth.currentUser) return Alert.alert("Error", "User not authenticated.");
     setSaving(true);
     try {
-      // 1. Save summary and line items to Firestore
       await addDoc(collection(db, 'estimates'), {
         projectId,
         userId: auth.currentUser.uid,
-        itemName: `Foundation Estimate (${foundationConfig.mainLayer})`,
+        itemName: `Foundation Materials (${foundationConfig.mainLayer})`,
         category: 'Foundation',
         totalCost: calculation.grandTotal,
         lineItems: calculation.items,
@@ -293,23 +262,15 @@ export default function FoundationCost({ route, navigation }: any) {
         specifications: {
           depth: depthFt,
           footingCount: numFootings,
-          plinthIncluded: foundationConfig.includePlinth,
-          method: foundationConfig.mainLayer
+          method: foundationConfig.mainLayer,
+          plinth: foundationConfig.includePlinth
         },
         createdAt: serverTimestamp()
       });
-      
-      Alert.alert("Success", "Foundation estimate saved to project.");
-
-      // 2. Navigate back to Construction Level to continue the wizard
-      navigation.navigate('ConstructionLevel', { 
-        totalArea: parseFloat(area), 
-        projectId, 
-        rooms: rooms || [] 
-      });
-
-    } catch (error: any) {
-      Alert.alert("Save Error", error.message);
+      Alert.alert("Success", "Estimate saved successfully.");
+      navigation.navigate('ConstructionLevel', { projectId, totalArea: area }); 
+    } catch (e: any) {
+      Alert.alert("Error", e.message);
     } finally {
       setSaving(false);
     }
@@ -319,20 +280,26 @@ export default function FoundationCost({ route, navigation }: any) {
     <View style={styles.container}>
       <StatusBar style="dark" />
       <SafeAreaView style={styles.safeArea}>
+        
+        {/* HEADER */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.roundBtn}>
             <Ionicons name="arrow-back" size={20} color="#1e293b" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Cost Estimation</Text>
-          <View style={{ width: 40 }} />
+          <Text style={styles.headerTitle}>Material Cost</Text>
+          <View style={styles.tierBadge}>
+            <Text style={styles.tierText}>{tier || 'Standard'}</Text>
+          </View>
         </View>
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+          
+          {/* SUMMARY CARD (DARK STYLE) */}
           <View style={styles.summaryCard}>
             <View style={styles.summaryHeader}>
               <View>
-                <Text style={styles.summaryLabel}>ESTIMATED COST</Text>
-                <Text style={styles.summaryTotal}>₹{Math.round(calculation.grandTotal).toLocaleString()}</Text>
+                <Text style={styles.summaryLabel}>ESTIMATED MATERIAL COST</Text>
+                <Text style={styles.summaryTotal}>₹{Math.round(calculation.grandTotal).toLocaleString('en-IN')}</Text>
               </View>
               <View style={styles.methodBadge}>
                 <Text style={styles.methodBadgeText}>{foundationConfig.mainLayer}</Text>
@@ -341,12 +308,12 @@ export default function FoundationCost({ route, navigation }: any) {
             <View style={styles.divider} />
             <View style={styles.specRow}>
               <View style={styles.specItem}>
-                <Ionicons name="scan-outline" size={14} color="#94a3b8" />
-                <Text style={styles.specText}>{area} Sq.ft</Text>
+                <Ionicons name="apps-outline" size={14} color="#94a3b8" />
+                <Text style={styles.specText}>{numFootings} Nos</Text>
               </View>
               <View style={styles.specItem}>
-                <Ionicons name="apps-outline" size={14} color="#94a3b8" />
-                <Text style={styles.specText}>{numFootings} Footings</Text>
+                <Ionicons name="resize-outline" size={14} color="#94a3b8" />
+                <Text style={styles.specText}>{lengthFt}x{widthFt} ft</Text>
               </View>
               <View style={styles.specItem}>
                 <Ionicons name="arrow-down-outline" size={14} color="#94a3b8" />
@@ -355,17 +322,20 @@ export default function FoundationCost({ route, navigation }: any) {
             </View>
           </View>
 
-          <Text style={styles.sectionTitle}>BILL OF QUANTITIES</Text>
+          <Text style={styles.sectionTitle}>MATERIAL BREAKDOWN</Text>
+          
+          {/* BREAKDOWN TABLE */}
           <View style={styles.table}>
             <View style={styles.tableHeader}>
-              <Text style={[styles.th, {flex: 2}]}>Item Description</Text>
+              <Text style={[styles.th, {flex: 2}]}>Material</Text>
               <Text style={[styles.th, {flex: 1, textAlign: 'center'}]}>Qty</Text>
-              <Text style={[styles.th, {flex: 1.2, textAlign: 'right'}]}>Amount</Text>
+              <Text style={[styles.th, {flex: 1.2, textAlign: 'right'}]}>Cost</Text>
             </View>
 
             {calculation.items.map((item, index) => (
               <View key={index} style={styles.tableRow}>
                 <View style={{flex: 2}}>
+                  <Text style={styles.categoryLabel}>{item.category}</Text>
                   <Text style={styles.itemName}>{item.name}</Text>
                   <Text style={styles.itemDesc}>{item.desc}</Text>
                 </View>
@@ -381,11 +351,12 @@ export default function FoundationCost({ route, navigation }: any) {
           </View>
 
           <View style={styles.disclaimer}>
-            <Ionicons name="alert-circle-outline" size={18} color="#64748b" />
+            <Ionicons name="information-circle-outline" size={18} color="#0369a1" />
             <Text style={styles.disclaimerText}>
-              Rates are derived from selected materials and standard market labor costs. Actuals may vary by +/- 10% based on site conditions.
+              This estimate includes <Text style={{fontWeight: 'bold'}}>Material Only</Text> (Dry Volume + 5% wastage). Excavation labor, shuttering, and curing water costs are excluded.
             </Text>
           </View>
+          
           <View style={{height: 100}} />
         </ScrollView>
 
@@ -398,7 +369,7 @@ export default function FoundationCost({ route, navigation }: any) {
             <ActivityIndicator color="#fff" />
           ) : (
             <>
-              <Text style={styles.saveBtnText}>Save to Project</Text>
+              <Text style={styles.saveBtnText}>Save Material Estimate</Text>
               <Ionicons name="save-outline" size={20} color="#fff" />
             </>
           )}
@@ -414,30 +385,40 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 20 },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#1e293b' },
   roundBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', elevation: 2 },
+  tierBadge: { backgroundColor: '#315b76', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 },
+  tierText: { color: '#fff', fontSize: 12, fontWeight: '800' },
   scroll: { padding: 20 },
-  summaryCard: { backgroundColor: '#1e293b', borderRadius: 20, padding: 20, marginBottom: 25, elevation: 5 },
+
+  // Summary Card
+  summaryCard: { backgroundColor: '#1e293b', borderRadius: 24, padding: 25, marginBottom: 25, elevation: 8 },
   summaryHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   summaryLabel: { color: '#94a3b8', fontSize: 11, fontWeight: '700', letterSpacing: 1, marginBottom: 5 },
   summaryTotal: { color: '#fff', fontSize: 28, fontWeight: '800' },
   methodBadge: { backgroundColor: '#315b76', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
-  methodBadgeText: { color: '#fff', fontSize: 12, fontWeight: '600' },
+  methodBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
   divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.1)', marginVertical: 15 },
   specRow: { flexDirection: 'row', justifyContent: 'space-between' },
   specItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   specText: { color: '#cbd5e1', fontSize: 13, fontWeight: '500' },
+
   sectionTitle: { fontSize: 12, fontWeight: '800', color: '#64748b', marginBottom: 15, letterSpacing: 0.5 },
-  table: { backgroundColor: '#fff', borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#e2e8f0' },
-  tableHeader: { flexDirection: 'row', backgroundColor: '#f1f5f9', padding: 12, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
+  
+  // Table Style
+  table: { backgroundColor: '#fff', borderRadius: 20, overflow: 'hidden', borderWidth: 1, borderColor: '#e2e8f0' },
+  tableHeader: { flexDirection: 'row', backgroundColor: '#f1f5f9', padding: 15, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
   th: { fontSize: 11, fontWeight: '700', color: '#64748b', textTransform: 'uppercase' },
   tableRow: { flexDirection: 'row', padding: 15, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', alignItems: 'center' },
-  itemName: { fontSize: 14, fontWeight: '700', color: '#334155', marginBottom: 2 },
-  itemDesc: { fontSize: 11, color: '#94a3b8' },
+  categoryLabel: { fontSize: 9, fontWeight: '800', color: '#315b76', textTransform: 'uppercase', marginBottom: 2 },
+  itemName: { fontSize: 14, fontWeight: '700', color: '#334155' },
+  itemDesc: { fontSize: 11, color: '#94a3b8', marginTop: 1 },
   itemQty: { fontSize: 14, fontWeight: '700', color: '#1e293b' },
   itemUnit: { fontSize: 10, color: '#94a3b8', fontWeight: '500' },
   itemPrice: { fontSize: 14, fontWeight: '700', color: '#10b981' },
   itemRate: { fontSize: 10, color: '#94a3b8', marginTop: 1 },
-  disclaimer: { flexDirection: 'row', gap: 10, backgroundColor: '#FFF7ED', padding: 15, borderRadius: 12, marginTop: 20, borderWidth: 1, borderColor: '#FFEDD5' },
-  disclaimerText: { flex: 1, fontSize: 11, color: '#C2410C', lineHeight: 16 },
-  saveBtn: { position: 'absolute', bottom: 30, alignSelf: 'center', width: width * 0.85, backgroundColor: '#315b76', padding: 16, borderRadius: 16, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, elevation: 5 },
+
+  disclaimer: { flexDirection: 'row', gap: 10, backgroundColor: '#E0F2FE', padding: 15, borderRadius: 16, marginTop: 20, borderWidth: 1, borderColor: '#BAE6FD' },
+  disclaimerText: { flex: 1, fontSize: 11, color: '#0369a1', lineHeight: 16 },
+
+  saveBtn: { position: 'absolute', bottom: 30, alignSelf: 'center', width: width * 0.85, backgroundColor: '#315b76', padding: 18, borderRadius: 20, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, elevation: 5 },
   saveBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 }
 });

@@ -6,170 +6,163 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
+  Dimensions,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Sidebar } from './Sidebar';
 import { db } from '@archlens/shared';
-import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
+import { collection, onSnapshot } from 'firebase/firestore';
 
-const BLUE_ARCH = '#1e293b';
+const { width } = Dimensions.get('window');
+const SLATE_900 = '#0f172a';
+const SLATE_800 = '#1e293b';
+const SKY_500 = '#0ea5e9';
 
-// --- Sub-Components (Defined outside to prevent re-renders) ---
-
+// --- Aesthetic Stat Card ---
 const StatCard = ({ title, value, icon, color }: any) => (
   <View style={styles.statCard}>
-    <View style={[styles.statIcon, { backgroundColor: color + '15' }]}>
-      <Feather name={icon} size={24} color={color} />
+    <View style={[styles.statIconContainer, { backgroundColor: color + '15' }]}>
+      <Feather name={icon} size={20} color={color} />
     </View>
-    <View>
-      <Text style={styles.statValue}>{value}</Text>
+    <View style={styles.statInfo}>
       <Text style={styles.statLabel}>{title}</Text>
+      <Text style={styles.statValue}>{value}</Text>
     </View>
   </View>
 );
 
-const QueryItem = ({ item }: any) => (
-  <View style={styles.queryItem}>
-    <View style={styles.avatar}>
-      <Text style={styles.avatarText}>
-        {item.userName ? item.userName.charAt(0).toUpperCase() : 'U'}
-      </Text>
-    </View>
-    <View style={{ flex: 1 }}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-        <Text style={styles.queryTitle}>{item.userName || 'Unknown User'}</Text>
-        <Text style={styles.queryTime}>
-          {item.createdAt ? new Date(item.createdAt.toDate()).toLocaleDateString() : 'Just now'}
-        </Text>
+// --- Category Breakdown Card ---
+const CategoryTile = ({ category, count, index }: any) => {
+  const icons: any = {
+    'Foundation': 'layers',
+    'Superstructure': 'home',
+    'Finishing': 'droplet',
+    'Electrical': 'zap',
+    'Plumbing': 'filter'
+  };
+
+  return (
+    <View style={styles.categoryTile}>
+      <View style={styles.categoryHeader}>
+        <View style={styles.categoryIconCircle}>
+          <Feather name={icons[category] || 'box'} size={18} color={SLATE_800} />
+        </View>
+        <Text style={styles.categoryCount}>{count}</Text>
       </View>
-      <Text style={styles.queryBody} numberOfLines={2}>
-        {item.message || item.subject || 'No content provided...'}
-      </Text>
+      <Text style={styles.categoryName}>{category}</Text>
+      <View style={styles.progressBarBg}>
+        <View style={[styles.progressBarFill, { width: `${Math.min(count * 5, 100)}%` }]} />
+      </View>
     </View>
-  </View>
-);
-
-// --- Main Component ---
+  );
+};
 
 export default function AdminHomeScreen({ navigation }: any) {
   const [materialCount, setMaterialCount] = useState(0);
-  const [queryCount, setQueryCount] = useState(0);
   const [userCount, setUserCount] = useState(0);
-  const [recentQueries, setRecentQueries] = useState<any[]>([]);
+  const [queryCount, setQueryCount] = useState(0);
+  const [categoryData, setCategoryData] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 1. Setup Listeners
-    const unsubMaterials = onSnapshot(collection(db, 'materials'), 
-      (snap) => setMaterialCount(snap.size),
-      (err) => console.error("Materials listener error:", err)
-    );
-    
-    const unsubQueriesCount = onSnapshot(collection(db, 'queries'), 
-      (snap) => setQueryCount(snap.size),
-      (err) => console.error("Queries count listener error:", err)
-    );
-    
-    const unsubUsers = onSnapshot(collection(db, 'users'), 
-      (snap) => setUserCount(snap.size),
-      (err) => console.error("Users listener error:", err)
-    );
-
-    // 2. Fetch Recent Queries
-    const qQuery = query(
-      collection(db, 'queries'),
-      orderBy('createdAt', 'desc'),
-      limit(5)
-    );
-
-    const unsubRecentQueries = onSnapshot(qQuery, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setRecentQueries(data);
+    // Listen to Materials and aggregate by category
+    const unsubMaterials = onSnapshot(collection(db, 'materials'), (snap) => {
+      setMaterialCount(snap.size);
+      const counts: Record<string, number> = {};
+      snap.docs.forEach(doc => {
+        const cat = doc.data().category || 'Other';
+        counts[cat] = (counts[cat] || 0) + 1;
+      });
+      setCategoryData(counts);
       setLoading(false);
-    }, (err) => {
-      console.error("Recent queries listener error:", err);
-      setLoading(false); // Stop loading even if error
     });
 
-    // Cleanup listeners on unmount
+    const unsubUsers = onSnapshot(collection(db, 'users'), (snap) => setUserCount(snap.size));
+    const unsubQueries = onSnapshot(collection(db, 'queries'), (snap) => setQueryCount(snap.size));
+
     return () => {
       unsubMaterials();
-      unsubQueriesCount();
       unsubUsers();
-      unsubRecentQueries();
+      unsubQueries();
     };
   }, []);
 
   return (
     <View style={styles.container}>
-      {/* Sidebar Navigation */}
       <Sidebar navigation={navigation} activeRoute="AdminHome" />
 
-      {/* Main Content Area */}
       <ScrollView style={styles.mainContent} contentContainerStyle={{ padding: 40 }}>
         
-        {/* Header */}
+        {/* Header Section */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.welcomeText}>System Overview</Text>
-            <Text style={styles.subHeaderText}>Welcome back, Administrator.</Text>
+            <Text style={styles.dateText}>{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</Text>
+            <Text style={styles.welcomeText}>Admin Dashboard</Text>
           </View>
+          <TouchableOpacity style={styles.profileBtn}>
+            <Feather name="bell" size={20} color={SLATE_800} />
+            <View style={styles.notifDot} />
+          </TouchableOpacity>
         </View>
 
-        {/* Statistics Row */}
+        {/* Global Stats */}
         <View style={styles.statsRow}>
-          <StatCard title="Active Materials" value={materialCount} icon="package" color="#38bdf8" />
-          <StatCard title="Pending Queries" value={queryCount} icon="message-square" color="#818cf8" />
-          <StatCard title="Registered Users" value={userCount} icon="users" color="#10b981" />
+          <StatCard title="Total Materials" value={materialCount} icon="package" color={SKY_500} />
+          <StatCard title="Active Users" value={userCount} icon="users" color="#10b981" />
+          <StatCard title="Total Queries" value={queryCount} icon="mail" color="#f59e0b" />
         </View>
 
-        {/* Dashboard Grid */}
         <View style={styles.gridContainer}>
+          
+          {/* LEFT COLUMN: Category Inventory */}
+          <View style={{ flex: 2 }}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Material Inventory</Text>
+              <Text style={styles.sectionSub}>Breakdown by construction phase</Text>
+            </View>
 
-          {/* LEFT: Quick Management */}
-          <View style={{ flex: 1 }}>
-            <Text style={styles.sectionTitle}>Quick Management</Text>
+            {loading ? (
+              <ActivityIndicator color={SLATE_800} style={{ marginTop: 20 }} />
+            ) : (
+              <View style={styles.categoryGrid}>
+                {Object.keys(categoryData).map((cat, index) => (
+                  <CategoryTile key={cat} category={cat} count={categoryData[cat]} index={index} />
+                ))}
+              </View>
+            )}
+          </View>
+
+          {/* RIGHT COLUMN: Quick Actions */}
+          <View style={{ flex: 1, marginLeft: 40 }}>
+            <Text style={styles.sectionTitle}>Control Panel</Text>
             
-            <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('Dashboard')}>
-              <LinearGradient colors={['#1e293b', '#0f172a']} style={styles.cardGradient}>
-                <Feather name="edit-3" size={32} color="#fff" />
-                <Text style={styles.cardTitle}>Material Rate Master</Text>
-                <Text style={styles.cardDesc}>Update prices and construction hierarchy.</Text>
-                <Feather name="arrow-right" size={20} color="#bae6fd" style={{ marginTop: 20 }} />
+            <TouchableOpacity 
+              style={styles.mainActionCard}
+              onPress={() => navigation.navigate('Dashboard')}
+            >
+              <LinearGradient colors={[SLATE_800, SLATE_900]} style={styles.actionGradient}>
+                <View style={styles.actionIconCircle}>
+                  <Feather name="database" size={24} color="#fff" />
+                </View>
+                <Text style={styles.actionTitle}>Rate Master</Text>
+                <Text style={styles.actionDesc}>Manage material hierarchy and live market pricing.</Text>
+                <View style={styles.actionFooter}>
+                  <Text style={styles.actionLink}>Open Database</Text>
+                  <Feather name="arrow-right" size={16} color={SKY_500} />
+                </View>
               </LinearGradient>
             </TouchableOpacity>
 
-            <TouchableOpacity style={[styles.actionCard, styles.cardLight, { marginTop: 20, height: 160 }]}>
-              <Feather name="settings" size={32} color="#1e293b" />
-              <Text style={[styles.cardTitle, { color: '#1e293b' }]}>System Settings</Text>
-              <Text style={styles.cardDesc}>Configure global units and permissions.</Text>
+            <TouchableOpacity style={styles.secondaryActionCard}>
+              <Feather name="shield" size={20} color={SLATE_800} />
+              <Text style={styles.secondaryActionText}>Access Logs</Text>
             </TouchableOpacity>
-          </View>
 
-          {/* RIGHT: Recent Inquiries */}
-          <View style={{ flex: 1 }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Recent Inquiries</Text>
-              <TouchableOpacity>
-                <Text style={{ color: BLUE_ARCH, fontWeight: '600' }}>View All</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.updatesContainer}>
-              {loading ? (
-                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                  <ActivityIndicator color={BLUE_ARCH} size="large" />
-                </View>
-              ) : recentQueries.length === 0 ? (
-                <View style={{ padding: 20, alignItems: 'center', justifyContent: 'center', flex: 1 }}>
-                  <Feather name="inbox" size={24} color="#cbd5e1" />
-                  <Text style={{ color: '#94a3b8', marginTop: 10 }}>No inquiries found.</Text>
-                </View>
-              ) : (
-                recentQueries.map((item) => <QueryItem key={item.id} item={item} />)
-              )}
-            </View>
+            <TouchableOpacity style={styles.secondaryActionCard}>
+              <Feather name="settings" size={20} color={SLATE_800} />
+              <Text style={styles.secondaryActionText}>System Config</Text>
+            </TouchableOpacity>
           </View>
 
         </View>
@@ -179,30 +172,49 @@ export default function AdminHomeScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, flexDirection: 'row', backgroundColor: '#f1f5f9' },
+  container: { flex: 1, flexDirection: 'row', backgroundColor: '#f8fafc' },
   mainContent: { flex: 1 },
-  header: { marginBottom: 40, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  welcomeText: { fontSize: 32, fontWeight: '800', color: '#0f172a' },
-  subHeaderText: { fontSize: 16, color: '#64748b', marginTop: 4 },
+  
+  // Header
+  header: { marginBottom: 35, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
+  dateText: { fontSize: 13, color: '#64748b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1 },
+  welcomeText: { fontSize: 34, fontWeight: '800', color: SLATE_900, marginTop: 4 },
+  profileBtn: { width: 48, height: 48, borderRadius: 14, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#e2e8f0' },
+  notifDot: { position: 'absolute', top: 12, right: 12, width: 8, height: 8, borderRadius: 4, backgroundColor: '#ef4444', borderWidth: 2, borderColor: '#fff' },
 
+  // Stats
   statsRow: { flexDirection: 'row', gap: 20, marginBottom: 40 },
-  statCard: { flex: 1, backgroundColor: '#fff', padding: 25, borderRadius: 20, flexDirection: 'row', alignItems: 'center', gap: 20, borderWidth: 1, borderColor: '#e2e8f0' },
-  statIcon: { width: 56, height: 56, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
-  statValue: { fontSize: 24, fontWeight: '800', color: '#1e293b' },
-  statLabel: { fontSize: 13, color: '#94a3b8', fontWeight: '600' },
+  statCard: { flex: 1, backgroundColor: '#fff', padding: 20, borderRadius: 20, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#e2e8f0', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.02, shadowRadius: 10 },
+  statIconContainer: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
+  statInfo: { flex: 1 },
+  statLabel: { fontSize: 12, color: '#64748b', fontWeight: '600', marginBottom: 2 },
+  statValue: { fontSize: 22, fontWeight: '800', color: SLATE_900 },
 
-  gridContainer: { flexDirection: 'row', gap: 40 },
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#1e293b', marginBottom: 20 },
-  actionCard: { height: 260, borderRadius: 24, overflow: 'hidden' },
-  cardLight: { backgroundColor: '#fff', padding: 35, borderWidth: 1, borderColor: '#e2e8f0' },
-  cardGradient: { flex: 1, padding: 35, justifyContent: 'center' },
-  cardTitle: { color: '#fff', fontSize: 20, fontWeight: '700', marginTop: 20 },
-  cardDesc: { color: '#94a3b8', fontSize: 14, marginTop: 10, lineHeight: 20 },
-  updatesContainer: { backgroundColor: '#fff', borderRadius: 24, padding: 20, borderWidth: 1, borderColor: '#e2e8f0', minHeight: 400 },
-  queryItem: { flexDirection: 'row', gap: 15, paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#f1f5f9', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#e2e8f0' },
-  avatarText: { fontWeight: 'bold', color: '#64748b' },
-  queryTitle: { fontSize: 14, fontWeight: '700', color: '#1e293b' },
-  queryBody: { fontSize: 13, color: '#64748b', marginTop: 2 },
-  queryTime: { fontSize: 11, color: '#94a3b8' },
+  // Grid
+  gridContainer: { flexDirection: 'row' },
+  sectionHeader: { marginBottom: 25 },
+  sectionTitle: { fontSize: 20, fontWeight: '700', color: SLATE_900, marginBottom: 6 },
+  sectionSub: { fontSize: 14, color: '#64748b' },
+  
+  // Category Grid
+  categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 20 },
+  categoryTile: { width: '47%', backgroundColor: '#fff', borderRadius: 24, padding: 24, borderWidth: 1, borderColor: '#e2e8f0' },
+  categoryHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
+  categoryIconCircle: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#f1f5f9', justifyContent: 'center', alignItems: 'center' },
+  categoryCount: { fontSize: 20, fontWeight: '800', color: SLATE_900 },
+  categoryName: { fontSize: 16, fontWeight: '700', color: SLATE_800, marginBottom: 12 },
+  progressBarBg: { height: 6, backgroundColor: '#f1f5f9', borderRadius: 3, overflow: 'hidden' },
+  progressBarFill: { height: '100%', backgroundColor: SKY_500 },
+
+  // Quick Actions
+  mainActionCard: { borderRadius: 28, overflow: 'hidden', marginBottom: 20, elevation: 4 },
+  actionGradient: { padding: 30 },
+  actionIconCircle: { width: 50, height: 50, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
+  actionTitle: { fontSize: 22, fontWeight: '700', color: '#fff', marginBottom: 10 },
+  actionDesc: { fontSize: 14, color: '#94a3b8', lineHeight: 20, marginBottom: 25 },
+  actionFooter: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  actionLink: { color: SKY_500, fontWeight: '700', fontSize: 14 },
+  
+  secondaryActionCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', padding: 20, borderRadius: 18, marginBottom: 12, borderWidth: 1, borderColor: '#e2e8f0' },
+  secondaryActionText: { marginLeft: 15, fontSize: 15, fontWeight: '600', color: SLATE_800 }
 });
