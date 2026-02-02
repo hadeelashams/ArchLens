@@ -14,7 +14,7 @@ const { width } = Dimensions.get('window');
 const LAYER_MATS: Record<string, string[]> = {
   'PCC Base': ['Cement', 'Sand'], 
   'RCC Footing': ['Cement', 'Steel (TMT Bar)', 'Sand'],
-  'Stone Masonry': ['Cement', 'Sand', 'Size Stone'],
+  'Stone Masonry': ['Cement', 'Sand', 'Stone'],
   'Plinth Beam': ['Cement', 'Steel (TMT Bar)', 'Sand']
 };
 
