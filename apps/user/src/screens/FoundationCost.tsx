@@ -13,10 +13,34 @@ const { width } = Dimensions.get('window');
 // --- ENGINEERING CONSTANTS ---
 const FT_TO_M = 0.3048;           
 const CEMENT_BAGS_PER_M3 = 28.8;
-const DRY_VOL_MULTIPLIER_CONCRETE = 1.54; // 54% bulkage for dry mix
-const DRY_VOL_MULTIPLIER_MORTAR = 1.33;   // 33% for mortar
-const MASONRY_MORTAR_RATIO = 0.30;        // 30% of stone volume is mortar
-const MARKET_RATE_AGGREGATE = 1450;       // ₹ per m³
+const DRY_VOL_MULTIPLIER_CONCRETE = 1.54; 
+const DRY_VOL_MULTIPLIER_MORTAR = 1.33;   
+const MASONRY_MORTAR_RATIO = 0.30;        
+
+// --- MATERIAL DENSITIES (kg/m³) ---
+const DENSITY = {
+  SAND: 1600,
+  AGGREGATE: 1550,
+  STEEL: 7850,
+  STONE: 2600, // Granite/Basalt
+  CEMENT: 1440
+};
+
+const CFT_PER_M3 = 35.3147;
+
+// --- MARKET RATES (Fallback pricing) ---
+const MARKET_RATE_AGGREGATE = 2200; // ₹ per m³
+
+// --- ASSUMED DIMENSIONS (Documented Defaults) ---
+const ASSUMED_SPECS = {
+  FOOTING_HEIGHT_M: 0.45,       // ~1.5 ft depth for the trapezoidal base
+  PEDESTAL_L_M: 0.45,           // 18 inches neck column length
+  PEDESTAL_W_M: 0.23,           // 9 inches neck column width
+  PLINTH_BEAM_W_M: 0.23,        // 9 inches width
+  PLINTH_BEAM_D_M: 0.30,        // 12 inches depth
+  STEEL_DENSITY_RCC: 95,        // kg/m³ of concrete
+  STEEL_DENSITY_PLINTH: 110     // kg/m³ of concrete
+};
 
 export default function FoundationCost({ route, navigation }: any) {
   const { 
@@ -34,214 +58,270 @@ export default function FoundationCost({ route, navigation }: any) {
 
   const [saving, setSaving] = useState(false);
 
-  // Helper to safely get material data from selections
+  // Helper: Get Selected Material Safely
   const getMat = (layer: string, type: string) => {
     const key = `${layer}_${type}`;
     const item = selections[key];
     return {
-      price: item ? parseFloat(item.pricePerUnit) : 0,
+      item: item || null,
+      price: item && item.pricePerUnit ? parseFloat(item.pricePerUnit) : 0,
+      unit: item && item.unit ? item.unit.trim().toLowerCase() : '',
       name: item ? item.name : 'Not Selected',
-      exists: !!item
+      exists: !!item // Explicit check for existence
     };
   };
 
   const getAggSize = (layer: string) => selections[layer] || '20 mm';
 
+  /**
+   * CORE CALCULATION HELPER
+   * Handles unit conversion and price application consistently.
+   * 
+   * @param requiredQty - The engineering quantity required (e.g., 5 m³ of sand)
+   * @param inputUnit - The unit of the requiredQty (e.g., 'm3', 'kg', 'nos')
+   * @param material - The selected material object from getMat()
+   * @param density - Density in kg/m³ (required for Volume <-> Weight conversion)
+   * @param fallbackRate - Market rate to use if no material is selected
+   */
+  const calculateItem = (
+    requiredQty: number,
+    inputUnit: 'm3' | 'kg' | 'nos' | 'bags',
+    material: any,
+    density: number,
+    fallbackRate: number
+  ) => {
+    let finalQty = requiredQty;
+    let finalUnit = inputUnit === 'm3' ? 'm³' : inputUnit; // Display formatting
+    
+    // 1. Determine Rate
+    const rateToUse = material.exists ? material.price : fallbackRate;
+    const dbUnit = material.unit; // already normalized to lowercase/trimmed
+
+    // 2. Unit Normalization & Conversion Logic
+    if (inputUnit === 'm3') {
+      // Input is Volume, check DB Unit
+      if (dbUnit.includes('cft') || dbUnit.includes('cubic feet')) {
+        finalQty = requiredQty * CFT_PER_M3;
+        finalUnit = 'cft';
+      } 
+      else if (dbUnit.includes('kg')) {
+        finalQty = requiredQty * density;
+        finalUnit = 'kg';
+      }
+      else if (dbUnit.includes('ton') || dbUnit.includes('tonne')) {
+        finalQty = (requiredQty * density) / 1000;
+        finalUnit = 'Ton';
+      }
+      else if (dbUnit.includes('brass')) {
+        finalQty = (requiredQty * CFT_PER_M3) / 100;
+        finalUnit = 'Brass';
+      }
+      // If DB unit is empty or matches m3, keep as is
+    } 
+    else if (inputUnit === 'kg') {
+      // Input is Weight, check DB Unit
+      if (dbUnit.includes('ton') || dbUnit.includes('tonne')) {
+        finalQty = requiredQty / 1000;
+        finalUnit = 'Ton';
+      }
+      // If DB unit is kg, keep as is
+    }
+
+    // 3. Rounding
+    // Qty: 2 decimals for accuracy, Price: Integer for currency
+    const roundedQty = parseFloat(finalQty.toFixed(2));
+    const totalCost = Math.round(roundedQty * rateToUse);
+
+    return {
+      qty: roundedQty,
+      unit: finalUnit, // The unit matching the price
+      rate: rateToUse,
+      total: totalCost,
+      name: material.name
+    };
+  };
+
   const calculation = useMemo(() => {
     let items: any[] = [];
     
-    // 1. DIMENSIONS & CONVERSION
+    // --- 1. GEOMETRY INPUTS ---
     const n = parseInt(numFootings) || 0;
     const l_m = parseFloat(lengthFt) * FT_TO_M;
     const w_m = parseFloat(widthFt) * FT_TO_M;
     const total_depth_m = parseFloat(depthFt) * FT_TO_M;
     const pcc_h_m = parseFloat(pccThicknessFt) * FT_TO_M;
     
-    // Height available for structure after PCC is laid
-    const structural_h_m = total_depth_m - pcc_h_m;
+    // Calculate remaining structural height
+    const structural_h_m = Math.max(0, total_depth_m - pcc_h_m);
 
-    // 2. PCC BASE CALCULATION (Mix 1:4:8)
+    // --- 2. PCC BASE (Mix 1:4:8) ---
     if (foundationConfig.hasPCC) {
       const volPCC = n * l_m * w_m * pcc_h_m;
       const dryVol = volPCC * DRY_VOL_MULTIPLIER_CONCRETE;
+      
+      // Cement
       const cementBags = Math.ceil((dryVol * (1/13)) * CEMENT_BAGS_PER_M3);
-      const sandM3 = dryVol * (4/13);
-      const aggM3 = dryVol * (8/13);
-
       const matCem = getMat('PCC Base', 'Cement');
-      const matSand = getMat('PCC Base', 'Sand');
-
       items.push({
         category: 'PCC Base',
         name: `Cement (${matCem.name})`,
         desc: 'Base Mix 1:4:8',
         qty: cementBags,
         unit: 'Bags',
-        rate: matCem.price || 420,
-        total: cementBags * (matCem.price || 420)
+        rate: matCem.exists ? matCem.price : 420,
+        total: Math.round(cementBags * (matCem.exists ? matCem.price : 420))
       });
 
-      items.push({
-        category: 'PCC Base',
-        name: `Sand (${matSand.name})`,
-        desc: 'PCC Grade Sand',
-        qty: sandM3.toFixed(1),
-        unit: 'm³',
-        rate: matSand.price || 1500,
-        total: sandM3 * (matSand.price || 1500)
-      });
+      // Sand
+      const sandM3 = dryVol * (4/13);
+      const matSand = getMat('PCC Base', 'Sand');
+      const sandCost = calculateItem(sandM3, 'm3', matSand, DENSITY.SAND, 1500);
+      items.push({ ...sandCost, category: 'PCC Base', desc: 'PCC Grade Sand' });
 
+      // Aggregate (Assuming standard m3 rate if not selected)
+      const aggM3 = dryVol * (8/13);
+      const aggLabel = `Aggregates (${getAggSize('PCC Base')})`;
       items.push({
         category: 'PCC Base',
-        name: `Aggregates (${getAggSize('PCC Base')})`,
+        name: aggLabel,
         desc: 'Coarse Aggregate',
-        qty: aggM3.toFixed(1),
+        qty: parseFloat(aggM3.toFixed(2)),
         unit: 'm³',
         rate: MARKET_RATE_AGGREGATE,
-        total: aggM3 * MARKET_RATE_AGGREGATE
+        total: Math.round(aggM3 * MARKET_RATE_AGGREGATE)
       });
     }
 
-    // 3. MAIN LAYER (RCC vs STONE)
+    // --- 3. MAIN LAYER ---
     if (foundationConfig.mainLayer === 'RCC Footing') {
-      // Logic: Trapezoidal Footing (avg 1.5ft height) + Neck Column (remaining depth)
-      const footingH_m = 0.45; // 1.5ft
-      const pedestalH_m = Math.max(0, structural_h_m - footingH_m);
+      // Split into Footing Base and Neck Column (Pedestal)
+      // Uses ASSUMED_SPECS constants instead of magic numbers
+      const pedestalH_m = Math.max(0, structural_h_m - ASSUMED_SPECS.FOOTING_HEIGHT_M);
       
-      const volFooting = n * l_m * w_m * footingH_m;
-      const volPedestal = n * (0.3 * 0.45) * pedestalH_m; // Standard 9"x18" neck column
+      const volFooting = n * l_m * w_m * ASSUMED_SPECS.FOOTING_HEIGHT_M;
+      const volPedestal = n * ASSUMED_SPECS.PEDESTAL_L_M * ASSUMED_SPECS.PEDESTAL_W_M * pedestalH_m;
       const totalRCCVol = volFooting + volPedestal;
-
       const dryVol = totalRCCVol * DRY_VOL_MULTIPLIER_CONCRETE;
-      const cementBags = Math.ceil((dryVol * (1/5.5)) * CEMENT_BAGS_PER_M3); // M20 Mix
-      const sandM3 = dryVol * (1.5/5.5);
-      const aggM3 = dryVol * (3/5.5);
-      const steelKg = totalRCCVol * 95; // Avg reinforcement density
 
+      // Cement (M20 Mix 1:1.5:3 approx)
+      const cementBags = Math.ceil((dryVol * (1/5.5)) * CEMENT_BAGS_PER_M3);
       const matCem = getMat('RCC Footing', 'Cement');
-      const matSteel = getMat('RCC Footing', 'Steel (TMT Bar)');
-      const matSand = getMat('RCC Footing', 'Sand');
-
       items.push({
         category: 'RCC Footing',
         name: `Cement (${matCem.name})`,
-        desc: 'M20 Grade (Footing + Neck)',
+        desc: 'M20 Grade Mix',
         qty: cementBags,
         unit: 'Bags',
-        rate: matCem.price || 450,
-        total: cementBags * (matCem.price || 450)
+        rate: matCem.exists ? matCem.price : 450,
+        total: Math.round(cementBags * (matCem.exists ? matCem.price : 450))
       });
 
-      items.push({
-        category: 'RCC Footing',
-        name: `Steel (${matSteel.name})`,
-        desc: 'Mesh & Starter Bars',
-        qty: Math.ceil(steelKg),
-        unit: 'kg',
-        rate: matSteel.price || 75,
-        total: steelKg * (matSteel.price || 75)
-      });
+      // Steel
+      const steelKg = totalRCCVol * ASSUMED_SPECS.STEEL_DENSITY_RCC;
+      const matSteel = getMat('RCC Footing', 'Steel (TMT Bar)');
+      const steelCost = calculateItem(steelKg, 'kg', matSteel, DENSITY.STEEL, 75);
+      items.push({ ...steelCost, category: 'RCC Footing', desc: 'Mesh & Starter Bars' });
 
-      items.push({
-        category: 'RCC Footing',
-        name: `Sand (${matSand.name})`,
-        desc: 'Concrete M-Sand',
-        qty: sandM3.toFixed(1),
-        unit: 'm³',
-        rate: matSand.price || 1600,
-        total: sandM3 * (matSand.price || 1600)
-      });
+      // Sand
+      const sandM3 = dryVol * (1.5/5.5);
+      const matSand = getMat('RCC Footing', 'Sand');
+      const sandCost = calculateItem(sandM3, 'm3', matSand, DENSITY.SAND, 1600);
+      items.push({ ...sandCost, category: 'RCC Footing', desc: 'Concrete M-Sand' });
 
+      // Aggregate
+      const aggM3 = dryVol * (3/5.5);
       items.push({
         category: 'RCC Footing',
         name: `Aggregates (${getAggSize('RCC Footing')})`,
         desc: 'Crushed Stone',
-        qty: aggM3.toFixed(1),
+        qty: parseFloat(aggM3.toFixed(2)),
         unit: 'm³',
         rate: MARKET_RATE_AGGREGATE,
-        total: aggM3 * MARKET_RATE_AGGREGATE
+        total: Math.round(aggM3 * MARKET_RATE_AGGREGATE)
       });
 
     } else if (foundationConfig.mainLayer === 'Stone Masonry') {
       const volMasonry = n * l_m * w_m * structural_h_m;
-      const stoneM3 = volMasonry * 1.15; // 15% wastage/voids
+      
+      // Stone
+      const stoneM3 = volMasonry * 1.15; // +15% for wastage/packing
+      const matStone = getMat('Stone Masonry', 'Size Stone');
+      // Note: Size Stone usually sold by Tractor Load (approx volume) or Number, but here converting based on unit
+      const stoneCost = calculateItem(stoneM3, 'm3', matStone, DENSITY.STONE, 1100);
+      items.push({ ...stoneCost, category: 'Stone Masonry', desc: 'Foundation Body' });
+
+      // Mortar
       const mortarVol = volMasonry * MASONRY_MORTAR_RATIO;
       const dryMortar = mortarVol * DRY_VOL_MULTIPLIER_MORTAR;
-      const cementBags = Math.ceil((dryMortar * (1/7)) * CEMENT_BAGS_PER_M3); // 1:6 Mix
-      const sandM3 = dryMortar * (6/7);
-
-      const matStone = getMat('Stone Masonry', 'Size Stone');
+      
+      // Cement (1:6)
+      const cementBags = Math.ceil((dryMortar * (1/7)) * CEMENT_BAGS_PER_M3);
       const matCem = getMat('Stone Masonry', 'Cement');
-      const matSand = getMat('Stone Masonry', 'Sand');
-
-      items.push({
-        category: 'Stone Masonry',
-        name: `Size Stone (${matStone.name})`,
-        desc: 'Main Foundation Body',
-        qty: stoneM3.toFixed(1),
-        unit: 'm³',
-        rate: matStone.price || 1100,
-        total: stoneM3 * (matStone.price || 1100)
-      });
-
       items.push({
         category: 'Stone Masonry',
         name: `Cement (${matCem.name})`,
         desc: 'Mortar Mix 1:6',
         qty: cementBags,
         unit: 'Bags',
-        rate: matCem.price || 420,
-        total: cementBags * (matCem.price || 420)
+        rate: matCem.exists ? matCem.price : 420,
+        total: Math.round(cementBags * (matCem.exists ? matCem.price : 420))
       });
 
-      items.push({
-        category: 'Stone Masonry',
-        name: `Sand (${matSand.name})`,
-        desc: 'Masonry Sand',
-        qty: sandM3.toFixed(1),
-        unit: 'm³',
-        rate: matSand.price || 1500,
-        total: sandM3 * (matSand.price || 1500)
-      });
+      // Sand
+      const sandM3 = dryMortar * (6/7);
+      const matSand = getMat('Stone Masonry', 'Sand');
+      const sandCost = calculateItem(sandM3, 'm3', matSand, DENSITY.SAND, 1500);
+      items.push({ ...sandCost, category: 'Stone Masonry', desc: 'Masonry Sand' });
     }
 
-    // 4. PLINTH BEAM CALCULATION
+    // --- 4. PLINTH BEAM ---
     if (foundationConfig.includePlinth) {
-      const perimeterM = (Math.sqrt(area) * 4) * 1.2; // perimeter + 20% for internal walls
-      const volPlinth = perimeterM * 0.23 * 0.30; // 9" x 12" beam
+      // Estimate Perimeter: SQRT(Area) * 4 sides * 1.2 multiplier for internal walls
+      const perimeterM = (Math.sqrt(area) * 4) * 1.2;
+      const volPlinth = perimeterM * ASSUMED_SPECS.PLINTH_BEAM_W_M * ASSUMED_SPECS.PLINTH_BEAM_D_M;
       const dryVol = volPlinth * DRY_VOL_MULTIPLIER_CONCRETE;
       
-      const cementBags = Math.ceil((dryVol * (1/5.5)) * CEMENT_BAGS_PER_M3);
-      const sandM3 = dryVol * (1.5/5.5);
-      const aggM3 = dryVol * (3/5.5);
-      const steelKg = volPlinth * 110;
-
-      // Fallback: If Plinth specific brand not selected, use RCC Footing brand
+      // Fallback Logic for Brands
       const matCem = getMat('Plinth Beam', 'Cement').exists ? getMat('Plinth Beam', 'Cement') : getMat('RCC Footing', 'Cement');
       const matSteel = getMat('Plinth Beam', 'Steel (TMT Bar)').exists ? getMat('Plinth Beam', 'Steel (TMT Bar)') : getMat('RCC Footing', 'Steel (TMT Bar)');
       const matSand = getMat('Plinth Beam', 'Sand').exists ? getMat('Plinth Beam', 'Sand') : getMat('RCC Footing', 'Sand');
 
+      // Cement
+      const cementBags = Math.ceil((dryVol * (1/5.5)) * CEMENT_BAGS_PER_M3);
       items.push({
         category: 'Plinth Beam',
-        name: 'Plinth Materials',
-        desc: `Cem (${matCem.name}) & Agg/Sand`,
-        qty: volPlinth.toFixed(1),
-        unit: 'm³',
-        rate: 3800, // Aggregate + Sand + Cement weighted avg per m3
-        total: (cementBags * matCem.price) + (sandM3 * (matSand.price || 1600)) + (aggM3 * MARKET_RATE_AGGREGATE)
+        name: `Cement (${matCem.name})`,
+        desc: 'M20 Grade',
+        qty: cementBags,
+        unit: 'Bags',
+        rate: matCem.exists ? matCem.price : 450,
+        total: Math.round(cementBags * (matCem.exists ? matCem.price : 450))
       });
 
+      // Sand
+      const sandM3 = dryVol * (1.5/5.5);
+      const sandCost = calculateItem(sandM3, 'm3', matSand, DENSITY.SAND, 1600);
+      items.push({ ...sandCost, category: 'Plinth Beam', desc: 'Concrete Sand' });
+
+      // Aggregate
+      const aggM3 = dryVol * (3/5.5);
       items.push({
         category: 'Plinth Beam',
-        name: `Plinth Steel (${matSteel.name})`,
-        desc: 'Main & Stirrup Bars',
-        qty: Math.ceil(steelKg),
-        unit: 'kg',
-        rate: matSteel.price || 78,
-        total: steelKg * (matSteel.price || 78)
+        name: 'Aggregates',
+        desc: 'Crushed Stone',
+        qty: parseFloat(aggM3.toFixed(2)),
+        unit: 'm³',
+        rate: MARKET_RATE_AGGREGATE,
+        total: Math.round(aggM3 * MARKET_RATE_AGGREGATE)
       });
+
+      // Steel
+      const steelKg = volPlinth * ASSUMED_SPECS.STEEL_DENSITY_PLINTH;
+      const steelCost = calculateItem(steelKg, 'kg', matSteel, DENSITY.STEEL, 78);
+      items.push({ ...steelCost, category: 'Plinth Beam', desc: 'Reinforcement' });
     }
 
+    // Final Sum of all rounded totals
     const grandTotal = items.reduce((sum, i) => sum + i.total, 0);
     return { items, grandTotal };
 
@@ -256,14 +336,16 @@ export default function FoundationCost({ route, navigation }: any) {
         userId: auth.currentUser.uid,
         itemName: `Foundation Materials (${foundationConfig.mainLayer})`,
         category: 'Foundation',
-        totalCost: calculation.grandTotal,
+        totalCost: calculation.grandTotal, // Rounded Total
         lineItems: calculation.items,
         area: parseFloat(area),
         specifications: {
           depth: depthFt,
           footingCount: numFootings,
           method: foundationConfig.mainLayer,
-          plinth: foundationConfig.includePlinth
+          plinth: foundationConfig.includePlinth,
+          // Save assumptions for traceability
+          assumptions: ASSUMED_SPECS 
         },
         createdAt: serverTimestamp()
       });
@@ -294,12 +376,13 @@ export default function FoundationCost({ route, navigation }: any) {
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
           
-          {/* SUMMARY CARD (DARK STYLE) */}
+          {/* SUMMARY CARD */}
           <View style={styles.summaryCard}>
             <View style={styles.summaryHeader}>
               <View>
                 <Text style={styles.summaryLabel}>ESTIMATED MATERIAL COST</Text>
-                <Text style={styles.summaryTotal}>₹{Math.round(calculation.grandTotal).toLocaleString('en-IN')}</Text>
+                {/* Grand total matches sum of items due to consistent rounding */}
+                <Text style={styles.summaryTotal}>₹{calculation.grandTotal.toLocaleString('en-IN')}</Text>
               </View>
               <View style={styles.methodBadge}>
                 <Text style={styles.methodBadgeText}>{foundationConfig.mainLayer}</Text>
@@ -343,8 +426,8 @@ export default function FoundationCost({ route, navigation }: any) {
                   <Text style={styles.itemQty}>{item.qty} <Text style={styles.itemUnit}>{item.unit}</Text></Text>
                 </View>
                 <View style={{flex: 1.2, alignItems: 'flex-end'}}>
-                  <Text style={styles.itemPrice}>₹{Math.round(item.total).toLocaleString()}</Text>
-                  <Text style={styles.itemRate}>@ {Math.round(item.rate)}</Text>
+                  <Text style={styles.itemPrice}>₹{item.total.toLocaleString()}</Text>
+                  <Text style={styles.itemRate}>@ {item.rate}/{item.unit}</Text>
                 </View>
               </View>
             ))}
@@ -353,7 +436,7 @@ export default function FoundationCost({ route, navigation }: any) {
           <View style={styles.disclaimer}>
             <Ionicons name="information-circle-outline" size={18} color="#0369a1" />
             <Text style={styles.disclaimerText}>
-              This estimate includes <Text style={{fontWeight: 'bold'}}>Material Only</Text> (Dry Volume + 5% wastage). Excavation labor, shuttering, and curing water costs are excluded.
+              Material estimate uses standard engineering densities (e.g. Steel {DENSITY.STEEL} kg/m³). Dimensions for Neck Column and Plinth are assumed based on standard residential specs.
             </Text>
           </View>
           

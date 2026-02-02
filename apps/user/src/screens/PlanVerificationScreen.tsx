@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   View, Text, StyleSheet, Image, SafeAreaView, ScrollView, 
-  TouchableOpacity, TextInput, ActivityIndicator, Alert, Platform 
+  TouchableOpacity, TextInput, ActivityIndicator, Alert, Platform,
+  Modal, Dimensions 
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -13,30 +14,29 @@ interface RoomData {
   name: string;
   length: string;
   width: string;
-  area: string; // explicit area field
+  area: string; 
 }
 
 export default function PlanVerificationScreen({ route, navigation }: any) {
   const { planImage } = route.params;
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false); // New state for saving process
+  const [saving, setSaving] = useState(false);
   const [rooms, setRooms] = useState<RoomData[]>([]);
   const [totalArea, setTotalArea] = useState(0);
+  
+  // --- NEW STATE FOR ZOOM MODAL ---
+  const [isZoomVisible, setZoomVisible] = useState(false);
 
   useEffect(() => {
     uploadAndAnalyze();
   }, []);
 
-  // --- RECALCULATE TOTAL WHENEVER ROOMS CHANGE ---
   useEffect(() => {
     const calculatedTotal = rooms.reduce((acc, r) => {
-        // Parse the string area to float
         const a = parseFloat(r.area);
-        // Add to accumulator, treating NaN as 0
         return acc + (isNaN(a) ? 0 : a);
     }, 0);
     
-    // Fix to 2 decimal places to avoid floating point errors (e.g. 1200.000004)
     setTotalArea(Number(calculatedTotal.toFixed(2)));
   }, [rooms]);
 
@@ -44,7 +44,6 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
     try {
       setLoading(true);
 
-      // 1. Prepare Base64
       let base64String = planImage;
       if (planImage.startsWith('file://')) {
         const response = await fetch(planImage);
@@ -57,7 +56,6 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
         });
       }
 
-      // 2. Call AI
       const analysis = await analyzeFloorPlan(base64String);
       
       const schema = `{
@@ -75,7 +73,6 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
 
       const structuredData = await extractStructuredData(analysis, schema);
       
-      // 3. Clean JSON
       let cleanedData = structuredData.trim();
       cleanedData = cleanedData.replace(/```json/g, '').replace(/```/g, '');
       const jsonStart = cleanedData.indexOf('{');
@@ -86,14 +83,12 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
 
       const parsedData = JSON.parse(cleanedData);
 
-      // 4. Map to State
       if (parsedData.rooms && Array.isArray(parsedData.rooms)) {
         const roomsWithIds = parsedData.rooms.map((room: any, index: number) => ({
           id: room.id || `room-${index}-${Date.now()}`,
           name: room.name || `Room ${index + 1}`,
           length: String(room.length || '0'),
           width: String(room.width || '0'),
-          // Priority: AI Provided Area > Calc Area > 0
           area: String(room.area || (room.length * room.width) || '0')
         }));
         setRooms(roomsWithIds);
@@ -116,7 +111,6 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
       
       const updatedRoom = { ...r, [field]: value };
       
-      // Auto-calculate Area if Length or Width changes
       if (field === 'length' || field === 'width') {
         const l = parseFloat(field === 'length' ? value : r.length) || 0;
         const w = parseFloat(field === 'width' ? value : r.width) || 0;
@@ -131,7 +125,6 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
     setRooms(prev => prev.filter(r => r.id !== id));
   };
 
-  // --- SAVE TO FIREBASE HANDLER ---
   const handleVerifyAndSave = async () => {
     if (!auth.currentUser) {
       Alert.alert("Login Required", "You must be logged in to save this project.");
@@ -146,14 +139,11 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
         status: 'active' as const,
         totalArea: totalArea,
         rooms: rooms
-        // planImageUrl: could upload to storage here if needed
       };
 
       const newProjectId = await createProject(projectData);
 
       setSaving(false);
-      
-      // Navigate to next screen passing the new Project ID
       navigation.navigate('ConstructionLevel', { 
         totalArea: totalArea,
         projectId: newProjectId 
@@ -188,8 +178,21 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
         </View>
 
         <ScrollView contentContainerStyle={styles.scrollContent}>
-          <Image source={{ uri: planImage }} style={styles.previewImage} resizeMode="contain" />
           
+          {/* --- UPDATED IMAGE SECTION --- */}
+          <TouchableOpacity 
+            activeOpacity={0.9} 
+            onPress={() => setZoomVisible(true)}
+            style={styles.imageContainer}
+          >
+            <Image source={{ uri: planImage }} style={styles.previewImage} resizeMode="contain" />
+            <View style={styles.zoomIconOverlay}>
+              <Ionicons name="expand-outline" size={24} color="#fff" />
+              <Text style={styles.zoomText}>Tap to Zoom</Text>
+            </View>
+          </TouchableOpacity>
+          {/* ----------------------------- */}
+
           <Text style={styles.instructionText}>
             Review the extracted dimensions below. Amounts are in Feet.
           </Text>
@@ -230,7 +233,6 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
                     />
                 </View>
                 
-                {/* Area Input - Editable for corrections */}
                 <View style={styles.areaBadge}>
                    <TextInput
                       style={styles.areaInput}
@@ -262,6 +264,37 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
             )}
           </TouchableOpacity>
         </View>
+
+        {/* --- ZOOM MODAL --- */}
+        <Modal 
+          visible={isZoomVisible} 
+          transparent={true} 
+          animationType="fade"
+          onRequestClose={() => setZoomVisible(false)}
+        >
+          <View style={styles.modalBackground}>
+            <TouchableOpacity style={styles.closeButton} onPress={() => setZoomVisible(false)}>
+              <Ionicons name="close-circle" size={40} color="#fff" />
+            </TouchableOpacity>
+            
+            <ScrollView
+              contentContainerStyle={styles.zoomScrollContent}
+              maximumZoomScale={4.0}
+              minimumZoomScale={1.0}
+              showsHorizontalScrollIndicator={false}
+              showsVerticalScrollIndicator={false}
+              centerContent={true}
+            >
+              <Image 
+                source={{ uri: planImage }} 
+                style={styles.fullScreenImage} 
+                resizeMode="contain" 
+              />
+            </ScrollView>
+          </View>
+        </Modal>
+        {/* ------------------ */}
+
       </SafeAreaView>
     </View>
   );
@@ -279,7 +312,17 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#0f172a' },
   scrollContent: { padding: 20, paddingBottom: 100 },
-  previewImage: { width: '100%', height: 250, borderRadius: 12, marginBottom: 20, backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#cbd5e1' },
+  
+  // Updated Image Styles
+  imageContainer: { position: 'relative', marginBottom: 20, borderRadius: 12, overflow: 'hidden' },
+  previewImage: { width: '100%', height: 250, backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 12 },
+  zoomIconOverlay: { 
+    position: 'absolute', bottom: 10, right: 10, 
+    backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 20, 
+    flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6 
+  },
+  zoomText: { color: '#fff', fontSize: 12, fontWeight: '600', marginLeft: 4 },
+
   instructionText: { fontSize: 14, color: '#64748b', marginBottom: 15, fontStyle: 'italic' },
   roomCard: { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#e2e8f0', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5, elevation: 2 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
@@ -296,5 +339,11 @@ const styles = StyleSheet.create({
   totalLabel: { fontSize: 12, color: '#64748b', fontWeight: '600', textTransform: 'uppercase' },
   totalValue: { fontSize: 24, fontWeight: '800', color: '#315b76' },
   confirmButton: { backgroundColor: '#315b76', paddingVertical: 14, paddingHorizontal: 24, borderRadius: 12, elevation: 2, minWidth: 120, alignItems: 'center' },
-  confirmText: { color: '#fff', fontWeight: 'bold', fontSize: 16 }
+  confirmText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+
+  // Modal Styles
+  modalBackground: { flex: 1, backgroundColor: '#000', justifyContent: 'center' },
+  closeButton: { position: 'absolute', top: 50, right: 20, zIndex: 10 },
+  zoomScrollContent: { flexGrow: 1, justifyContent: 'center' },
+  fullScreenImage: { width: Dimensions.get('window').width, height: Dimensions.get('window').height }
 });

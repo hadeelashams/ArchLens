@@ -10,14 +10,21 @@ import {
   SafeAreaView, 
   StatusBar,
   ActivityIndicator,
-  Alert
+  Alert,
+  LayoutAnimation,
+  UIManager
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { auth } from '@archlens/shared';
-import { createEstimate } from '../services/projectService'; // Import Service
+import { createEstimate } from '../services/projectService';
 
 const { width } = Dimensions.get('window');
+
+// Enable LayoutAnimation on Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 // Mock Rates per Sq. Ft.
 const RATES = {
@@ -27,14 +34,12 @@ const RATES = {
 };
 
 export default function EstimateResultScreen({ route, navigation }: any) {
-  // --- UPDATED: Receive ProjectID ---
   const { totalArea = 1000, level = 'Standard', projectId } = route.params || {};
 
   const [loading, setLoading] = useState(true);
   const [costs, setCosts] = useState<any>(null);
 
   useEffect(() => {
-    // Simulate Calculation Delay
     setTimeout(() => {
       calculateCosts();
       setLoading(false);
@@ -58,20 +63,13 @@ export default function EstimateResultScreen({ route, navigation }: any) {
     return amount.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   };
 
-  // --- NEW: Save Estimate Handler ---
   const handleSaveEstimate = async () => {
     if (!auth.currentUser) {
         Alert.alert("Error", "User not authenticated");
         return;
     }
 
-    if (!projectId) {
-        Alert.alert("Warning", "No active project found. Estimate will not be linked.");
-        // We continue to save but without link, or you could return;
-    }
-
     try {
-        // Save Summary Estimate
         await createEstimate({
             projectId: projectId || 'orphan_estimate',
             userId: auth.currentUser.uid,
@@ -93,23 +91,70 @@ export default function EstimateResultScreen({ route, navigation }: any) {
     }
   };
 
-  const CostCard = ({ title, amount, iconName, gradientColors, subtext }: any) => (
-    <View style={styles.card}>
-      <LinearGradient colors={gradientColors} style={styles.cardIconContainer}>
-        <MaterialCommunityIcons name={iconName} size={24} color="#fff" />
-      </LinearGradient>
+  // --- UPDATED: Expandable Cost Card ---
+  const CostCard = ({ title, amount, iconName, gradientColors, subtext, percentage }: any) => {
+    const [expanded, setExpanded] = useState(false);
 
-      <View style={styles.cardTextContent}>
-        <Text style={styles.cardTitle}>{title}</Text>
-        <Text style={styles.cardSubtext}>{subtext}</Text>
-      </View>
+    const toggleExpand = () => {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setExpanded(!expanded);
+    };
 
-      <View style={styles.amountContainer}>
-         <Text style={styles.amountText}>{costs ? formatCurrency(Math.round(amount)) : '...'}</Text>
-         <Text style={styles.currencyLabel}>INR</Text>
-      </View>
-    </View>
-  );
+    return (
+      <TouchableOpacity 
+        style={styles.card} 
+        activeOpacity={0.9}
+        onPress={toggleExpand}
+      >
+        {/* Main Row */}
+        <View style={styles.cardMainRow}>
+          <LinearGradient colors={gradientColors} style={styles.cardIconContainer}>
+            <MaterialCommunityIcons name={iconName} size={24} color="#fff" />
+          </LinearGradient>
+
+          <View style={styles.cardTextContent}>
+            <Text style={styles.cardTitle}>{title}</Text>
+            <Text style={styles.cardSubtext}>{subtext}</Text>
+          </View>
+
+          <View style={styles.amountContainer}>
+             <Text style={styles.amountText}>{costs ? formatCurrency(Math.round(amount)) : '...'}</Text>
+             <View style={styles.currencyRow}>
+                <Text style={styles.currencyLabel}>INR</Text>
+                {/* Chevron Indicator */}
+                <Ionicons 
+                  name={expanded ? "chevron-up" : "chevron-down"} 
+                  size={16} 
+                  color="#94a3b8" 
+                  style={{ marginLeft: 4 }}
+                />
+             </View>
+          </View>
+        </View>
+
+        {/* Expanded Details */}
+        {expanded && (
+          <View style={styles.expandedContent}>
+            <View style={styles.cardDivider} />
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Allocation</Text>
+              <Text style={styles.detailValue}>{percentage}% of Total Cost</Text>
+            </View>
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Per Sq.ft</Text>
+              <Text style={styles.detailValue}>≈ ₹{Math.round((amount || 0) / totalArea)}/sq.ft</Text>
+            </View>
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Status</Text>
+              <View style={styles.statusPill}>
+                <Text style={styles.statusText}>Estimated</Text>
+              </View>
+            </View>
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  };
 
   if (loading) {
     return (
@@ -143,7 +188,7 @@ export default function EstimateResultScreen({ route, navigation }: any) {
           showsVerticalScrollIndicator={false}
         >
           
-          {/* HERO SECTION - Total Cost */}
+          {/* HERO SECTION */}
           <View style={styles.heroWrapper}>
             <LinearGradient
                 colors={['#315b76', '#2a4179']}
@@ -190,24 +235,27 @@ export default function EstimateResultScreen({ route, navigation }: any) {
             
             <CostCard 
                 title="Material Cost"
-                subtext="Cement, Steel, Bricks, Finishings"
+                subtext="Cement, Steel, Bricks..."
                 amount={costs.material}
+                percentage={60}
                 iconName="cube-outline"
                 gradientColors={['#4F46E5', '#818cf8']} 
             />
 
             <CostCard 
                 title="Labor Charges"
-                subtext="Contractor, Masonry, Plumbing"
+                subtext="Masonry, Plumbing..."
                 amount={costs.labor}
+                percentage={25}
                 iconName="account-hard-hat"
                 gradientColors={['#d97706', '#fbbf24']} 
             />
 
             <CostCard 
                 title="Services & Fees"
-                subtext="Architecture, Approval, Electric"
+                subtext="Architecture, Approval..."
                 amount={costs.services}
+                percentage={15}
                 iconName="file-certificate-outline"
                 gradientColors={['#10b981', '#34d399']} 
             />
@@ -218,11 +266,10 @@ export default function EstimateResultScreen({ route, navigation }: any) {
           <View style={styles.disclaimerBox}>
             <Ionicons name="information-circle" size={20} color="#64748b" style={{marginRight: 8}}/>
             <Text style={styles.disclaimerText}>
-                This is an approximate estimation based on current market averages. Actual costs may vary by +/- 15% based on location and specific material choices.
+                This is an approximate estimation based on current market averages. Actual costs may vary by +/- 15%.
             </Text>
           </View>
 
-          {/* SAVE BUTTON - MODIFIED */}
           <TouchableOpacity style={styles.saveButton} onPress={handleSaveEstimate}>
             <Text style={styles.saveButtonText}>Save to Project</Text>
             <Ionicons name="save-outline" size={20} color="#fff" style={{marginLeft: 8}}/>
@@ -235,7 +282,6 @@ export default function EstimateResultScreen({ route, navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  // Global Setup
   container: { flex: 1, backgroundColor: '#F8FAFC' },
   safeArea: { flex: 1, paddingTop: Platform.OS === 'android' ? 35 : 0 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8FAFC' },
@@ -243,28 +289,21 @@ const styles = StyleSheet.create({
   loadingSubText: { marginTop: 8, fontSize: 14, color: '#64748b' },
   scrollContent: { paddingHorizontal: 24, paddingBottom: 40 },
 
-  // Header
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingVertical: 15,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 24, paddingVertical: 15,
   },
   iconButton: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: '#fff',
+    width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff',
     justifyContent: 'center', alignItems: 'center',
     borderWidth: 1, borderColor: '#f1f5f9',
     shadowColor: '#64748b', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 5,
   },
   headerTitle: { fontSize: 20, fontWeight: '700', color: '#1e293b' },
 
-  // Hero Section
   heroWrapper: { marginTop: 10, marginBottom: 25 },
   heroContainer: {
-    borderRadius: 24,
-    padding: 24,
+    borderRadius: 24, padding: 24,
     shadowColor: '#315b76', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.3, shadowRadius: 20, elevation: 10,
   },
   heroHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
@@ -279,49 +318,42 @@ const styles = StyleSheet.create({
   statLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 12, marginBottom: 2 },
   statValue: { color: '#fff', fontSize: 15, fontWeight: '600' },
 
-  // Section Headers
   sectionHeader: { marginBottom: 15 },
   sectionLabel: { fontSize: 12, fontWeight: '700', color: '#94a3b8', letterSpacing: 1 },
 
-  // Cards
+  // --- UPDATED CARD STYLES ---
   cardsContainer: { gap: 16 },
   card: { 
-    backgroundColor: '#ffffff', 
-    borderRadius: 20, 
-    padding: 16, 
-    flexDirection: 'row', 
-    alignItems: 'center', 
+    backgroundColor: '#ffffff', borderRadius: 20, padding: 16, 
     shadowColor: '#94a3b8', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.1, shadowRadius: 15, elevation: 2,
-    borderWidth: 1, borderColor: '#f8fafc'
+    borderWidth: 1, borderColor: '#f8fafc',
+    overflow: 'hidden' // Important for animation
   },
+  cardMainRow: { flexDirection: 'row', alignItems: 'center' },
   cardIconContainer: { width: 52, height: 52, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
   cardTextContent: { flex: 1 },
   cardTitle: { fontSize: 16, fontWeight: '700', color: '#1e293b', marginBottom: 2 },
   cardSubtext: { fontSize: 12, color: '#64748b' },
   amountContainer: { alignItems: 'flex-end' },
   amountText: { fontSize: 16, fontWeight: '700', color: '#1e293b' },
+  currencyRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
   currencyLabel: { fontSize: 10, color: '#94a3b8', fontWeight: '600' },
 
-  // Disclaimer
-  disclaimerBox: { 
-    marginTop: 25, 
-    flexDirection: 'row', 
-    backgroundColor: '#f1f5f9', 
-    padding: 15, 
-    borderRadius: 16,
-    alignItems: 'center'
-  },
+  // Expanded Content Styles
+  expandedContent: { marginTop: 16 },
+  cardDivider: { height: 1, backgroundColor: '#f1f5f9', marginBottom: 12 },
+  detailRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  detailLabel: { fontSize: 12, color: '#64748b', fontWeight: '500' },
+  detailValue: { fontSize: 12, color: '#1e293b', fontWeight: '700' },
+  statusPill: { backgroundColor: '#dcfce7', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
+  statusText: { fontSize: 10, color: '#166534', fontWeight: '700' },
+
+  disclaimerBox: { marginTop: 25, flexDirection: 'row', backgroundColor: '#f1f5f9', padding: 15, borderRadius: 16, alignItems: 'center' },
   disclaimerText: { flex: 1, fontSize: 11, color: '#64748b', lineHeight: 16 },
 
-  // Action Button
   saveButton: {
-    marginTop: 20,
-    backgroundColor: '#315b76',
-    borderRadius: 16,
-    height: 56,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    marginTop: 20, backgroundColor: '#315b76', borderRadius: 16, height: 56,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     shadowColor: '#315b76', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 5,
   },
   saveButtonText: { fontSize: 16, fontWeight: '700', color: '#fff' }
