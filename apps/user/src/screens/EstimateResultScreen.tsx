@@ -7,13 +7,13 @@ import {
   TouchableOpacity, 
   Dimensions, 
   Platform, 
-  SafeAreaView, 
   StatusBar,
   ActivityIndicator,
   Alert,
   LayoutAnimation,
   UIManager
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { auth } from '@archlens/shared';
@@ -21,9 +21,13 @@ import { createEstimate } from '../services/projectService';
 
 const { width } = Dimensions.get('window');
 
-// Enable LayoutAnimation on Android
+// Enable LayoutAnimation on Android (suppress warning for New Architecture)
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
+  try {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+  } catch (e) {
+    // Ignore warning in New Architecture
+  }
 }
 
 // Mock Rates per Sq. Ft.
@@ -283,7 +287,7 @@ export default function EstimateResultScreen({ route, navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
-  safeArea: { flex: 1, paddingTop: Platform.OS === 'android' ? 35 : 0 },
+  safeArea: { flex: 1 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8FAFC' },
   loadingText: { marginTop: 20, fontSize: 18, fontWeight: '700', color: '#1e293b' },
   loadingSubText: { marginTop: 8, fontSize: 14, color: '#64748b' },

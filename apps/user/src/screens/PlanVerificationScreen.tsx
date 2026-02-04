@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  View, Text, StyleSheet, Image, SafeAreaView, ScrollView, 
+  View, Text, StyleSheet, Image, ScrollView, 
   TouchableOpacity, TextInput, ActivityIndicator, Alert, Platform,
   Modal, Dimensions 
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { analyzeFloorPlan, extractStructuredData, auth } from '@archlens/shared'; 
+import { useAIAnalysis } from '../context/AIAnalysisContext';
 import { createProject } from '../services/projectService';
 
 interface RoomData {
@@ -23,9 +25,13 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
   const [saving, setSaving] = useState(false);
   const [rooms, setRooms] = useState<RoomData[]>([]);
   const [totalArea, setTotalArea] = useState(0);
+  const [isCached, setIsCached] = useState(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
   
   // --- NEW STATE FOR ZOOM MODAL ---
   const [isZoomVisible, setZoomVisible] = useState(false);
+
+  const { getCachedFloorPlanAnalysis, cacheFloorPlanAnalysis } = useAIAnalysis();
 
   useEffect(() => {
     uploadAndAnalyze();
@@ -43,6 +49,7 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
   const uploadAndAnalyze = async () => {
     try {
       setLoading(true);
+      setAnalysisError(null);
 
       let base64String = planImage;
       if (planImage.startsWith('file://')) {
@@ -54,6 +61,23 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
             reader.onerror = reject;
             reader.readAsDataURL(blob);
         });
+      }
+
+      // CHECK CACHE FIRST
+      const cachedAnalysis = getCachedFloorPlanAnalysis(base64String);
+      if (cachedAnalysis) {
+        console.log('Using cached floor plan analysis');
+        const roomsWithIds = (cachedAnalysis.data.rooms || []).map((room: any, index: number) => ({
+          id: room.id || `room-${index}-${Date.now()}`,
+          name: room.name || `Room ${index + 1}`,
+          length: String(room.length || '0'),
+          width: String(room.width || '0'),
+          area: String(room.area || (room.length * room.width) || '0')
+        }));
+        setRooms(roomsWithIds);
+        setIsCached(true);
+        setLoading(false);
+        return;
       }
 
       const analysis = await analyzeFloorPlan(base64String);
@@ -92,6 +116,16 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
           area: String(room.area || (room.length * room.width) || '0')
         }));
         setRooms(roomsWithIds);
+
+        // CACHE THE ANALYSIS
+        cacheFloorPlanAnalysis(base64String, {
+          id: `analysis-${Date.now()}`,
+          type: 'floor_plan',
+          timestamp: Date.now(),
+          data: parsedData,
+        });
+
+        setIsCached(false);
       } else {
         throw new Error("Invalid structure");
       }
@@ -99,10 +133,43 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
       setLoading(false);
     } catch (err: any) {
       console.error("Analysis Error:", err);
-      Alert.alert("Analysis Error", "Could not interpret plan details. Please enter manually.");
+      
+      // Handle quota errors with user-friendly message
+      if (err.message === 'AI_QUOTA_EXCEEDED' || err.message?.includes('quota') || err.message?.includes('429')) {
+        setAnalysisError('AI quota limit reached. Please skip and enter dimensions manually.');
+      } else {
+        setAnalysisError(err.message || 'Could not interpret plan details. You can skip and enter manually.');
+      }
+      
       setRooms([{ id: '1', name: 'Main Room', length: '0', width: '0', area: '0' }]);
       setLoading(false);
     }
+  };
+
+  const handleSkipAI = () => {
+    Alert.alert(
+      'Skip AI Analysis',
+      'You can manually enter room dimensions. Continue?',
+      [
+        { text: 'Cancel', onPress: () => {} },
+        {
+          text: 'Continue',
+          onPress: () => {
+            // Clear rooms and start fresh with manual entry
+            setRooms([
+              {
+                id: `room-${Date.now()}`,
+                name: 'Room 1',
+                length: '0',
+                width: '0',
+                area: '0',
+              },
+            ]);
+            setAnalysisError(null);
+          },
+        },
+      ]
+    );
   };
 
   const updateRoom = (id: string, field: keyof RoomData, value: string) => {
@@ -163,18 +230,67 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
     </View>
   );
 
+  if (analysisError) {
+    const isQuotaError = analysisError.includes('quota') || analysisError.includes('limit reached');
+    
+    return (
+      <View style={styles.errorContainer}>
+        <Ionicons 
+          name={isQuotaError ? "flash-off" : "alert-circle"} 
+          size={64} 
+          color={isQuotaError ? "#f59e0b" : "#ef4444"} 
+        />
+        <Text style={styles.errorTitle}>
+          {isQuotaError ? 'AI Quota Limit Reached' : 'Analysis Failed'}
+        </Text>
+        <Text style={styles.errorMessage}>{analysisError}</Text>
+        {isQuotaError && (
+          <View style={styles.quotaInfoBox}>
+            <Ionicons name="information-circle" size={20} color="#0284c7" />
+            <Text style={styles.quotaInfoText}>
+              Don't worry! You can manually enter room dimensions below.
+            </Text>
+          </View>
+        )}
+        <View style={styles.errorButtonRow}>
+          {!isQuotaError && (
+            <TouchableOpacity style={styles.retryButton} onPress={uploadAndAnalyze}>
+              <Ionicons name="refresh" size={18} color="#fff" />
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity 
+            style={[styles.skipErrorButton, isQuotaError && styles.skipErrorButtonPrimary]} 
+            onPress={handleSkipAI}
+          >
+            <Ionicons name="create" size={18} color={isQuotaError ? "#fff" : "#315b76"} />
+            <Text style={[styles.skipErrorButtonText, isQuotaError && styles.skipErrorButtonTextPrimary]}>
+              Manual Entry
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <StatusBar style="dark" />
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Ionicons name="arrow-back" size={24} color="#1e293b" />
+          <TouchableOpacity 
+            onPress={() => navigation.goBack()} 
+            style={styles.iconButton}
+          >
+            <Ionicons name="arrow-back" size={20} color="#315b76" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Verify Dimensions</Text>
-          <TouchableOpacity onPress={() => setRooms([...rooms, { id: Date.now().toString(), name: 'New Room', length: '0', width: '0', area: '0' }])}>
-            <Ionicons name="add-circle" size={28} color="#315b76" />
-          </TouchableOpacity>
+          <View style={styles.headerRight}>
+            {isCached && <Text style={styles.cachedBadge}>From Cache</Text>}
+            <TouchableOpacity onPress={() => setRooms([...rooms, { id: Date.now().toString(), name: 'New Room', length: '0', width: '0', area: '0' }])}>
+              <Ionicons name="add-circle" size={28} color="#315b76" />
+            </TouchableOpacity>
+          </View>
         </View>
 
         <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -302,20 +418,82 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8F9FA' },
-  safeArea: { flex: 1, paddingTop: Platform.OS === 'android' ? 30 : 0 },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' },
+  safeArea: { flex: 1 },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff', paddingHorizontal: 20 },
   loadingText: { marginTop: 15, fontSize: 18, color: '#1e293b', fontWeight: 'bold' },
-  subLoadingText: { marginTop: 5, fontSize: 14, color: '#64748b' },
+  subLoadingText: { marginTop: 5, fontSize: 14, color: '#64748b', marginBottom: 30 },
+  skipButton: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: '#ef4444', 
+    paddingVertical: 12, 
+    paddingHorizontal: 20, 
+    borderRadius: 10, 
+    gap: 8,
+    marginTop: 20 
+  },
+  skipButtonText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+
+  errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff', paddingHorizontal: 30 },
+  errorTitle: { fontSize: 20, fontWeight: '700', color: '#1e293b', marginTop: 20, marginBottom: 8 },
+  errorMessage: { fontSize: 15, color: '#64748b', marginTop: 8, textAlign: 'center', marginBottom: 20, lineHeight: 22 },
+  quotaInfoBox: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: '#e0f2fe', 
+    padding: 15, 
+    borderRadius: 12, 
+    marginBottom: 25, 
+    gap: 10,
+    borderWidth: 1,
+    borderColor: '#bae6fd'
+  },
+  quotaInfoText: { flex: 1, fontSize: 14, color: '#0369a1', lineHeight: 20, fontWeight: '500' },
+  errorButtonRow: { flexDirection: 'row', gap: 12, width: '100%' },
+  retryButton: { 
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#315b76',
+    paddingVertical: 14,
+    borderRadius: 12,
+    gap: 6,
+  },
+  retryButtonText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  skipErrorButton: { 
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#e2e8f0',
+    paddingVertical: 14,
+    borderRadius: 12,
+    gap: 6,
+  },
+  skipErrorButtonPrimary: {
+    backgroundColor: '#315b76',
+  },
+  skipErrorButtonText: { color: '#315b76', fontSize: 15, fontWeight: '600' },
+  skipErrorButtonTextPrimary: { color: '#fff' },
+
   header: { 
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingVertical: 15, backgroundColor: '#F8F9FA'
+    paddingHorizontal: 20, paddingVertical: 12
   },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: '#0f172a' },
+  iconButton: { 
+    width: 40, height: 40, borderRadius: 12, backgroundColor: '#fff', 
+    justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#f1f5f9',
+    shadowColor: '#64748b', shadowOpacity: 0.05, shadowRadius: 5, elevation: 1
+  },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  cachedBadge: { backgroundColor: '#d1fae5', color: '#059669', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, fontSize: 11, fontWeight: '600' },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: '#0f172a', flex: 1, textAlign: 'center' },
   scrollContent: { padding: 20, paddingBottom: 100 },
   
   // Updated Image Styles
   imageContainer: { position: 'relative', marginBottom: 20, borderRadius: 12, overflow: 'hidden' },
-  previewImage: { width: '100%', height: 250, backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 12 },
+  previewImage: { width: '100%', height: 290, backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 12 },
   zoomIconOverlay: { 
     position: 'absolute', bottom: 10, right: 10, 
     backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 20, 

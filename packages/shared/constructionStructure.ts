@@ -14,6 +14,43 @@ export const MATERIAL_UNITS = [
   "Bundle"
 ] as const;
 
+export type WallType = 'Load Bearing' | 'Non-Load Bearing' | 'Partition';
+
+export const WALL_TYPE_SPECS: Record<WallType, {
+  label: string;
+  mortarRatio: number;
+  cementMortar: number;
+  sandMortar: number;
+  bricksPerCuFt: number;
+  description: string;
+}> = {
+  'Load Bearing': {
+    label: 'Load Bearing',
+    mortarRatio: 0.25,
+    cementMortar: 1,
+    sandMortar: 6,
+    bricksPerCuFt: 5.0,
+    description: 'Structural walls using bricks and concrete blocks'
+  },
+  'Non-Load Bearing': {
+    label: 'Non-Load Bearing',
+    mortarRatio: 0.15,
+    cementMortar: 1,
+    sandMortar: 5,
+    bricksPerCuFt: 1.1,
+    description: 'Lightweight walls using AAC and hollow blocks'
+  },
+  'Partition': {
+    label: 'Partition',
+    mortarRatio: 0.10,
+    cementMortar: 1,
+    sandMortar: 4,
+    bricksPerCuFt: 0,
+    description: 'Interior partitions using plywood and boards'
+  }
+};
+
+
 export const CONSTRUCTION_HIERARCHY = {
   'Foundation': {
     label: "Foundation",
@@ -27,9 +64,8 @@ export const CONSTRUCTION_HIERARCHY = {
   'Wall': {
     label: "Wall",
     subCategories: {
-      'Load Bearing': ["Red Brick", "Fly Ash Brick", "Solid Concrete Block", "Stone Masonry"],
-      'Non-Load Bearing': ["AAC Block", "Hollow Concrete Block", "Gypsum Board", "Glass Block"],
-      'Partition': ["Plywood", "Fiber Cement Board", "Glass"],
+      'Load Bearing': ["Brick Wall", "Block Wall", "Stone Wall"],
+      'Non-Load Bearing': ["Brick Partition", "Block Partition", "Dry Wall", "Glass","Wood Wall"],
     },
   },
   'Roof': {

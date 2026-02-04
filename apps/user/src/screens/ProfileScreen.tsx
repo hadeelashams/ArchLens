@@ -4,11 +4,11 @@ import {
   Text, 
   StyleSheet, 
   TouchableOpacity, 
-  SafeAreaView, 
   ScrollView,
   Alert,
   Platform 
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth } from '@archlens/shared';
 import { signOut } from 'firebase/auth';
 import { Ionicons, Feather } from '@expo/vector-icons';
@@ -123,7 +123,7 @@ export default function ProfileScreen({ navigation }: any) {
 // ... styles remain the same
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#ffffff' },
-    safeArea: { flex: 1, paddingTop: Platform.OS === 'android' ? 30 : 0 },
+    safeArea: { flex: 1 },
     header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20 },
     headerTitle: { fontSize: 18, fontWeight: '700', color: '#1e293b' },
     scrollContent: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 120 },

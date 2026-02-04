@@ -1,15 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { 
   View, Text, StyleSheet, FlatList, TouchableOpacity, 
-  SafeAreaView, Platform, Alert, ActivityIndicator, LayoutAnimation, UIManager 
+  Platform, Alert, ActivityIndicator, LayoutAnimation, UIManager 
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { db } from '@archlens/shared';
 import { collection, query, where, onSnapshot, deleteDoc, doc } from 'firebase/firestore';
 
-// Enable LayoutAnimation on Android
+// Enable LayoutAnimation on Android (suppress warning for New Architecture)
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
+  try {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+  } catch (e) {
+    // Ignore warning in New Architecture
+  }
 }
 
 export default function ProjectSummaryScreen({ route, navigation }: any) {
@@ -188,7 +193,7 @@ export default function ProjectSummaryScreen({ route, navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
-  safeArea: { flex: 1, paddingTop: Platform.OS === 'android' ? 35 : 0 },
+  safeArea: { flex: 1 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20 },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#1e293b' },
   backBtn: { padding: 5 },

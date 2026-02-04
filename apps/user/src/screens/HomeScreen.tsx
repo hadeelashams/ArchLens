@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { 
   View, Text, StyleSheet, TouchableOpacity, ScrollView, 
-  Dimensions, SafeAreaView, Platform, ImageBackground, Modal, Alert 
+  Dimensions, Platform, ImageBackground, Modal, Alert 
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth } from '@archlens/shared';
 import { signOut } from 'firebase/auth';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'; 
@@ -225,7 +226,7 @@ export default function HomeScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
-  safeArea: { flex: 1, paddingTop: Platform.OS === 'android' ? 35 : 0 },
+  safeArea: { flex: 1 },
   scrollContent: { paddingBottom: 130 },
 
   // NAV BAR

@@ -24,7 +24,7 @@ export interface GenerationConfig {
  */
 const retryWithBackoff = async <T>(
   fn: () => Promise<T>,
-  maxRetries: number = 3,
+  maxRetries: number = 2,
   initialDelayMs: number = 1000
 ): Promise<T> => {
   let lastError: Error | null = null;
@@ -34,8 +34,17 @@ const retryWithBackoff = async <T>(
       return await fn();
     } catch (error) {
       lastError = error as Error;
-      const is429Error = error instanceof Error && 
-        (error.message.includes('429') || error.message.includes('GEMINI_DEVELOPER_OVERLOADED'));
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const is429Error = errorMessage.includes('429') || 
+                         errorMessage.includes('quota') || 
+                         errorMessage.includes('GEMINI_DEVELOPER_OVERLOADED');
+
+      // On quota error, fail fast without retry
+      if (errorMessage.includes('quota')) {
+        const quotaError = new Error('AI_QUOTA_EXCEEDED');
+        (quotaError as any).originalError = error;
+        throw quotaError;
+      }
 
       if (!is429Error || attempt === maxRetries) {
         throw error;

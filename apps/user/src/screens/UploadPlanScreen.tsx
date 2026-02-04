@@ -5,12 +5,12 @@ import {
   StyleSheet, 
   TouchableOpacity, 
   Image, 
-  SafeAreaView, 
   Alert,
   ScrollView,
   Platform,
   Dimensions
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { StatusBar } from 'expo-status-bar';
@@ -19,25 +19,49 @@ const { width } = Dimensions.get('window');
 
 export default function UploadPlanScreen({ navigation }: any) {
   const [imageUri, setImageUri] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const pickImage = async () => {
-    // Request Permission
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    
-    if (status !== 'granted') {
-      Alert.alert('Permission Required', 'We need access to your gallery to upload the floor plan.');
-      return;
-    }
+    try {
+      setLoading(true);
+      
+      // Request Permission
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permission Required',
+          'We need access to your gallery to upload the floor plan. Please enable it in settings.',
+          [{ text: 'OK' }]
+        );
+        setLoading(false);
+        return;
+      }
 
-    // Launch Gallery
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 1,
-    });
+      // Launch Gallery
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: false,
+        quality: 0.8,
+      });
 
-    if (!result.canceled) {
-      setImageUri(result.assets[0].uri);
+      if (result.canceled) {
+        console.log('Image picker was cancelled');
+        setLoading(false);
+        return;
+      }
+
+      if (result.assets && result.assets.length > 0) {
+        const selectedImageUri = result.assets[0].uri;
+        console.log('Image selected:', selectedImageUri);
+        setImageUri(selectedImageUri);
+      }
+      
+      setLoading(false);
+    } catch (error) {
+      console.error('Image picker error:', error);
+      Alert.alert('Error', 'Failed to pick image. Please try again.');
+      setLoading(false);
     }
   };
 
@@ -50,9 +74,7 @@ export default function UploadPlanScreen({ navigation }: any) {
       Alert.alert("No Image", "Please upload a floor plan to proceed.");
       return;
     }
-    // TODO: Navigate to Next Step (e.g., Material Estimation)
-     navigation.navigate('PlanVerification', { planImage: imageUri });
-    console.log("Proceeding with image:", imageUri);
+    navigation.navigate('PlanVerification', { planImage: imageUri });
   };
 
   return (
@@ -79,8 +101,14 @@ export default function UploadPlanScreen({ navigation }: any) {
             <View style={styles.dashedBorder}>
               <Text style={styles.uploadTitle}>Upload Floor Plan</Text>
               <Text style={styles.uploadSubtitle}>JPG or PNG</Text>
-              <TouchableOpacity style={styles.browseButton} onPress={pickImage}>
-                <Text style={styles.browseText}>Browse Files</Text>
+              <TouchableOpacity 
+                style={[styles.browseButton, loading && styles.browseButtonDisabled]} 
+                onPress={pickImage}
+                disabled={loading}
+              >
+                <Text style={styles.browseText}>
+                  {loading ? 'Loading...' : 'Browse Files'}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -124,7 +152,7 @@ export default function UploadPlanScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8F9FA' },
-  safeArea: { flex: 1, paddingTop: Platform.OS === 'android' ? 30 : 0 },
+  safeArea: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 15, backgroundColor: '#F8F9FA' },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#0f172a' },
   backButton: { padding: 5 },
@@ -135,6 +163,7 @@ const styles = StyleSheet.create({
   uploadTitle: { fontSize: 18, fontWeight: '600', color: '#0f172a', marginBottom: 6 },
   uploadSubtitle: { fontSize: 14, color: '#94a3b8', marginBottom: 20 },
   browseButton: { backgroundColor: '#315b76', paddingHorizontal: 25, paddingVertical: 12, borderRadius: 8 },
+  browseButtonDisabled: { backgroundColor: '#94a3b8', opacity: 0.6 },
   browseText: { color: '#fff', fontWeight: '600', fontSize: 14 },
   previewSection: { marginTop: 0 },
   sectionHeader: { fontSize: 18, fontWeight: '600', color: '#315b76', marginBottom: 15 },

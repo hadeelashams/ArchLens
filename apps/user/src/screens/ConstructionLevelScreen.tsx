@@ -8,10 +8,10 @@ import {
   ScrollView, 
   Dimensions, 
   Platform,
-  SafeAreaView,
   StatusBar,
-  Alert // Added Alert
+  Alert 
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons, MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -259,7 +259,7 @@ export default function ConstructionLevelScreen({ route, navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
-  safeArea: { flex: 1, paddingTop: Platform.OS === 'android' ? 35 : 0 },
+  safeArea: { flex: 1 },
   scrollContent: { paddingHorizontal: 20 },
   
   // Header

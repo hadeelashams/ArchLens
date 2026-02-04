@@ -7,6 +7,7 @@ import { onAuthStateChanged, User } from 'firebase/auth';
 // Internal Imports
 import { auth } from '@archlens/shared';
 import { FirestoreProvider } from './context/FirestoreContext';
+import { AIAnalysisProvider } from './context/AIAnalysisContext';
 
 // Screen Imports
 import OnboardingScreen from './screens/OnboardingScreen';
@@ -137,7 +138,9 @@ function AppContent() {
 export default function App() {
   return (
     <FirestoreProvider>
-      <AppContent />
+      <AIAnalysisProvider>
+        <AppContent />
+      </AIAnalysisProvider>
     </FirestoreProvider>
   );
 }

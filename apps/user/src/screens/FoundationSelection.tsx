@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   View, Text, StyleSheet, TouchableOpacity, ScrollView, 
-  Dimensions, SafeAreaView, Platform, TextInput, ActivityIndicator, Image, Switch 
+  Dimensions, Platform, TextInput, ActivityIndicator, Image, Switch 
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons'; 
 import { StatusBar } from 'expo-status-bar';
 import { db } from '@archlens/shared';
@@ -267,7 +268,7 @@ export default function FoundationSelection({ route, navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
-  safeArea: { flex: 1, paddingTop: Platform.OS === 'android' ? 35 : 0 },
+  safeArea: { flex: 1 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 20 },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#1e293b' },
