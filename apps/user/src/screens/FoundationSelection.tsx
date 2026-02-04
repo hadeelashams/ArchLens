@@ -318,6 +318,6 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: '#315b76', borderColor: '#315b76' },
   chipText: { fontSize: 12, fontWeight: '600', color: '#64748b' },
   chipTextActive: { color: '#fff' },
-  mainBtn: { position: 'absolute', bottom: 30, alignSelf: 'center', width: width * 0.85, backgroundColor: '#1e293b', padding: 18, borderRadius: 20, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, elevation: 6 },
+  mainBtn: { position: 'absolute', bottom: 30, alignSelf: 'center', width: width * 0.85, backgroundColor: '#315b76', padding: 18, borderRadius: 20, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, elevation: 6 },
   mainBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 }
 });

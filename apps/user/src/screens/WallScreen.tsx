@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons'; 
+import { LinearGradient } from 'expo-linear-gradient';
 import { db, WALL_TYPE_SPECS, WallType, CONSTRUCTION_HIERARCHY } from '@archlens/shared';
 import { collection, query, onSnapshot } from 'firebase/firestore';
 
@@ -145,7 +146,7 @@ export default function WallScreen({ route, navigation }: any) {
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-            <Ionicons name="arrow-back" size={24} color="#1e293b" />
+            <Ionicons name="arrow-back" size={20} color="#315b76" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{tier} Wall Setup</Text>
           <View style={styles.tierBadge}><Text style={styles.tierText}>{tier}</Text></View>
@@ -281,7 +282,7 @@ export default function WallScreen({ route, navigation }: any) {
                 data={materials.filter(m => m.type === activeSelectionKey || m.name?.toLowerCase().includes(activeSelectionKey?.toLowerCase() || ''))}
                 keyExtractor={item => item.id}
                 renderItem={({item}) => (
-                  <TouchableOpacity style={styles.selectorItem} onPress={() => selectMaterial(item)}>
+                  <TouchableOpacity style={styles.selectorItem} onPress={() => setMaterials(item)}>
                     <View>
                       <Text style={styles.selectorItemName}>{item.name}</Text>
                       <Text style={styles.selectorItemPrice}>₹{item.pricePerUnit} / {item.unit}</Text>
@@ -305,7 +306,7 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', padding: 15, justifyContent: 'space-between' },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#1e293b' },
-  backBtn: { padding: 5 },
+  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#f1f5f9', shadowColor: '#64748b', shadowOpacity: 0.05, shadowRadius: 5, elevation: 1 },
   tierBadge: { backgroundColor: '#315b76', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
   tierText: { color: '#fff', fontSize: 11, fontWeight: '800' },
   scroll: { paddingHorizontal: 20, paddingBottom: 100 },
@@ -315,7 +316,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: 10 },
   inputBox: { flex: 1 },
   label: { fontSize: 10, color: '#64748b', marginBottom: 5, fontWeight: '700' },
-  input: { backgroundColor: '#f1f5f9', padding: 12, borderRadius: 10, fontSize: 15, fontWeight: '700', color: '#1e293b', borderSize: 1, borderColor: '#e2e8f0' },
+  input: { backgroundColor: '#f1f5f9', padding: 12, borderRadius: 10, fontSize: 15, fontWeight: '700', color: '#1e293b', borderWidth: 1, borderColor: '#e2e8f0' },
   
   wallTypeContainer: { flexDirection: 'row', gap: 8 },
   wallTypeTab: { flex: 1, paddingVertical: 12, backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 },
@@ -345,15 +346,15 @@ const styles = StyleSheet.create({
   materialValue: { fontSize: 11, fontWeight: '700', color: '#1e293b', flex: 1, marginRight: 5 },
   materialQty: { fontSize: 11, fontWeight: '600', color: '#315b76', marginTop: 10 },
 
-  resultCard: { backgroundColor: '#1e293b', padding: 20, borderRadius: 25, marginTop: 20, elevation: 4 },
+  resultCard: { backgroundColor: '#ffffff', padding: 20, borderRadius: 15, marginTop: 20, borderWidth: 1, borderColor: '#e2e8f0', elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5 },
   resultHeader: { color: '#94a3b8', fontSize: 10, fontWeight: 'bold', marginBottom: 15, letterSpacing: 1 },
   resRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  resLabel: { color: '#cbd5e1', fontSize: 12 },
-  resVal: { color: '#fff', fontWeight: '700', fontSize: 12 },
-  divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.1)', marginVertical: 12 },
+  resLabel: { color: '#64748b', fontSize: 12 },
+  resVal: { color: '#1e293b', fontWeight: '700', fontSize: 12 },
+  divider: { height: 1, backgroundColor: '#e2e8f0', marginVertical: 12 },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  totalLabel: { color: '#fff', fontSize: 14, fontWeight: '600' },
-  totalVal: { color: '#4ade80', fontSize: 22, fontWeight: '800' },
+  totalLabel: { color: '#1e293b', fontSize: 14, fontWeight: '600' },
+  totalVal: { color: '#10b981', fontSize: 22, fontWeight: '800' },
 
   mainBtn: { backgroundColor: '#315b76', margin: 20, padding: 18, borderRadius: 15, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 10, position: 'absolute', bottom: 0, left: 0, right: 0 },
   mainBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
