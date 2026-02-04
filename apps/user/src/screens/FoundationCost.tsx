@@ -57,17 +57,37 @@ export default function FoundationCost({ route, navigation }: any) {
   const { 
     projectId, 
     area, 
+    foundationType,
     foundationConfig, 
     selections, 
-    numFootings,
-    lengthFt,
-    widthFt,
-    depthFt,
-    pccThicknessFt,
     tier 
   } = route.params;
 
   const [saving, setSaving] = useState(false);
+
+  // Extract parameters based on foundation type
+  const getRCCParams = () => {
+    if (foundationType !== 'RCC') return null;
+    return {
+      numFootings: foundationConfig.footingCount || 0,
+      lengthFt: foundationConfig.footingLength || 4,
+      widthFt: foundationConfig.footingWidth || 4,
+      depthFt: foundationConfig.rccExcavationDepth || 5,
+      pccThicknessFt: foundationConfig.pccThickness || 0.33,
+      hasPCC: foundationConfig.hasPCC ?? true,
+      includePlinth: foundationConfig.includePlinth ?? false
+    };
+  };
+
+  const getMasonryParams = () => {
+    if (foundationType !== 'StoneMasonry') return null;
+    return {
+      wallPerimeter: foundationConfig.wallPerimeter || 0,
+      trenchWidth: foundationConfig.trenchWidth || 2,
+      depthFt: foundationConfig.masonryExcavationDepth || 3,
+      masonryThickness: foundationConfig.masonryThickness || 2
+    };
+  };
 
   // Helper: Get Selected Material Safely
   const getMat = (layer: string, type: string) => {
@@ -81,8 +101,6 @@ export default function FoundationCost({ route, navigation }: any) {
       exists: !!item 
     };
   };
-
-  const getAggSize = (layer: string) => selections[layer] || '20 mm';
 
   const calculateItem = (
     requiredQty: number,
@@ -136,62 +154,62 @@ export default function FoundationCost({ route, navigation }: any) {
 
   const calculation = useMemo(() => {
     let items: any[] = [];
-    
-    // --- 1. GEOMETRY INPUTS ---
-    const n = parseInt(numFootings) || 0;
     const inputArea = parseFloat(area) || 0;
-    const l_m = parseFloat(lengthFt) * FT_TO_M;
-    const w_m = parseFloat(widthFt) * FT_TO_M;
-    const total_depth_m = parseFloat(depthFt) * FT_TO_M;
-    const pcc_h_m = parseFloat(pccThicknessFt) * FT_TO_M;
-    
-    const structural_h_m = Math.max(0, total_depth_m - pcc_h_m);
-    
-    // Calculate Building Perimeter for continuous foundation components
-    const approxPerimeterM = (Math.sqrt(inputArea) * 4) * 1.15 * FT_TO_M;
 
-    // --- 2. PCC BASE (Mix 1:4:8) ---
-    if (foundationConfig.hasPCC) {
-      // PCC logic remains pad-based if footings are defined, else perimeter-based
-      const pcc_l = l_m + (2 * ASSUMED_SPECS.PCC_OFFSET_M);
-      const pcc_w = w_m + (2 * ASSUMED_SPECS.PCC_OFFSET_M);
+    // --- FOUNDATION TYPE DETECTION ---
+    if (foundationType === 'RCC') {
+      // RCC ISOLATED FOOTING SYSTEM
+      const rccParams = getRCCParams();
+      if (!rccParams) return { items: [], grandTotal: 0 };
+
+      const n = rccParams.numFootings;
+      const l_m = rccParams.lengthFt * FT_TO_M;
+      const w_m = rccParams.widthFt * FT_TO_M;
+      const total_depth_m = rccParams.depthFt * FT_TO_M;
+      const pcc_h_m = rccParams.pccThicknessFt * FT_TO_M;
       
-      const volPCC = foundationConfig.mainLayer === 'RCC Footing' 
-        ? (n * pcc_l * pcc_w * pcc_h_m)
-        : (approxPerimeterM * (ASSUMED_SPECS.MASONRY_MEAN_WIDTH_M + 0.2) * pcc_h_m);
-
-      const dryVol = volPCC * DRY_VOL_MULTIPLIER_CONCRETE;
+      const structural_h_m = Math.max(0, total_depth_m - pcc_h_m);
       
-      const cementBags = Math.ceil((dryVol * (1/13)) * CEMENT_BAGS_PER_M3);
-      const matCem = getMat('PCC Base', 'Cement');
-      items.push({
-        category: 'PCC Base',
-        name: `Cement (${matCem.name})`,
-        desc: 'Base Mix 1:4:8',
-        qty: cementBags,
-        unit: 'Bags',
-        rate: matCem.exists ? matCem.price : MARKET_RATES.CEMENT,
-        total: Math.round(cementBags * (matCem.exists ? matCem.price : MARKET_RATES.CEMENT))
-      });
+      // Calculate Building Perimeter for plinth
+      const approxPerimeterM = (Math.sqrt(inputArea) * 4) * 1.15 * FT_TO_M;
 
-      const sandM3 = dryVol * (4/13);
-      const matSand = getMat('PCC Base', 'Sand');
-      items.push({ ...calculateItem(sandM3, 'm3', matSand, DENSITY.SAND, MARKET_RATES.SAND), category: 'PCC Base', desc: 'PCC Sand' });
+      // --- 2. PCC BASE (Mix 1:4:8) ---
+      if (rccParams.hasPCC) {
+        const pcc_l = l_m + (2 * ASSUMED_SPECS.PCC_OFFSET_M);
+        const pcc_w = w_m + (2 * ASSUMED_SPECS.PCC_OFFSET_M);
+        
+        const volPCC = n * pcc_l * pcc_w * pcc_h_m;
+        const dryVol = volPCC * DRY_VOL_MULTIPLIER_CONCRETE;
+        
+        const cementBags = Math.ceil((dryVol * (1/13)) * CEMENT_BAGS_PER_M3);
+        const matCem = getMat('PCC Base', 'Cement');
+        items.push({
+          category: 'PCC Base',
+          name: `Cement (${matCem.name})`,
+          desc: 'Base Mix 1:4:8',
+          qty: cementBags,
+          unit: 'Bags',
+          rate: matCem.exists ? matCem.price : MARKET_RATES.CEMENT,
+          total: Math.round(cementBags * (matCem.exists ? matCem.price : MARKET_RATES.CEMENT))
+        });
 
-      const aggM3 = dryVol * (8/13);
-      items.push({
-        category: 'PCC Base',
-        name: `Aggregates (${getAggSize('PCC Base')})`,
-        desc: 'Coarse Aggregate',
-        qty: parseFloat(aggM3.toFixed(2)),
-        unit: 'm³',
-        rate: MARKET_RATES.AGGREGATE,
-        total: Math.round(aggM3 * MARKET_RATES.AGGREGATE)
-      });
-    }
+        const sandM3 = dryVol * (4/13);
+        const matSand = getMat('PCC Base', 'Sand');
+        items.push({ ...calculateItem(sandM3, 'm3', matSand, DENSITY.SAND, MARKET_RATES.SAND), category: 'PCC Base', desc: 'PCC Sand' });
 
-    // --- 3. MAIN LAYER ---
-    if (foundationConfig.mainLayer === 'RCC Footing') {
+        const aggM3 = dryVol * (8/13);
+        items.push({
+          category: 'PCC Base',
+          name: `Aggregates (${selections['PCC Base'] || '20 mm'})`,
+          desc: 'Coarse Aggregate',
+          qty: parseFloat(aggM3.toFixed(2)),
+          unit: 'm³',
+          rate: MARKET_RATES.AGGREGATE,
+          total: Math.round(aggM3 * MARKET_RATES.AGGREGATE)
+        });
+      }
+
+      // --- 3. RCC FOOTING ---
       const pedestalH_m = Math.max(0, structural_h_m - ASSUMED_SPECS.FOOTING_HEIGHT_M);
       const volFooting = n * l_m * w_m * ASSUMED_SPECS.FOOTING_HEIGHT_M;
       const volPedestal = n * ASSUMED_SPECS.PEDESTAL_L_M * ASSUMED_SPECS.PEDESTAL_W_M * pedestalH_m;
@@ -221,7 +239,7 @@ export default function FoundationCost({ route, navigation }: any) {
       const aggM3 = dryVol * (3/5.5);
       items.push({
         category: 'RCC Footing',
-        name: `Aggregates (${getAggSize('RCC Footing')})`,
+        name: `Aggregates (${selections['RCC Footing'] || '20 mm'})`,
         desc: 'Crushed Stone',
         qty: parseFloat(aggM3.toFixed(2)),
         unit: 'm³',
@@ -229,17 +247,75 @@ export default function FoundationCost({ route, navigation }: any) {
         total: Math.round(aggM3 * MARKET_RATES.AGGREGATE)
       });
 
-    } else if (foundationConfig.mainLayer === 'Stone Masonry') {
-      // FIX: Stone masonry is continuous. Volume = Perimeter * Width * Height
-      // This increases the volume significantly compared to isolated pads.
-      const volMasonry = approxPerimeterM * ASSUMED_SPECS.MASONRY_MEAN_WIDTH_M * structural_h_m;
+      // --- 4. PLINTH BEAM ---
+      if (rccParams.includePlinth) {
+        const volPlinth = approxPerimeterM * ASSUMED_SPECS.PLINTH_BEAM_W_M * ASSUMED_SPECS.PLINTH_BEAM_D_M;
+        const dryVolPlinth = volPlinth * DRY_VOL_MULTIPLIER_CONCRETE;
+        
+        const matCem2 = getMat('Plinth Beam', 'Cement').exists ? getMat('Plinth Beam', 'Cement') : getMat('RCC Footing', 'Cement');
+        const matSteel2 = getMat('Plinth Beam', 'Steel (TMT Bar)').exists ? getMat('Plinth Beam', 'Steel (TMT Bar)') : getMat('RCC Footing', 'Steel (TMT Bar)');
+        const matSand2 = getMat('Plinth Beam', 'Sand').exists ? getMat('Plinth Beam', 'Sand') : getMat('RCC Footing', 'Sand');
+
+        const cementBags2 = Math.ceil((dryVolPlinth * (1/5.5)) * CEMENT_BAGS_PER_M3);
+        items.push({
+          category: 'Plinth Beam',
+          name: `Cement (${matCem2.name})`,
+          desc: 'M20 Grade',
+          qty: cementBags2,
+          unit: 'Bags',
+          rate: matCem2.exists ? matCem2.price : MARKET_RATES.CEMENT,
+          total: Math.round(cementBags2 * (matCem2.exists ? matCem2.price : MARKET_RATES.CEMENT))
+        });
+
+        const sandM3_2 = dryVolPlinth * (1.5/5.5);
+        items.push({ ...calculateItem(sandM3_2, 'm3', matSand2, DENSITY.SAND, MARKET_RATES.SAND), category: 'Plinth Beam', desc: 'Concrete Sand' });
+
+        const aggM3_2 = dryVolPlinth * (3/5.5);
+        items.push({
+          category: 'Plinth Beam',
+          name: 'Aggregates',
+          desc: 'Crushed Stone',
+          qty: parseFloat(aggM3_2.toFixed(2)),
+          unit: 'm³',
+          rate: MARKET_RATES.AGGREGATE,
+          total: Math.round(aggM3_2 * MARKET_RATES.AGGREGATE)
+        });
+
+        const steelKg_2 = volPlinth * ASSUMED_SPECS.STEEL_DENSITY_PLINTH;
+        items.push({ ...calculateItem(steelKg_2, 'kg', matSteel2, DENSITY.STEEL, MARKET_RATES.STEEL), category: 'Plinth Beam', desc: 'Reinforcement' });
+
+        // --- 5. PLINTH FILLING ---
+        const fillVolM3 = (inputArea * (FT_TO_M * FT_TO_M)) * ASSUMED_SPECS.PLINTH_FILL_HEIGHT_M;
+        items.push({
+          category: 'Earth Work',
+          name: 'Plinth Filling Soil',
+          desc: 'Backfilling',
+          qty: parseFloat(fillVolM3.toFixed(2)),
+          unit: 'm³',
+          rate: MARKET_RATES.SOIL,
+          total: Math.round(fillVolM3 * MARKET_RATES.SOIL)
+        });
+      }
+
+    } else if (foundationType === 'StoneMasonry') {
+      // STONE MASONRY CONTINUOUS WALL SYSTEM
+      const masonryParams = getMasonryParams();
+      if (!masonryParams) return { items: [], grandTotal: 0 };
+
+      const perimeterM = masonryParams.wallPerimeter * FT_TO_M;
+      const trenchWidthM = masonryParams.trenchWidth * FT_TO_M;
+      const excavationDepthM = masonryParams.depthFt * FT_TO_M;
+      const masonryThicknessM = masonryParams.masonryThickness * FT_TO_M;
+
+      // --- 1. STONE MASONRY ---
+      const volMasonry = perimeterM * masonryThicknessM * excavationDepthM;
       
       // Stone (Wastage factor 1.25 for irregular shapes)
       const stoneM3 = volMasonry * 1.25; 
-      const matStone = getMat('Stone Masonry', 'Stone'); // Key corrected to 'Stone'
+      const matStone = getMat('Stone Masonry', 'Stone');
       items.push({ ...calculateItem(stoneM3, 'm3', matStone, DENSITY.STONE, MARKET_RATES.STONE), category: 'Stone Masonry', desc: 'Foundation Body (Stones)' });
 
-      // Mortar (30% of total volume)
+      // --- 2. MASONRY MORTAR ---
       const mortarVol = volMasonry * MASONRY_MORTAR_RATIO;
       const dryMortar = mortarVol * DRY_VOL_MULTIPLIER_MORTAR;
       
@@ -260,73 +336,25 @@ export default function FoundationCost({ route, navigation }: any) {
       items.push({ ...calculateItem(sandM3, 'm3', matSand, DENSITY.SAND, MARKET_RATES.SAND), category: 'Stone Masonry', desc: 'Masonry Sand' });
     }
 
-    // --- 4. PLINTH BEAM ---
-    if (foundationConfig.includePlinth) {
-      const volPlinth = approxPerimeterM * ASSUMED_SPECS.PLINTH_BEAM_W_M * ASSUMED_SPECS.PLINTH_BEAM_D_M;
-      const dryVol = volPlinth * DRY_VOL_MULTIPLIER_CONCRETE;
-      
-      const matCem = getMat('Plinth Beam', 'Cement').exists ? getMat('Plinth Beam', 'Cement') : getMat('RCC Footing', 'Cement');
-      const matSteel = getMat('Plinth Beam', 'Steel (TMT Bar)').exists ? getMat('Plinth Beam', 'Steel (TMT Bar)') : getMat('RCC Footing', 'Steel (TMT Bar)');
-      const matSand = getMat('Plinth Beam', 'Sand').exists ? getMat('Plinth Beam', 'Sand') : getMat('RCC Footing', 'Sand');
-
-      const cementBags = Math.ceil((dryVol * (1/5.5)) * CEMENT_BAGS_PER_M3);
-      items.push({
-        category: 'Plinth Beam',
-        name: `Cement (${matCem.name})`,
-        desc: 'M20 Grade',
-        qty: cementBags,
-        unit: 'Bags',
-        rate: matCem.exists ? matCem.price : MARKET_RATES.CEMENT,
-        total: Math.round(cementBags * (matCem.exists ? matCem.price : MARKET_RATES.CEMENT))
-      });
-
-      const sandM3 = dryVol * (1.5/5.5);
-      items.push({ ...calculateItem(sandM3, 'm3', matSand, DENSITY.SAND, MARKET_RATES.SAND), category: 'Plinth Beam', desc: 'Concrete Sand' });
-
-      const aggM3 = dryVol * (3/5.5);
-      items.push({
-        category: 'Plinth Beam',
-        name: 'Aggregates',
-        desc: 'Crushed Stone',
-        qty: parseFloat(aggM3.toFixed(2)),
-        unit: 'm³',
-        rate: MARKET_RATES.AGGREGATE,
-        total: Math.round(aggM3 * MARKET_RATES.AGGREGATE)
-      });
-
-      const steelKg = volPlinth * ASSUMED_SPECS.STEEL_DENSITY_PLINTH;
-      items.push({ ...calculateItem(steelKg, 'kg', matSteel, DENSITY.STEEL, MARKET_RATES.STEEL), category: 'Plinth Beam', desc: 'Reinforcement' });
-
-      // --- 5. PLINTH FILLING ---
-      const fillVolM3 = (inputArea * (FT_TO_M * FT_TO_M)) * ASSUMED_SPECS.PLINTH_FILL_HEIGHT_M;
-      items.push({
-        category: 'Earth Work',
-        name: 'Plinth Filling Soil',
-        desc: 'Backfilling',
-        qty: parseFloat(fillVolM3.toFixed(2)),
-        unit: 'm³',
-        rate: MARKET_RATES.SOIL,
-        total: Math.round(fillVolM3 * MARKET_RATES.SOIL)
-      });
-    }
-
     const grandTotal = items.reduce((sum, i) => sum + i.total, 0);
     return { items, grandTotal };
 
-  }, [area, numFootings, lengthFt, widthFt, depthFt, pccThicknessFt, selections, foundationConfig]);
+  }, [area, foundationType, foundationConfig, selections]);
 
   const handleSaveEstimate = async () => {
     if (!auth.currentUser) return Alert.alert("Error", "User not authenticated.");
     setSaving(true);
     try {
+      const systemName = foundationType === 'RCC' ? 'RCC Footing' : 'Stone Masonry';
       await addDoc(collection(db, 'estimates'), {
         projectId,
         userId: auth.currentUser.uid,
-        itemName: `Foundation Materials (${foundationConfig.mainLayer})`,
+        itemName: `Foundation Materials (${systemName})`,
         category: 'Foundation',
         totalCost: calculation.grandTotal, 
         lineItems: calculation.items,
         area: parseFloat(area),
+        foundationType,
         createdAt: serverTimestamp()
       });
       Alert.alert("Success", "Estimate saved successfully.");
@@ -360,23 +388,39 @@ export default function FoundationCost({ route, navigation }: any) {
                 <Text style={styles.summaryTotal}>₹{calculation.grandTotal.toLocaleString('en-IN')}</Text>
               </View>
               <View style={styles.methodBadge}>
-                <Text style={styles.methodBadgeText}>{foundationConfig.mainLayer}</Text>
+                <Text style={styles.methodBadgeText}>{foundationType === 'RCC' ? 'RCC Footing' : 'Stone Masonry'}</Text>
               </View>
             </View>
             <View style={styles.divider} />
             <View style={styles.specRow}>
-              <View style={styles.specItem}>
-                <Ionicons name="apps-outline" size={14} color="#94a3b8" />
-                <Text style={styles.specText}>{numFootings} Nos</Text>
-              </View>
-              <View style={styles.specItem}>
-                <Ionicons name="resize-outline" size={14} color="#94a3b8" />
-                <Text style={styles.specText}>{lengthFt}x{widthFt} ft</Text>
-              </View>
-              <View style={styles.specItem}>
-                <Ionicons name="arrow-down-outline" size={14} color="#94a3b8" />
-                <Text style={styles.specText}>{depthFt}' Depth</Text>
-              </View>
+              {foundationType === 'RCC' && getRCCParams() && (
+                <>
+                  <View style={styles.specItem}>
+                    <Ionicons name="apps-outline" size={14} color="#94a3b8" />
+                    <Text style={styles.specText}>{getRCCParams()?.numFootings} Nos</Text>
+                  </View>
+                  <View style={styles.specItem}>
+                    <Ionicons name="resize-outline" size={14} color="#94a3b8" />
+                    <Text style={styles.specText}>{getRCCParams()?.lengthFt}x{getRCCParams()?.widthFt} ft</Text>
+                  </View>
+                  <View style={styles.specItem}>
+                    <Ionicons name="arrow-down-outline" size={14} color="#94a3b8" />
+                    <Text style={styles.specText}>{getRCCParams()?.depthFt}' Depth</Text>
+                  </View>
+                </>
+              )}
+              {foundationType === 'StoneMasonry' && getMasonryParams() && (
+                <>
+                  <View style={styles.specItem}>
+                    <Ionicons name="resize-outline" size={14} color="#94a3b8" />
+                    <Text style={styles.specText}>{getMasonryParams()?.wallPerimeter.toFixed(1)} ft Perimeter</Text>
+                  </View>
+                  <View style={styles.specItem}>
+                    <Ionicons name="arrow-down-outline" size={14} color="#94a3b8" />
+                    <Text style={styles.specText}>{getMasonryParams()?.depthFt}' Depth</Text>
+                  </View>
+                </>
+              )}
             </View>
           </View>
 
