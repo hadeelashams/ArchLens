@@ -67,19 +67,55 @@ try {
 // 3. Initialize Firestore
 const db = getFirestore(app);
 
-// 4. Initialize Gemini AI
+// 4. Initialize Gemini AI with Model Fallback Strategy
 let ai: any = null;
 let geminiModel: any = null;
 
+// Model priority list - tries primary first, then falls back to secondaries
+const GEMINI_MODELS = [
+  'gemini-flash-lite-latest',  // Primary: Lite version for higher rate limits
+  'gemini-3-flash-preview',    // Fallback: Latest with extended thinking
+  'gemini-flash-latest',       // Fallback: Stable latest
+  'gemini-2.5-flash',          // Fallback: Previous stable
+];
+
+// Map of model names to display names
+const MODEL_NAMES: Record<string, string> = {
+  'gemini-3-flash-preview': 'Gemini 3.0 Flash Preview',
+  'gemini-flash-latest': 'Gemini Flash Latest',
+  'gemini-2.5-flash': 'Gemini 2.5 Flash',
+  'gemini-flash-lite-latest': 'Gemini Flash Lite',
+};
+
+/**
+ * Create a generative model with the specified configuration
+ */
+const createGeminiModel = (aiInstance: any, modelName: string) => {
+  return getGenerativeModel(aiInstance, {
+    model: modelName,
+    generationConfig: {
+      thinkingConfig: {
+        thinkingBudget: 0,  // Disable extended thinking
+      },
+    } as any,  // Type assertion for extended generation config
+  });
+};
+
+/**
+ * Initialize Gemini AI with primary model
+ * Fallback models are used automatically on rate limit/overload errors
+ */
 try {
   // Initialize Firebase AI backend with Gemini
   ai = getAI(app, { backend: new GoogleAIBackend() });
   
-  // Create a GenerativeModel instance for Gemini 2.5 Flash
-  geminiModel = getGenerativeModel(ai, { model: 'gemini-2.5-flash-lite' });
+  // Initialize primary model
+  geminiModel = createGeminiModel(ai, GEMINI_MODELS[0]);
+  
+  console.log(`✓ Gemini AI initialized with ${MODEL_NAMES[GEMINI_MODELS[0]]}`);
 } catch (error) {
   console.warn('Gemini AI initialization warning:', error);
 }
 
-export { app, auth, db, ai, geminiModel };
+export { app, auth, db, ai, geminiModel, GEMINI_MODELS, MODEL_NAMES, createGeminiModel };
 export default app;

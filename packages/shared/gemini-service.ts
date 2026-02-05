@@ -2,9 +2,10 @@
  * Gemini AI Service
  * Provides AI-powered capabilities using Firebase Gemini API
  * Supports text generation, analysis, and multi-turn conversations
+ * Includes automatic fallback to alternative models on rate limits
  */
 
-import { geminiModel } from './firebase';
+import { geminiModel, GEMINI_MODELS, MODEL_NAMES, createGeminiModel, ai } from './firebase';
 
 export interface ChatMessage {
   role: 'user' | 'model';
@@ -18,9 +19,60 @@ export interface GenerationConfig {
   topK?: number;
 }
 
+// Track current model being used
+let currentModelIndex = 0;
+let currentModel = geminiModel;
+
 /**
- * Retry helper with exponential backoff for rate-limited API calls
+ * Switch to the next available fallback model
+ * This is done transparently when rate limits are hit
+ */
+const switchToNextModel = async () => {
+  if (currentModelIndex < GEMINI_MODELS.length - 1) {
+    currentModelIndex++;
+    const nextModel = GEMINI_MODELS[currentModelIndex];
+    
+    try {
+      currentModel = createGeminiModel(ai, nextModel);
+      console.log(`ℹ️ Switched to ${MODEL_NAMES[nextModel]} due to rate limit`);
+      return true;
+    } catch (error) {
+      console.warn(`Failed to switch to ${nextModel}:`, error);
+      return false;
+    }
+  }
+  return false;
+};
+
+/**
+ * Reset to primary model (can be called after successful request or on app restart)
+ */
+export const resetToPrimaryModel = () => {
+  if (currentModelIndex > 0) {
+    currentModelIndex = 0;
+    currentModel = geminiModel;
+    console.log(`✓ Reset to primary model: ${MODEL_NAMES[GEMINI_MODELS[0]]}`);
+  }
+};
+
+/**
+ * Get current model name being used
+ */
+export const getCurrentModel = (): string => {
+  return GEMINI_MODELS[currentModelIndex];
+};
+
+/**
+ * Get current model display name
+ */
+export const getCurrentModelName = (): string => {
+  return MODEL_NAMES[getCurrentModel()];
+};
+
+/**
+ * Retry helper with exponential backoff AND model fallback for rate-limited API calls
  * Automatically retries on 429 (overloaded) errors with increasing delays
+ * Falls back to alternative models if primary model is rate-limited
  */
 const retryWithBackoff = async <T>(
   fn: () => Promise<T>,
@@ -44,6 +96,16 @@ const retryWithBackoff = async <T>(
         const quotaError = new Error('AI_QUOTA_EXCEEDED');
         (quotaError as any).originalError = error;
         throw quotaError;
+      }
+
+      // If rate-limited and there are fallback models available, try switching
+      if (is429Error && currentModelIndex < GEMINI_MODELS.length - 1) {
+        const switched = await switchToNextModel();
+        if (switched) {
+          // Try again with new model
+          attempt--; // Don't count this as a retry attempt
+          continue;
+        }
       }
 
       if (!is429Error || attempt === maxRetries) {
@@ -71,11 +133,11 @@ export const generateText = async (
 ): Promise<string> => {
   return retryWithBackoff(async () => {
     try {
-      if (!geminiModel) {
+      if (!currentModel) {
         throw new Error('Gemini model not initialized. Check Firebase configuration.');
       }
 
-      const result = await geminiModel.generateContent({
+      const result = await currentModel.generateContent({
         contents: [
           {
             role: 'user',
@@ -107,7 +169,7 @@ export const analyzeFloorPlan = async (
 ): Promise<string> => {
   return retryWithBackoff(async () => {
     try {
-      if (!geminiModel) {
+      if (!currentModel) {
         throw new Error('Gemini model not initialized. Check Firebase configuration.');
       }
 
@@ -152,7 +214,7 @@ export const analyzeFloorPlan = async (
         ? imageData.split(',')[1] 
         : imageData;
 
-      const result = await geminiModel.generateContent({
+      const result = await currentModel.generateContent({
         contents: [
           {
             role: 'user',
@@ -191,11 +253,11 @@ export const chat = async (
 ): Promise<string> => {
   return retryWithBackoff(async () => {
     try {
-      if (!geminiModel) {
+      if (!currentModel) {
         throw new Error('Gemini model not initialized. Check Firebase configuration.');
       }
 
-      const result = await geminiModel.generateContent({
+      const result = await currentModel.generateContent({
         contents: messages.map(msg => ({
           role: msg.role === 'user' ? 'user' : 'model',
           parts: [{ text: msg.content }],
@@ -224,11 +286,11 @@ export const streamGenerateText = async function* (
   config?: GenerationConfig
 ): AsyncGenerator<string, void, unknown> {
   try {
-    if (!geminiModel) {
+    if (!currentModel) {
       throw new Error('Gemini model not initialized. Check Firebase configuration.');
     }
 
-    const result = await geminiModel.generateContentStream({
+    const result = await currentModel.generateContentStream({
       contents: [
         {
           role: 'user',
@@ -275,7 +337,7 @@ ${content}
 
 IMPORTANT: Return ONLY valid JSON with no markdown code blocks, no formatting, and no extra text.`;
 
-      const result = await geminiModel.generateContent({
+      const result = await currentModel.generateContent({
         contents: [
           {
             role: 'user',

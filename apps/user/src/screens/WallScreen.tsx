@@ -30,7 +30,7 @@ export default function WallScreen({ route, navigation }: any) {
   const defaultHeight = tier === 'Luxury' ? '11' : tier === 'Standard' ? '10.5' : '10';
   const [height, setHeight] = useState(defaultHeight);
   const [thickness, setThickness] = useState('0.75'); 
-  const [openingDeduction, setOpeningDeduction] = useState('20'); 
+  const [openingDeduction, setOpeningDeduction] = useState('20');
 
   // 1. Fetch Materials Once
   useEffect(() => {
@@ -282,7 +282,13 @@ export default function WallScreen({ route, navigation }: any) {
                 data={materials.filter(m => m.type === activeSelectionKey || m.name?.toLowerCase().includes(activeSelectionKey?.toLowerCase() || ''))}
                 keyExtractor={item => item.id}
                 renderItem={({item}) => (
-                  <TouchableOpacity style={styles.selectorItem} onPress={() => setMaterials(item)}>
+                  <TouchableOpacity 
+                    style={styles.selectorItem} 
+                    onPress={() => {
+                      setSelections({...selections, [activeSelectionKey!]: item});
+                      setIsModalVisible(false);
+                    }}
+                  >
                     <View>
                       <Text style={styles.selectorItemName}>{item.name}</Text>
                       <Text style={styles.selectorItemPrice}>₹{item.pricePerUnit} / {item.unit}</Text>
