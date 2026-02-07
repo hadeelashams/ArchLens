@@ -165,7 +165,7 @@ export default function HomeScreen({ navigation }: any) {
                 subtext="Live cement & steel prices"
                 iconName="chart-line"
                 gradientColors={['#ea580c', '#c2410c']}
-                onPress={() => {}}
+                onPress={() => navigation.navigate('MaterialRates')}
               />
             </View>
 

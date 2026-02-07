@@ -18,12 +18,16 @@ import UploadPlanScreen from './screens/UploadPlanScreen';
 import PlanVerificationScreen from './screens/PlanVerificationScreen'; 
 import ConstructionLevelScreen from './screens/ConstructionLevelScreen'; 
 import ProjectSummaryScreen from './screens/ProjectSummaryScreen';
+import MaterialRatesScreen from './screens/MaterialRatesScreen';
 
 // --- UPDATED FOUNDATION IMPORTS ---
 import FoundationSelection from './screens/FoundationSelection';
 import FoundationCost from './screens/FoundationCost';
 
 import WallScreen from './screens/WallScreen'; 
+import RoofingScreen from './screens/RoofingScreen';
+import FlooringScreen from './screens/FlooringScreen';
+import PaintingScreen from './screens/PaintingScreen';
 import ProfileScreen from './screens/ProfileScreen';
 
 // Settings Screens
@@ -47,6 +51,7 @@ export type RootStackParamList = {
   PlanVerification: { planImage: string }; 
   ConstructionLevel: { totalArea: number; projectId: string; rooms: any[] }; 
   ProjectSummary: { projectId: string };
+  MaterialRates: undefined;
   FoundationSelection: { totalArea: number; projectId: string }; 
   
   FoundationCost: { 
@@ -59,6 +64,9 @@ export type RootStackParamList = {
 
   // Other Estimates
   WallDetails: { totalArea: number; projectId: string; rooms: any[]; tier: string }; 
+  RoofingScreen: { totalArea: number; projectId: string; tier: string };
+  FlooringScreen: { totalArea: number; projectId: string; tier: string };
+  PaintingScreen: { totalArea: number; projectId: string; tier: string };
   EstimateResult: { 
     totalArea: number; 
     level: string; 
@@ -107,12 +115,16 @@ function AppContent() {
             <Stack.Screen name="PlanVerification" component={PlanVerificationScreen} />
             <Stack.Screen name="ConstructionLevel" component={ConstructionLevelScreen} />
             <Stack.Screen name="ProjectSummary" component={ProjectSummaryScreen} />
+            <Stack.Screen name="MaterialRates" component={MaterialRatesScreen} />
             
             {/* --- UPDATED FOUNDATION SCREENS --- */}
             <Stack.Screen name="FoundationSelection" component={FoundationSelection} />
             <Stack.Screen name="FoundationCost" component={FoundationCost} />
 
             <Stack.Screen name="WallDetails" component={WallScreen} />
+            <Stack.Screen name="RoofingScreen" component={RoofingScreen} />
+            <Stack.Screen name="FlooringScreen" component={FlooringScreen} />
+            <Stack.Screen name="PaintingScreen" component={PaintingScreen} />
             <Stack.Screen name="EstimateResult" component={EstimateResultScreen} />
 
             <Stack.Screen name="Profile" component={ProfileScreen} />

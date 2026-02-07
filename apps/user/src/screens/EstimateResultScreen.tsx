@@ -16,8 +16,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { auth } from '@archlens/shared';
-import { createEstimate } from '../services/projectService';
+import { auth, db } from '@archlens/shared';
+import { collection, query, where, onSnapshot, deleteDoc, doc } from 'firebase/firestore';
 
 const { width } = Dimensions.get('window');
 
@@ -30,79 +30,110 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   }
 }
 
-// Mock Rates per Sq. Ft.
-const RATES = {
-  Economy: 1600,
-  Standard: 2200,
-  Luxury: 3500
-};
-
 export default function EstimateResultScreen({ route, navigation }: any) {
-  const { totalArea = 1000, level = 'Standard', projectId } = route.params || {};
+  const { projectId } = route.params || {};
 
   const [loading, setLoading] = useState(true);
-  const [costs, setCosts] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [estimates, setEstimates] = useState<any[]>([]);
+  const [grandTotal, setGrandTotal] = useState(0);
+  const [categoryBreakdown, setCategoryBreakdown] = useState<any>({});
+
+  // Category icons mapping
+  const categoryIcons: any = {
+    'Foundation': 'home',
+    'Wall': 'view-grid-plus',
+    'Roofing': 'home-roof',
+    'Flooring': 'view-module',
+    'Painting': 'format-paint',
+    'Plastering': 'texture',
+  };
 
   useEffect(() => {
-    setTimeout(() => {
-      calculateCosts();
+    if (!projectId) {
+      setError('Project ID not found. Please go back and try again.');
       setLoading(false);
-    }, 1500);
-  }, []);
+      return;
+    }
 
-  const calculateCosts = () => {
-    const rate = RATES[level as keyof typeof RATES] || 2200;
-    const total = totalArea * rate;
+    try {
+      // Listen to all estimates for this project
+      const q = query(collection(db, 'estimates'), where('projectId', '==', projectId));
+      const unsubscribe = onSnapshot(
+        q, 
+        (snapshot) => {
+          const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          setEstimates(data);
+          setError(null); // Clear any previous errors
+          
+          // Calculate Total and Category Breakdown
+          let total = 0;
+          const breakdown: any = {};
+          
+          data.forEach((item: any) => {
+            const cost = item.totalCost || 0;
+            total += cost;
+            const category = item.category || 'Other';
+            
+            if (!breakdown[category]) {
+              breakdown[category] = { total: 0, items: 0, color: getCategoryColor(category) };
+            }
+            breakdown[category].total += cost;
+            breakdown[category].items += 1;
+          });
+          
+          setGrandTotal(total);
+          setCategoryBreakdown(breakdown);
+          setLoading(false);
+        },
+        (error) => {
+          console.error('Error fetching estimates:', error);
+          setError('Failed to load estimates. Please try again.');
+          setLoading(false);
+        }
+      );
 
-    setCosts({
-      total: total,
-      rate: rate,
-      material: total * 0.60, // 60% Material
-      labor: total * 0.25,    // 25% Labor
-      services: total * 0.15, // 15% Architect/Services
-    });
+      return () => unsubscribe();
+    } catch (err: any) {
+      console.error('Error setting up listener:', err);
+      setError('Error loading data: ' + err.message);
+      setLoading(false);
+    }
+  }, [projectId]);
+
+  const getCategoryColor = (category: string) => {
+    const colors: any = {
+      'Foundation': ['#4F46E5', '#818cf8'],
+      'Wall': ['#3b82f6', '#60a5fa'],
+      'Roofing': ['#0ea5e9', '#38bdf8'],
+      'Flooring': ['#14b8a6', '#2dd4bf'],
+      'Painting': ['#10b981', '#34d399'],
+      'Plastering': ['#64748B', '#94a3b8'],
+    };
+    return colors[category] || ['#6b7280', '#9ca3af'];
+  };
+
+  const handleDelete = async (id: string) => {
+    Alert.alert("Remove Item", "Are you sure you want to remove this estimate?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: async () => await deleteDoc(doc(db, 'estimates', id)) }
+    ]);
   };
 
   const formatCurrency = (amount: number) => {
     return amount.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   };
 
-  const handleSaveEstimate = async () => {
-    if (!auth.currentUser) {
-        Alert.alert("Error", "User not authenticated");
-        return;
-    }
-
-    try {
-        await createEstimate({
-            projectId: projectId || 'orphan_estimate',
-            userId: auth.currentUser.uid,
-            itemName: `Construction Estimate (${level})`,
-            category: 'Total Project Cost',
-            quantity: 1,
-            unit: 'Project',
-            unitCost: costs.total,
-            totalCost: costs.total,
-            notes: `Generated for ${totalArea} sq.ft built-up area`
-        });
-
-        Alert.alert("Success", "Estimate saved successfully!", [
-            { text: "Go to Home", onPress: () => navigation.navigate("Home") }
-        ]);
-
-    } catch (error: any) {
-        Alert.alert("Error", "Failed to save estimate: " + error.message);
-    }
-  };
-
-  // --- UPDATED: Expandable Cost Card ---
-  const CostCard = ({ title, amount, iconName, gradientColors, subtext, percentage }: any) => {
+  // Category Card Component
+  const CategoryCard = ({ category, data }: any) => {
     const [expanded, setExpanded] = useState(false);
 
     const toggleExpand = () => {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setExpanded(!expanded);
     };
+
+    const categoryEstimates = estimates.filter(e => e.category === category);
 
     return (
       <TouchableOpacity 
@@ -112,27 +143,26 @@ export default function EstimateResultScreen({ route, navigation }: any) {
       >
         {/* Main Row */}
         <View style={styles.cardMainRow}>
-          <LinearGradient colors={gradientColors} style={styles.cardIconContainer}>
-            <MaterialCommunityIcons name={iconName} size={24} color="#fff" />
+          <LinearGradient colors={data.color} style={styles.cardIconContainer}>
+            <MaterialCommunityIcons name={categoryIcons[category] || "calculator-variant"} size={24} color="#fff" />
           </LinearGradient>
 
           <View style={styles.cardTextContent}>
-            <Text style={styles.cardTitle}>{title}</Text>
-            <Text style={styles.cardSubtext}>{subtext}</Text>
+            <Text style={styles.cardTitle}>{category}</Text>
+            <Text style={styles.cardSubtext}>{data.items} item(s)</Text>
           </View>
 
           <View style={styles.amountContainer}>
-             <Text style={styles.amountText}>{costs ? formatCurrency(Math.round(amount)) : '...'}</Text>
-             <View style={styles.currencyRow}>
-                <Text style={styles.currencyLabel}>INR</Text>
-                {/* Chevron Indicator */}
-                <Ionicons 
-                  name={expanded ? "chevron-up" : "chevron-down"} 
-                  size={16} 
-                  color="#94a3b8" 
-                  style={{ marginLeft: 4 }}
-                />
-             </View>
+            <Text style={styles.amountText}>₹{formatCurrency(Math.round(data.total))}</Text>
+            <View style={styles.currencyRow}>
+              <Text style={styles.currencyLabel}>{grandTotal > 0 ? ((data.total / grandTotal) * 100).toFixed(1) : '0'}%</Text>
+              <Ionicons 
+                name={expanded ? "chevron-up" : "chevron-down"} 
+                size={16} 
+                color="#94a3b8" 
+                style={{ marginLeft: 4 }}
+              />
+            </View>
           </View>
         </View>
 
@@ -140,32 +170,68 @@ export default function EstimateResultScreen({ route, navigation }: any) {
         {expanded && (
           <View style={styles.expandedContent}>
             <View style={styles.cardDivider} />
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Allocation</Text>
-              <Text style={styles.detailValue}>{percentage}% of Total Cost</Text>
-            </View>
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Per Sq.ft</Text>
-              <Text style={styles.detailValue}>≈ ₹{Math.round((amount || 0) / totalArea)}/sq.ft</Text>
-            </View>
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Status</Text>
-              <View style={styles.statusPill}>
-                <Text style={styles.statusText}>Estimated</Text>
+            {categoryEstimates.map((item, idx) => (
+              <View key={idx} style={styles.detailRow}>
+                <View style={{flex: 1}}>
+                  <Text style={styles.itemName}>{item.itemName}</Text>
+                  {item.notes && <Text style={styles.itemNotes}>{item.notes}</Text>}
+                </View>
+                <View style={{alignItems: 'flex-end', gap: 4}}>
+                  <Text style={styles.itemCost}>₹{formatCurrency(Math.round(item.totalCost))}</Text>
+                  <TouchableOpacity onPress={() => handleDelete(item.id)}>
+                    <Ionicons name="trash-outline" size={16} color="#ef4444" />
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
+            ))}
           </View>
         )}
       </TouchableOpacity>
     );
   };
 
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#315b76" />
-        <Text style={styles.loadingText}>Calculating Estimates...</Text>
-        <Text style={styles.loadingSubText}>Analyzing current market rates for {level} tier</Text>
+        <Text style={styles.loadingText}>Loading Project Summary...</Text>
+        <Text style={styles.loadingSubText}>Gathering all estimates</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.container}>
+        <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
+        <SafeAreaView style={styles.safeArea}>
+          <View style={styles.header}>
+            <TouchableOpacity 
+              onPress={() => navigation.goBack()} 
+              style={styles.iconButton}
+            >
+              <Ionicons name="arrow-back" size={20} color="#315b76" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Project Summary</Text>
+            <View style={{ width: 40 }} /> 
+          </View>
+          
+          <View style={styles.errorContainer}>
+            <MaterialCommunityIcons name="alert-circle" size={60} color="#ef4444" />
+            <Text style={styles.errorTitle}>Error Loading Summary</Text>
+            <Text style={styles.errorText}>{error}</Text>
+            <TouchableOpacity 
+              style={styles.retryButton}
+              onPress={() => {
+                setError(null);
+                setLoading(true);
+              }}
+            >
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
       </View>
     );
   }
@@ -183,103 +249,98 @@ export default function EstimateResultScreen({ route, navigation }: any) {
           >
              <Ionicons name="arrow-back" size={20} color="#315b76" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Project Estimate</Text>
+          <Text style={styles.headerTitle}>Project Summary</Text>
           <View style={{ width: 40 }} /> 
         </View>
 
-        <ScrollView 
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          
-          {/* HERO SECTION */}
-          <View style={styles.heroWrapper}>
-            <LinearGradient
-                colors={['#315b76', '#2a4179']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.heroContainer}
-            >
-                <View style={styles.heroHeader}>
-                    <Text style={styles.heroLabel}>ESTIMATED TOTAL COST</Text>
-                    <View style={styles.levelBadge}>
-                        <Text style={styles.levelText}>{level.toUpperCase()}</Text>
-                    </View>
-                </View>
-
-                <Text style={styles.heroAmount}>
-                    ₹ {formatCurrency(costs.total)}
-                </Text>
-                
-                <Text style={styles.heroSubtitle}>
-                    Based on {totalArea} sq.ft built-up area
-                </Text>
-
-                <View style={styles.divider} />
-
-                <View style={styles.statRow}>
-                    <View style={styles.statItem}>
-                        <Text style={styles.statLabel}>Avg. Rate</Text>
-                        <Text style={styles.statValue}>₹{costs.rate}/sq.ft</Text>
-                    </View>
-                    <View style={styles.statItem}>
-                        <Text style={styles.statLabel}>Completion</Text>
-                        <Text style={styles.statValue}>~8-10 Months</Text>
-                    </View>
-                </View>
-            </LinearGradient>
-          </View>
-
-          {/* COST BREAKDOWN */}
-          <View style={styles.sectionHeader}>
-             <Text style={styles.sectionLabel}>COST BREAKDOWN</Text>
-          </View>
-
-          <View style={styles.cardsContainer}>
+        {estimates.length === 0 ? (
+          <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            <View style={styles.emptyStateContainer}>
+              <MaterialCommunityIcons name="file-document-outline" size={60} color="#cbd5e1" />
+              <Text style={styles.emptyStateText}>No Estimates Yet</Text>
+              <Text style={styles.emptyStateSubtext}>Add estimates from construction components to see the summary</Text>
+              <TouchableOpacity 
+                style={styles.addMoreButton}
+                onPress={() => navigation.navigate("ConstructionLevel")}
+              >
+                <Ionicons name="add" size={20} color="#fff" />
+                <Text style={styles.addMoreButtonText}>Add Estimate</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        ) : (
+          <ScrollView 
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
             
-            <CostCard 
-                title="Material Cost"
-                subtext="Cement, Steel, Bricks..."
-                amount={costs.material}
-                percentage={60}
-                iconName="cube-outline"
-                gradientColors={['#4F46E5', '#818cf8']} 
-            />
+            {/* HERO SECTION */}
+            <View style={styles.heroWrapper}>
+              <LinearGradient
+                  colors={['#315b76', '#2a4179']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.heroContainer}
+              >
+                  <View style={styles.heroHeader}>
+                      <Text style={styles.heroLabel}>PROJECT TOTAL ESTIMATE</Text>
+                      <View style={styles.levelBadge}>
+                          <Text style={styles.levelText}>{Object.keys(categoryBreakdown).length} CATEGORIES</Text>
+                      </View>
+                  </View>
 
-            <CostCard 
-                title="Labor Charges"
-                subtext="Masonry, Plumbing..."
-                amount={costs.labor}
-                percentage={25}
-                iconName="account-hard-hat"
-                gradientColors={['#d97706', '#fbbf24']} 
-            />
+                  <Text style={styles.heroAmount}>
+                      ₹ {formatCurrency(grandTotal)}
+                  </Text>
+                  
+                  <Text style={styles.heroSubtitle}>
+                      {estimates.length} estimates across {Object.keys(categoryBreakdown).length} categories
+                  </Text>
 
-            <CostCard 
-                title="Services & Fees"
-                subtext="Architecture, Approval..."
-                amount={costs.services}
-                percentage={15}
-                iconName="file-certificate-outline"
-                gradientColors={['#10b981', '#34d399']} 
-            />
+                  <View style={styles.divider} />
 
-          </View>
+                  <View style={styles.statRow}>
+                      <View style={styles.statItem}>
+                          <Text style={styles.statLabel}>Total Items</Text>
+                          <Text style={styles.statValue}>{estimates.length}</Text>
+                      </View>
+                      <View style={styles.statItem}>
+                          <Text style={styles.statLabel}>Categories</Text>
+                          <Text style={styles.statValue}>{Object.keys(categoryBreakdown).length}</Text>
+                      </View>
+                  </View>
+              </LinearGradient>
+            </View>
 
-          {/* DISCLAIMER */}
-          <View style={styles.disclaimerBox}>
-            <Ionicons name="information-circle" size={20} color="#64748b" style={{marginRight: 8}}/>
-            <Text style={styles.disclaimerText}>
-                This is an approximate estimation based on current market averages. Actual costs may vary by +/- 15%.
-            </Text>
-          </View>
+            {/* CATEGORY BREAKDOWN */}
+            <View style={styles.sectionHeader}>
+               <Text style={styles.sectionLabel}>CATEGORY BREAKDOWN</Text>
+            </View>
 
-          <TouchableOpacity style={styles.saveButton} onPress={handleSaveEstimate}>
-            <Text style={styles.saveButtonText}>Save to Project</Text>
-            <Ionicons name="save-outline" size={20} color="#fff" style={{marginLeft: 8}}/>
-          </TouchableOpacity>
+            <View style={styles.cardsContainer}>
+              {Object.entries(categoryBreakdown).map(([category, data]: [string, any]) => (
+                <CategoryCard key={category} category={category} data={data} />
+              ))}
+            </View>
 
-        </ScrollView>
+            {/* FOOTER ACTIONS */}
+            <View style={styles.footerActions}>
+              <TouchableOpacity 
+                style={styles.addMoreButton}
+                onPress={() => navigation.navigate("ConstructionLevel")}
+              >
+                <Ionicons name="add-circle-outline" size={20} color="#fff" />
+                <Text style={styles.addMoreButtonText}>Add More</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.exportButton}>
+                <Ionicons name="download-outline" size={20} color="#315b76" />
+                <Text style={styles.exportButtonText}>Export</Text>
+              </TouchableOpacity>
+            </View>
+
+          </ScrollView>
+        )}
       </SafeAreaView>
     </View>
   );
@@ -325,13 +386,12 @@ const styles = StyleSheet.create({
   sectionHeader: { marginBottom: 15 },
   sectionLabel: { fontSize: 12, fontWeight: '700', color: '#94a3b8', letterSpacing: 1 },
 
-  // --- UPDATED CARD STYLES ---
   cardsContainer: { gap: 16 },
   card: { 
     backgroundColor: '#ffffff', borderRadius: 20, padding: 16, 
     shadowColor: '#94a3b8', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.1, shadowRadius: 15, elevation: 2,
     borderWidth: 1, borderColor: '#f8fafc',
-    overflow: 'hidden' // Important for animation
+    overflow: 'hidden'
   },
   cardMainRow: { flexDirection: 'row', alignItems: 'center' },
   cardIconContainer: { width: 52, height: 52, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
@@ -343,22 +403,47 @@ const styles = StyleSheet.create({
   currencyRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
   currencyLabel: { fontSize: 10, color: '#94a3b8', fontWeight: '600' },
 
-  // Expanded Content Styles
   expandedContent: { marginTop: 16 },
   cardDivider: { height: 1, backgroundColor: '#f1f5f9', marginBottom: 12 },
-  detailRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  detailLabel: { fontSize: 12, color: '#64748b', fontWeight: '500' },
-  detailValue: { fontSize: 12, color: '#1e293b', fontWeight: '700' },
-  statusPill: { backgroundColor: '#dcfce7', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
-  statusText: { fontSize: 10, color: '#166534', fontWeight: '700' },
+  detailRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  itemName: { fontSize: 13, color: '#1e293b', fontWeight: '600' },
+  itemNotes: { fontSize: 11, color: '#94a3b8', marginTop: 2 },
+  itemCost: { fontSize: 13, fontWeight: '700', color: '#315b76' },
 
-  disclaimerBox: { marginTop: 25, flexDirection: 'row', backgroundColor: '#f1f5f9', padding: 15, borderRadius: 16, alignItems: 'center' },
-  disclaimerText: { flex: 1, fontSize: 11, color: '#64748b', lineHeight: 16 },
+  emptyStateContainer: { 
+    flex: 1, justifyContent: 'center', alignItems: 'center', 
+    paddingVertical: 60, paddingHorizontal: 24 
+  },
+  emptyStateText: { fontSize: 18, fontWeight: '700', color: '#1e293b', marginTop: 16 },
+  emptyStateSubtext: { fontSize: 13, color: '#64748b', marginTop: 8, textAlign: 'center', lineHeight: 19 },
 
-  saveButton: {
-    marginTop: 20, backgroundColor: '#315b76', borderRadius: 16, height: 56,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+  footerActions: { 
+    flexDirection: 'row', gap: 12, marginTop: 25
+  },
+  addMoreButton: {
+    flex: 1, backgroundColor: '#315b76', borderRadius: 16, height: 56,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     shadowColor: '#315b76', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 5,
   },
-  saveButtonText: { fontSize: 16, fontWeight: '700', color: '#fff' }
+  addMoreButtonText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  
+  exportButton: {
+    flex: 1, backgroundColor: '#fff', borderRadius: 16, height: 56,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    borderWidth: 1, borderColor: '#e2e8f0',
+    shadowColor: '#94a3b8', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 5, elevation: 2,
+  },
+  exportButtonText: { fontSize: 15, fontWeight: '700', color: '#315b76' },
+
+  // Error State Styles
+  errorContainer: { 
+    flex: 1, justifyContent: 'center', alignItems: 'center', 
+    paddingVertical: 60, paddingHorizontal: 24 
+  },
+  errorTitle: { fontSize: 18, fontWeight: '700', color: '#ef4444', marginTop: 16, marginBottom: 8 },
+  errorText: { fontSize: 14, color: '#64748b', textAlign: 'center', lineHeight: 20, marginBottom: 24 },
+  retryButton: {
+    backgroundColor: '#315b76', borderRadius: 12, paddingHorizontal: 32, paddingVertical: 12
+  },
+  retryButtonText: { fontSize: 15, fontWeight: '700', color: '#fff' },
 });

@@ -359,7 +359,7 @@ export default function FoundationCost({ route, navigation }: any) {
         createdAt: serverTimestamp()
       });
       Alert.alert("Success", "Estimate saved successfully.");
-      navigation.navigate('ConstructionLevel', { projectId, totalArea: area }); 
+      navigation.navigate('ProjectSummary', { projectId }); 
     } catch (e: any) {
       Alert.alert("Error", e.message);
     } finally {

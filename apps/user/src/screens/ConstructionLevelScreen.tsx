@@ -111,6 +111,15 @@ export default function ConstructionLevelScreen({ route, navigation }: any) {
     else if (item.title === 'Wall and Masonry') {
       navigation.navigate('WallDetails', { totalArea, projectId, rooms, tier: activeTab });
     } 
+    else if (item.title === 'Roofing') {
+      navigation.navigate('RoofingScreen', { totalArea, projectId, tier: activeTab });
+    }
+    else if (item.title === 'Flooring') {
+      navigation.navigate('FlooringScreen', { totalArea, projectId, tier: activeTab });
+    }
+    else if (item.title === 'Painting') {
+      navigation.navigate('PaintingScreen', { totalArea, projectId, tier: activeTab });
+    }
     else {
       navigation.navigate('EstimateResult', { totalArea, level: activeTab, projectId });
     }
