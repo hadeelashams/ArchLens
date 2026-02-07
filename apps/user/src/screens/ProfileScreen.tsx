@@ -106,11 +106,11 @@ export default function ProfileScreen({ navigation }: any) {
             <Ionicons name="home-outline" size={24} color="#64748b" />
             <Text style={styles.navText}>HOME</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.navItem}>
+          <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('EstimateResult')}>
             <Ionicons name="document-text-outline" size={24} color="#64748b" />
             <Text style={styles.navText}>ESTIMATES</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.navItem}>
+          <TouchableOpacity style={styles.navItem} onPress={() => { /* Already on Profile */ }}>
             <Ionicons name="person" size={24} color="#315b76" />
             <Text style={[styles.navText, {color: '#315b76'}]}>PROFILE</Text>
           </TouchableOpacity>

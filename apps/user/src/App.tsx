@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, Dimensions } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { onAuthStateChanged, User } from 'firebase/auth';
@@ -107,7 +107,49 @@ function AppContent() {
 
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Navigator 
+        screenOptions={{ 
+          headerShown: false,
+          animationEnabled: true,
+          gestureEnabled: true,
+          transitionSpec: {
+            open: {
+              animation: 'timing',
+              config: {
+                duration: 400,
+                useNativeDriver: true,
+              },
+            },
+            close: {
+              animation: 'timing',
+              config: {
+                duration: 400,
+                useNativeDriver: true,
+              },
+            },
+          },
+          cardStyleInterpolator: ({ current, next, layouts }) => {
+            return {
+              cardStyle: {
+                transform: [
+                  {
+                    translateX: current.progress.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [layouts.screen.width, 0],
+                    }),
+                  },
+                ],
+              },
+              overlayStyle: {
+                opacity: current.progress.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, 0.07],
+                }),
+              },
+            };
+          },
+        }}
+      >
         {user ? (
           <>
             <Stack.Screen name="Home" component={HomeScreen} />

@@ -12,10 +12,9 @@ import {
   WALL_TYPE_SPECS, 
   WallType, 
   CONSTRUCTION_HIERARCHY, 
-  auth, 
-  createDocument
+  auth
 } from '@archlens/shared';
-import { collection, query, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { collection, query, onSnapshot, serverTimestamp, addDoc } from 'firebase/firestore';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -29,7 +28,7 @@ const CFT_PER_M3 = 35.3147;
 // -----------------------------------------------------------------
 
 export default function WallScreen({ route, navigation }: any) {
-  const { totalArea, rooms, projectId, tier } = route.params || {};
+  const { totalArea = 1000, rooms = [], projectId, tier = 'Standard' } = route.params || {};
 
   // --- DATA STATE ---
   const [loading, setLoading] = useState(true);
@@ -45,8 +44,7 @@ export default function WallScreen({ route, navigation }: any) {
   const [wallThicknessError, setWallThicknessError] = useState<string | null>(null); // NEW ERROR STATE
   
   // --- INPUT FIELDS (Inches for thickness, Feet for height) ---
-  const defaultHeight = tier === 'Luxury' ? '11' : tier === 'Standard' ? '10.5' : '10';
-  const [height, setHeight] = useState(defaultHeight);
+  const [height, setHeight] = useState('10.5');
   const [wallThickness, setWallThickness] = useState('9'); // Wall Thickness in INCHES (e.g., 9 for a 9" wall)
   const [jointThickness, setJointThickness] = useState('0.375'); // Mortar Joint Thickness in INCHES (3/8 inch)
   const [openingDeduction, setOpeningDeduction] = useState('20');
@@ -94,9 +92,7 @@ export default function WallScreen({ route, navigation }: any) {
   }, [materials, wallType, tier]);
 
   // 3. Calculation Engine (Updated for material-specific quantity)
-  const calculation = useMemo(() => {
-    // Reset error on recalculation
-    setWallThicknessError(null); 
+  const calculation = useMemo(() => { 
     
     const h_ft = parseFloat(height) || 0; // Height in Feet
     const wt_in = parseFloat(wallThickness) || 0; // Wall Thickness in Inches
@@ -119,10 +115,9 @@ export default function WallScreen({ route, navigation }: any) {
     const totalVolume_m3 = (wallLength_m * wallHeight_m * wallThickness_m) * (1 - ded);
 
     // --- 2. Brick/Block Quantity Calculation (CRITICAL FIX) ---
-    const dimsMatch = selectedBrick.dimensions?.match(/(\d+(\.\d+)?)\s*x\s*(\d+(\.\d+)?)\s*x\s*(\d+(\.\d+)?)/);
+    const dimsMatch = selectedBrick.dimensions?.match(/(\d+(\.\d+)?)\s*x\s*(\d+(\.\d+)?)\s*x\s*(\d+(\.\d+)?)/)
     
     if (!dimsMatch) {
-      setWallThicknessError('Dimensions not set for selected block/brick in the database.');
       return { brickQty: 0, cementBags: 0, sandQty: 0, totalCost: 0, costBreakdown: { bricks: 0, cement: 0, sand: 0 }, sandUnit: 'cft' };
     }
 
@@ -146,10 +141,6 @@ export default function WallScreen({ route, navigation }: any) {
         Math.abs(wt_in - effectiveBrickWidth) < 0.5 || // Close to one width (e.g. 4.5 inch wall)
         Math.abs(wt_in - effectiveBrickLength) < 0.5 || // Close to one length (rare, but possible)
         Math.abs(wt_in - (effectiveBrickWidth * 2 - jt_in)) < 0.5; // Close to two widths with a joint in between (e.g. 9 inch wall)
-
-    if (!isSensibleThickness && wt_in > 0.5) {
-        setWallThicknessError(`Wall thickness (${wt_in} in) is unusual for a ${brickL_in}x${brickW_in}x${brickH_in} block with ${jt_in} joint. Check if this is a sensible multiple of ${effectiveBrickWidth} or ${effectiveBrickLength}.`);
-    }
 
     // Use the maximum of the brick's largest dimension or the wall thickness for the quantity calc.
     // Assuming the largest brick face is laid along the wall.
@@ -226,8 +217,17 @@ export default function WallScreen({ route, navigation }: any) {
   const handleSaveWallEstimate = async () => {
     if (!auth.currentUser) return Alert.alert("Error", "User not authenticated.");
     if (!projectId) return Alert.alert("Error", "Project ID not found.");
-    if (calculation.totalCost === 0) return Alert.alert("Error", "Cost is zero. Check dimensions and material selections.");
-    if (wallThicknessError) return Alert.alert("Validation Error", "Please adjust Wall Thickness or select a different block.");
+    
+    // Validation checks
+    const h_ft = parseFloat(height) || 0;
+    const wt_in = parseFloat(wallThickness) || 0;
+    const selectedBrick = selections['Bricks'];
+    
+    if (h_ft <= 0) return Alert.alert("Validation Error", "Please enter a valid height.");
+    if (wt_in <= 0) return Alert.alert("Validation Error", "Please enter a valid wall thickness.");
+    if (!selectedBrick) return Alert.alert("Validation Error", "Please select a brick/block type.");
+    if (calculation.totalCost === 0) return Alert.alert("Error", "Cost calculation failed. Check dimensions and material selections.");
+    if (wallThicknessError) return Alert.alert("Validation Error", wallThicknessError);
 
     setSaving(true);
     try {
@@ -255,9 +255,9 @@ export default function WallScreen({ route, navigation }: any) {
             createdAt: serverTimestamp()
         };
         
-        await createDocument('estimates', estimateData);
+        await addDoc(collection(db, 'estimates'), estimateData);
         
-        Alert.alert("Success", "Wall Estimate saved successfully to project summary.");
+        Alert.alert("Success", "Wall Estimate saved successfully.");
         navigation.navigate('ProjectSummary', { projectId }); 
     } catch (e: any) {
         Alert.alert("Error", e.message);
@@ -426,16 +426,16 @@ export default function WallScreen({ route, navigation }: any) {
 
         {/* Floating Action Button (Updated Action) */}
         <TouchableOpacity 
-          style={styles.mainBtn} 
+          style={[styles.mainBtn, (saving) && styles.mainBtnDisabled]} 
           onPress={handleSaveWallEstimate}
-          disabled={saving || calculation.totalCost === 0 || !!wallThicknessError} // Disable if error exists
+          disabled={saving}
         >
           {saving ? (
             <ActivityIndicator color="#fff" size="small" />
           ) : (
             <>
-              <Text style={styles.mainBtnText}>Save & View Project Summary</Text>
-              <Ionicons name="arrow-forward" size={18} color="#fff" />
+              <Text style={styles.mainBtnText}>Save Estimate</Text>
+              <Ionicons name="save-outline" size={18} color="#fff" />
             </>
           )}
         </TouchableOpacity>
@@ -537,6 +537,7 @@ const styles = StyleSheet.create({
   totalVal: { color: '#10b981', fontSize: 22, fontWeight: '800' },
 
   mainBtn: { backgroundColor: '#315b76', margin: 20, padding: 18, borderRadius: 15, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 10, position: 'absolute', bottom: 0, left: 0, right: 0 },
+  mainBtnDisabled: { opacity: 0.6 },
   mainBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },

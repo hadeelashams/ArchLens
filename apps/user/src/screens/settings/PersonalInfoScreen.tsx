@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, TextInput, ScrollView, Platform, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Platform, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { auth } from '@archlens/shared';
 
@@ -18,11 +19,11 @@ export default function PersonalInfoScreen({ navigation }: any) {
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Ionicons name="arrow-back" size={24} color="#1e293b" />
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <Ionicons name="arrow-back" size={20} color="#315b76" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Personal Info</Text>
-          <View style={{ width: 24 }} /> 
+          <View style={{ width: 40 }} />
         </View>
 
         <ScrollView contentContainerStyle={styles.content}>
@@ -68,8 +69,9 @@ export default function PersonalInfoScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#ffffff' },
-  safeArea: { flex: 1 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  safeArea: { flex: 1 ,},
+  header: { flexDirection: 'row', alignItems: 'center', padding: 15, justifyContent: 'space-between' },
+  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#f1f5f9', shadowColor: '#64748b', shadowOpacity: 0.05, shadowRadius: 5, elevation: 1 },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#1e293b' },
   content: { padding: 20 },
   inputGroup: { marginBottom: 20 },

@@ -38,6 +38,7 @@ export default function EstimateResultScreen({ route, navigation }: any) {
   const [estimates, setEstimates] = useState<any[]>([]);
   const [grandTotal, setGrandTotal] = useState(0);
   const [categoryBreakdown, setCategoryBreakdown] = useState<any>({});
+  const [viewMode, setViewMode] = useState<'project' | 'all'>('project'); // Track view mode
 
   // Category icons mapping
   const categoryIcons: any = {
@@ -50,15 +51,26 @@ export default function EstimateResultScreen({ route, navigation }: any) {
   };
 
   useEffect(() => {
-    if (!projectId) {
-      setError('Project ID not found. Please go back and try again.');
+    // If no user is logged in, show error
+    if (!auth.currentUser) {
+      setError('Please log in to view estimates.');
       setLoading(false);
       return;
     }
 
     try {
-      // Listen to all estimates for this project
-      const q = query(collection(db, 'estimates'), where('projectId', '==', projectId));
+      let q;
+      
+      if (projectId) {
+        // Mode 1: Show estimates for specific project
+        setViewMode('project');
+        q = query(collection(db, 'estimates'), where('projectId', '==', projectId));
+      } else {
+        // Mode 2: Show all estimates for current user
+        setViewMode('all');
+        q = query(collection(db, 'estimates'), where('userId', '==', auth.currentUser.uid));
+      }
+
       const unsubscribe = onSnapshot(
         q, 
         (snapshot) => {
@@ -171,17 +183,79 @@ export default function EstimateResultScreen({ route, navigation }: any) {
           <View style={styles.expandedContent}>
             <View style={styles.cardDivider} />
             {categoryEstimates.map((item, idx) => (
-              <View key={idx} style={styles.detailRow}>
-                <View style={{flex: 1}}>
-                  <Text style={styles.itemName}>{item.itemName}</Text>
-                  {item.notes && <Text style={styles.itemNotes}>{item.notes}</Text>}
-                </View>
-                <View style={{alignItems: 'flex-end', gap: 4}}>
-                  <Text style={styles.itemCost}>₹{formatCurrency(Math.round(item.totalCost))}</Text>
-                  <TouchableOpacity onPress={() => handleDelete(item.id)}>
+              <View key={idx}>
+                {/* Estimate Item Header */}
+                <View style={styles.estimateItemHeader}>
+                  <View style={{flex: 1}}>
+                    <Text style={styles.itemName}>{item.itemName}</Text>
+                    {item.notes && <Text style={styles.itemNotes}>{item.notes}</Text>}
+                  </View>
+                  <TouchableOpacity onPress={() => handleDelete(item.id)} style={{padding: 8}}>
                     <Ionicons name="trash-outline" size={16} color="#ef4444" />
                   </TouchableOpacity>
                 </View>
+
+                {/* Budget Level & Type Badge */}
+                <View style={styles.badgeRow}>
+                  {item.tier && (
+                    <View style={styles.badge}>
+                      <Text style={styles.badgeText}>📊 {item.tier}</Text>
+                    </View>
+                  )}
+                  {item.foundationType && (
+                    <View style={styles.badge}>
+                      <Text style={styles.badgeText}>🏗️ {item.foundationType}</Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Line Items Detail Table */}
+                {item.lineItems && item.lineItems.length > 0 && (
+                  <View style={styles.lineItemsContainer}>
+                    <View style={styles.tableHeader}>
+                      <Text style={[styles.tableHeading, {flex: 1.5}]}>Material</Text>
+                      <Text style={[styles.tableHeading, {flex: 1}]}>Qty</Text>
+                      <Text style={[styles.tableHeading, {flex: 1, textAlign: 'right'}]}>Cost</Text>
+                    </View>
+                    {item.lineItems.map((line: any, lineIdx: number) => (
+                      <View key={lineIdx} style={styles.tableRow}>
+                        <View style={{flex: 1.5}}>
+                          <Text style={styles.lineItemName}>{line.name || line.label}</Text>
+                          {line.desc && <Text style={styles.lineItemDesc}>{line.desc}</Text>}
+                        </View>
+                        <View style={{flex: 1}}>
+                          <Text style={styles.lineItemQty}>{line.qty} {line.unit}</Text>
+                        </View>
+                        <View style={{flex: 1, alignItems: 'flex-end'}}>
+                          <Text style={styles.lineItemPrice}>₹{formatCurrency(Math.round(line.total || 0))}</Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                {/* Specifications if available */}
+                {item.specifications && (
+                  <View style={styles.specsBox}>
+                    <Text style={styles.specsLabel}>Specifications:</Text>
+                    <Text style={styles.specsValue}>
+                      {item.specifications.method && `Method: ${item.specifications.method} • `}
+                      {item.specifications.depth && `Depth: ${item.specifications.depth}' • `}
+                      {item.specifications.plinth && 'Includes Plinth'}
+                    </Text>
+                  </View>
+                )}
+
+                {/* Total Cost */}
+                <View style={styles.itemTotalRow}>
+                  <Text style={styles.estimateLabel}>Estimate Total:</Text>
+                  <Text style={styles.estimateTotal}>₹{formatCurrency(Math.round(item.totalCost))}</Text>
+                </View>
+
+                {/* Divider between items */}
+                {idx < categoryEstimates.length - 1 && (
+                  <View style={styles.itemDivider} />
+                )}
               </View>
             ))}
           </View>
@@ -244,12 +318,12 @@ export default function EstimateResultScreen({ route, navigation }: any) {
         {/* HEADER */}
         <View style={styles.header}>
           <TouchableOpacity 
-            onPress={() => navigation.goBack()} 
+            onPress={() => viewMode === 'all' ? navigation.navigate('Home') : navigation.goBack()} 
             style={styles.iconButton}
           >
              <Ionicons name="arrow-back" size={20} color="#315b76" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Project Summary</Text>
+          <Text style={styles.headerTitle}>{viewMode === 'all' ? 'My All Estimates' : 'Project Summary'}</Text>
           <View style={{ width: 40 }} /> 
         </View>
 
@@ -257,8 +331,14 @@ export default function EstimateResultScreen({ route, navigation }: any) {
           <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
             <View style={styles.emptyStateContainer}>
               <MaterialCommunityIcons name="file-document-outline" size={60} color="#cbd5e1" />
-              <Text style={styles.emptyStateText}>No Estimates Yet</Text>
-              <Text style={styles.emptyStateSubtext}>Add estimates from construction components to see the summary</Text>
+              <Text style={styles.emptyStateText}>
+                {viewMode === 'all' ? 'No Estimates Found' : 'No Estimates Yet'}
+              </Text>
+              <Text style={styles.emptyStateSubtext}>
+                {viewMode === 'all' 
+                  ? 'Start a new project to create estimates' 
+                  : 'Add estimates from construction components to see the summary'}
+              </Text>
               <TouchableOpacity 
                 style={styles.addMoreButton}
                 onPress={() => navigation.navigate("ConstructionLevel")}
@@ -283,7 +363,7 @@ export default function EstimateResultScreen({ route, navigation }: any) {
                   style={styles.heroContainer}
               >
                   <View style={styles.heroHeader}>
-                      <Text style={styles.heroLabel}>PROJECT TOTAL ESTIMATE</Text>
+                      <Text style={styles.heroLabel}>{viewMode === 'all' ? 'TOTAL ESTIMATES' : 'PROJECT TOTAL ESTIMATE'}</Text>
                       <View style={styles.levelBadge}>
                           <Text style={styles.levelText}>{Object.keys(categoryBreakdown).length} CATEGORIES</Text>
                       </View>
@@ -342,6 +422,24 @@ export default function EstimateResultScreen({ route, navigation }: any) {
           </ScrollView>
         )}
       </SafeAreaView>
+
+      {/* BOTTOM NAVIGATION BAR */}
+      <View style={styles.bottomNavContainer}>
+        <View style={styles.bottomNav}>
+          <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Home')}>
+            <Ionicons name="home" size={24} color="#64748b" />
+            <Text style={styles.navText}>HOME</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.navItem} onPress={() => { /* Already on Estimates */ }}>
+            <Ionicons name="document-text" size={24} color="#315b76" />
+            <Text style={[styles.navText, {color: '#315b76'}]}>ESTIMATES</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Profile')}>
+            <Ionicons name="person-outline" size={24} color="#64748b" />
+            <Text style={styles.navText}>PROFILE</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
     </View>
   );
 }
@@ -352,7 +450,7 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8FAFC' },
   loadingText: { marginTop: 20, fontSize: 18, fontWeight: '700', color: '#1e293b' },
   loadingSubText: { marginTop: 8, fontSize: 14, color: '#64748b' },
-  scrollContent: { paddingHorizontal: 24, paddingBottom: 40 },
+  scrollContent: { paddingHorizontal: 24, paddingBottom: 120 },
 
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -403,12 +501,38 @@ const styles = StyleSheet.create({
   currencyRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
   currencyLabel: { fontSize: 10, color: '#94a3b8', fontWeight: '600' },
 
-  expandedContent: { marginTop: 16 },
+  expandedContent: { marginTop: 16, paddingBottom: 12 },
   cardDivider: { height: 1, backgroundColor: '#f1f5f9', marginBottom: 12 },
   detailRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   itemName: { fontSize: 13, color: '#1e293b', fontWeight: '600' },
   itemNotes: { fontSize: 11, color: '#94a3b8', marginTop: 2 },
   itemCost: { fontSize: 13, fontWeight: '700', color: '#315b76' },
+
+  // Enhanced Estimate Details
+  estimateItemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 10, marginBottom: 10 },
+  
+  badgeRow: { flexDirection: 'row', gap: 8, marginBottom: 12, flexWrap: 'wrap' },
+  badge: { backgroundColor: '#f0f4f8', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0' },
+  badgeText: { fontSize: 11, fontWeight: '600', color: '#475569' },
+
+  lineItemsContainer: { backgroundColor: '#f8fafc', padding: 12, borderRadius: 10, marginVertical: 10, borderWidth: 1, borderColor: '#e2e8f0' },
+  tableHeader: { flexDirection: 'row', paddingBottom: 8, borderBottomWidth: 2, borderBottomColor: '#cbd5e1', marginBottom: 8 },
+  tableHeading: { fontSize: 10, fontWeight: '700', color: '#475569', textTransform: 'uppercase' },
+  tableRow: { flexDirection: 'row', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  lineItemName: { fontSize: 12, fontWeight: '600', color: '#1e293b' },
+  lineItemDesc: { fontSize: 10, color: '#94a3b8', marginTop: 2 },
+  lineItemQty: { fontSize: 12, color: '#475569', fontWeight: '500' },
+  lineItemPrice: { fontSize: 12, fontWeight: '700', color: '#10b981' },
+
+  specsBox: { backgroundColor: '#eef2ff', padding: 10, borderRadius: 8, marginVertical: 10, borderLeftWidth: 3, borderLeftColor: '#6366f1' },
+  specsLabel: { fontSize: 10, fontWeight: '700', color: '#4338ca', textTransform: 'uppercase' },
+  specsValue: { fontSize: 11, color: '#4338ca', marginTop: 4, lineHeight: 16 },
+
+  itemTotalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f1f5f9', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8, marginTop: 10 },
+  estimateLabel: { fontSize: 12, fontWeight: '600', color: '#475569' },
+  estimateTotal: { fontSize: 14, fontWeight: '800', color: '#315b76' },
+
+  itemDivider: { height: 1, backgroundColor: '#e2e8f0', marginVertical: 12 },
 
   emptyStateContainer: { 
     flex: 1, justifyContent: 'center', alignItems: 'center', 
@@ -446,4 +570,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#315b76', borderRadius: 12, paddingHorizontal: 32, paddingVertical: 12
   },
   retryButtonText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+
+  // BOTTOM NAVIGATION BAR
+  bottomNavContainer: { position: 'absolute', bottom: 0, left: 0, right: 0, alignItems: 'center', paddingBottom: Platform.OS === 'ios' ? 30 : 20 },
+  bottomNav: { width: width * 0.9, height: 70, backgroundColor: '#FFFFFF', borderRadius: 35, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', elevation: 20, shadowColor: '#315b76', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.15, shadowRadius: 20 },
+  navItem: { alignItems: 'center', height: '100%', justifyContent: 'center', flex: 1 },
+  navText: { fontSize: 10, fontWeight: 'bold', marginTop: 4, color: '#64748b' },
 });
