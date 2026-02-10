@@ -546,8 +546,8 @@ const styles = StyleSheet.create({
   },
   addMoreButton: {
     flex: 1, backgroundColor: '#315b76', borderRadius: 16, height: 56,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    shadowColor: '#315b76', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 5,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9,
+    shadowColor: '#315b76', shadowOffset: { width: 0 , height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 5,
   },
   addMoreButtonText: { fontSize: 15, fontWeight: '700', color: '#fff' },
   
