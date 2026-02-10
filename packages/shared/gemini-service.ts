@@ -174,34 +174,54 @@ export const analyzeFloorPlan = async (
       }
 
       // ---------------------------------------------------------
-      // OPTIMIZED PROMPT FOR ARCHITECTURAL PLANS
+      // DEEP METADATA EXTRACTION PROMPT FOR ARCHITECTURAL PLANS
+      // This prompt identifies construction specifications from visual cues
       // ---------------------------------------------------------
       const defaultPrompt = `
-        Act as a professional Quantity Surveyor and Architect. Analyze this floor plan image with high precision.
+        Act as an expert Draughtsman and Quantity Surveyor. Analyze this floor plan for detailed construction specifications.
         
         The image contains specific text labels for Room Names (e.g., "Bedroom 1", "Kitchen") and Area measurements (e.g., "137 sq ft", "10'5"").
         
-        Your tasks:
+        Your expert tasks:
         1. OCR EXTRACTION: Identify every text label inside a room. Extract the Room Name and the explicit Area labeled (if present).
         2. DIMENSION ESTIMATION: 
            - If dimensions are written on the walls (e.g. 12' x 10'), use them.
            - If area is written (e.g., "100 sq ft"), estimate a logical Length and Width that equals that area (e.g., L=10, W=10).
            - If no text exists, visually estimate dimensions assuming standard door width is 3 feet.
-        3. WALLS: Identify if the room is a closed space or an open space (like a Hallway).
-        4. UNIT CONVERSION: Convert all dimensions to DECIMAL FEET (e.g., 10'6" becomes 10.5).
+        3. WALL CLASS DETECTION (CRITICAL): 
+           - THICK LINES (bold/prominent): These are Load-Bearing walls. Mark these rooms with HIGH mainWallRatio (0.7-0.9).
+           - THIN LINES (regular/light): These are Partition walls. Mark with HIGH partitionWallRatio (0.5-0.8).
+           - Most rooms will have a MIX: mainWallRatio + partitionWallRatio should sum to ~1.0 for a realistic structure.
+           - Example: A bedroom with 2 thick external walls and 2 thin partition walls = mainWallRatio: 0.6, partitionWallRatio: 0.4.
+        4. OPENING PERCENTAGE (DOORS & WINDOWS):
+           - Count visible windows and doors (include sliding doors, balcony doors, French doors).
+           - Calculate: openingPercentage = (Total opening width / Perimeter) * 100.
+           - Typical ranges: 15% (minimal), 25% (standard), 35% (open plan).
+           - Living rooms and bedrooms often have 20-30% openings; bathrooms 5-15%.
+        5. ROOM TYPE CLASSIFICATION:
+           - "standard": Normal enclosed room (Bedroom, Living, Kitchen, etc.)
+           - "balcony": Outdoor space with parapet. Use 3.5 ft height for calculations.
+           - "wash_area": Bathroom, Toilet, Laundry (small, utility spaces).
+        6. UNIT CONVERSION: Convert all dimensions to DECIMAL FEET (e.g., 10'6" becomes 10.5).
 
         RETURN DATA STRUCTURE (Strict JSON, no markdown):
         {
-          "summary": "Brief architectural summary (e.g., 3 Bedroom, 2 Bath layout with balcony)",
-          "totalArea": "Number (Sum of all room areas)",
+          "summary": "Brief architectural summary (e.g., 3 Bedroom, 2 Bath with balcony, modern open-plan)",
+          "totalArea": "Number (Sum of all room areas in sq ft)",
           "rooms": [
             {
-              "id": "unique_id",
+              "id": "unique_room_id",
               "name": "String (e.g., Master Bedroom)",
               "length": "Number (Decimal Feet, e.g., 12.5)",
               "width": "Number (Decimal Feet, e.g., 10.0)",
               "area": "Number (Square Feet)",
-              "features": ["String (e.g., Walk-in Closet, En-suite)"]
+              "roomType": "standard | balcony | wash_area",
+              "wallMetadata": {
+                "mainWallRatio": "Number 0.0-1.0 (proportion of Load-Bearing walls, e.g., 0.7)",
+                "partitionWallRatio": "Number 0.0-1.0 (proportion of Partition walls, e.g., 0.3)"
+              },
+              "openingPercentage": "Number 0-100 (percentage of perimeter with windows/doors, e.g., 25)",
+              "features": ["String (e.g., Walk-in Closet, En-suite, Sliding Door)"]
             }
           ]
         }
@@ -349,13 +369,17 @@ IMPORTANT: Return ONLY valid JSON with no markdown code blocks, no formatting, a
       const response = result.response;
       let jsonText = response.text();
       
-      // Clean markdown code blocks if present
+      // Robust JSON extraction: Clean the response with regex to handle various text-wrapped formats
+      // (e.g., "Here is your JSON: {...}" or markdown code fences)
       jsonText = jsonText.trim();
+      
+      // Step 1: Remove markdown code blocks if present (e.g., ```json ... ```)
       if (jsonText.startsWith('```')) {
         jsonText = jsonText.replace(/^```json\n?/, '').replace(/^```\n?/, '').replace(/\n?```$/, '');
       }
       
-      // Try to extract JSON if wrapped in other text
+      // Step 2: Extract JSON using regex - catches JSON between first { and last }
+      // This handles cases where AI returns explanatory text like "Here is your JSON: {...}"
       const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         jsonText = jsonMatch[0];

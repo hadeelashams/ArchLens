@@ -40,14 +40,23 @@ export default function WallScreen({ route, navigation }: any) {
   const [wallType, setWallType] = useState<WallType>('Load Bearing');
   const [materialType, setMaterialType] = useState<string>('All'); 
   const [isModalVisible, setIsModalVisible] = useState(false);
-  const [activeSelectionKey, setActiveSelectionKey] = useState<'Cement' | 'Sand' | null>(null);
+  const [activeSelectionKey, setActiveSelectionKey] = useState<'Cement' | 'Sand' | 'LoadBearingBrick' | 'PartitionBrick' | null>(null);
   const [wallThicknessError, setWallThicknessError] = useState<string | null>(null); // NEW ERROR STATE
+  
+  // --- SEPARATE MATERIAL SELECTIONS FOR EACH WALL TYPE ---
+  const [loadBearingBrick, setLoadBearingBrick] = useState<any>(null);
+  const [partitionBrick, setPartitionBrick] = useState<any>(null);
   
   // --- INPUT FIELDS (Inches for thickness, Feet for height) ---
   const [height, setHeight] = useState('10.5');
   const [wallThickness, setWallThickness] = useState('9'); // Wall Thickness in INCHES (e.g., 9 for a 9" wall)
   const [jointThickness, setJointThickness] = useState('0.375'); // Mortar Joint Thickness in INCHES (3/8 inch)
   const [openingDeduction, setOpeningDeduction] = useState('20');
+  
+  // --- METADATA FROM AI ANALYSIS ---
+  const [avgOpeningPercentage, setAvgOpeningPercentage] = useState(20); // Will be updated from rooms data
+  const [avgMainWallRatio, setAvgMainWallRatio] = useState(0.6); // Load-Bearing wall proportion
+  const [avgPartitionWallRatio, setAvgPartitionWallRatio] = useState(0.4); // Partition wall proportion
 
   // 1. Fetch Materials Once
   useEffect(() => {
@@ -59,6 +68,54 @@ export default function WallScreen({ route, navigation }: any) {
     });
     return unsub;
   }, []);
+
+  // 1.5. Extract Wall Metadata from Rooms (Deep Metadata Extraction)
+  useEffect(() => {
+    if (rooms && rooms.length > 0) {
+      // Calculate averages from room metadata
+      let totalMainRatio = 0;
+      let totalPartitionRatio = 0;
+      let totalOpeningPercentage = 0;
+      let roomsWithMetadata = 0;
+
+      rooms.forEach((room: any) => {
+        if (room.wallMetadata) {
+          totalMainRatio += room.wallMetadata.mainWallRatio || 0.6;
+          totalPartitionRatio += room.wallMetadata.partitionWallRatio || 0.4;
+          roomsWithMetadata++;
+        }
+        if (room.openingPercentage) {
+          totalOpeningPercentage += room.openingPercentage;
+        }
+      });
+
+      if (roomsWithMetadata > 0) {
+        const avgMain = totalMainRatio / roomsWithMetadata;
+        const avgPartition = totalPartitionRatio / roomsWithMetadata;
+        const avgOpening = Math.round(totalOpeningPercentage / rooms.length);
+
+        setAvgMainWallRatio(avgMain);
+        setAvgPartitionWallRatio(avgPartition);
+        setAvgOpeningPercentage(avgOpening);
+
+        // Intelligently set wall thickness based on detected wall classes
+        // Load-Bearing walls: 9" (0.75 ft), Partition walls: 4.5" (0.375 ft)
+        // Use weighted average: (mainRatio * 9) + (partitionRatio * 4.5)
+        const estimatedThickness = (avgMain * 9) + (avgPartition * 4.5);
+        setWallThickness(estimatedThickness.toFixed(2));
+
+        // Update opening deduction based on AI analysis
+        setOpeningDeduction(avgOpening.toString());
+
+        console.log(`Wall Metadata Extracted:`, {
+          mainWallRatio: avgMain.toFixed(2),
+          partitionWallRatio: avgPartition.toFixed(2),
+          estimatedThickness: estimatedThickness.toFixed(2),
+          estimatedOpeningDeduction: avgOpening,
+        });
+      }
+    }
+  }, [rooms]);
 
   // 2. Default Selections Logic
   useEffect(() => {
@@ -73,10 +130,16 @@ export default function WallScreen({ route, navigation }: any) {
         return sorted[0] || items[0] || null;
       };
 
-      // Set default Brick/Block
-      const brickOpts = materials.filter(m => m.category === 'Wall' && m.subCategory === wallType && m.type?.includes('Brick'));
-      if (brickOpts.length > 0 && !initialSels['Bricks']) {
-        initialSels['Bricks'] = filteredByTier(brickOpts);
+      // Set default Load Bearing Brick (thick walls)
+      const loadBearingOpts = materials.filter(m => m.category === 'Wall' && m.subCategory === 'Load Bearing' && m.type?.includes('Brick'));
+      if (loadBearingOpts.length > 0 && !loadBearingBrick) {
+        setLoadBearingBrick(filteredByTier(loadBearingOpts));
+      }
+
+      // Set default Partition Brick (thin walls)
+      const partitionOpts = materials.filter(m => m.category === 'Wall' && m.subCategory === 'Non-Load Bearing' && m.type?.includes('Brick'));
+      if (partitionOpts.length > 0 && !partitionBrick) {
+        setPartitionBrick(filteredByTier(partitionOpts));
       }
 
       // Set default Cement & Sand
@@ -89,24 +152,33 @@ export default function WallScreen({ route, navigation }: any) {
 
       setSelections(initialSels);
     }
-  }, [materials, wallType, tier]);
+  }, [materials, tier]);
 
-  // 3. Calculation Engine (Updated for material-specific quantity)
+  // 3. Calculation Engine (Updated for weighted material-specific quantity)
   const calculation = useMemo(() => { 
     
     const h_ft = parseFloat(height) || 0; // Height in Feet
     const wt_in = parseFloat(wallThickness) || 0; // Wall Thickness in Inches
     const jt_in = parseFloat(jointThickness) || 0; // Joint Thickness in Inches
     const ded = (parseFloat(openingDeduction) || 0) / 100;
-    const selectedBrick = selections['Bricks'];
-    const spec = WALL_TYPE_SPECS[wallType];
+    const selectedLoadBearing = loadBearingBrick;
+    const selectedPartition = partitionBrick;
 
-    if (h_ft <= 0 || wt_in <= 0 || !selectedBrick) return { brickQty: 0, cementBags: 0, sandQty: 0, totalCost: 0, costBreakdown: { bricks: 0, cement: 0, sand: 0 }, sandUnit: 'cft', brickBrand: 'Not Selected', cementBrand: 'Not Selected', sandBrand: 'Not Selected', mortarMix: '1:0' };
+    if (h_ft <= 0 || wt_in <= 0 || (!selectedLoadBearing && !selectedPartition)) return { 
+      brickQty: 0, cementBags: 0, sandQty: 0, totalCost: 0, 
+      costBreakdown: { bricks: 0, cement: 0, sand: 0 }, 
+      sandUnit: 'cft', 
+      loadBearingBrand: 'Not Selected',
+      partitionBrand: 'Not Selected',
+      cementBrand: 'Not Selected', 
+      sandBrand: 'Not Selected', 
+      mortarMix: '1:0' 
+    };
 
     // --- 1. Running Length & Total Volume (in CUM) ---
     const runningLength_ft = (rooms?.length > 0) 
-      ? rooms.reduce((acc: number, r: any) => acc + (2 * (parseFloat(r.length || 0) + parseFloat(r.width || 0))), 0)
-      : 4 * Math.sqrt(totalArea || 1000);
+      ? (rooms.reduce((acc: number, r: any) => acc + (2 * (parseFloat(r.length || 0) + parseFloat(r.width || 0))), 0)) * 0.7
+      : 4 * Math.sqrt(totalArea || 1000) * 0.7;
     
     const wallLength_m = runningLength_ft * FT_TO_M;
     const wallHeight_m = h_ft * FT_TO_M;
@@ -114,73 +186,63 @@ export default function WallScreen({ route, navigation }: any) {
 
     const totalVolume_m3 = (wallLength_m * wallHeight_m * wallThickness_m) * (1 - ded);
 
-    // --- 2. Brick/Block Quantity Calculation (CRITICAL FIX) ---
-    const dimsMatch = selectedBrick.dimensions?.match(/(\d+(\.\d+)?)\s*x\s*(\d+(\.\d+)?)\s*x\s*(\d+(\.\d+)?)/)
-    
-    if (!dimsMatch) {
-      return { brickQty: 0, cementBags: 0, sandQty: 0, totalCost: 0, costBreakdown: { bricks: 0, cement: 0, sand: 0 }, sandUnit: 'cft' };
-    }
+    // --- 2. Split Volume based on AI Detected Ratios ---
+    const loadBearingVolume_m3 = totalVolume_m3 * avgMainWallRatio;
+    const partitionVolume_m3 = totalVolume_m3 * avgPartitionWallRatio;
 
-    const brickDimsIn = [
+    /**
+     * Helper function to calculate quantities for a given brick type and volume
+     */
+    const calculateForBrickType = (brick: any, volume: number, mortarSpec: {cementMortar: number, sandMortar: number}) => {
+      if (!brick || volume <= 0) return { qty: 0, brickVolume: 0, mortarVolume: 0 };
+
+      const dimsMatch = brick.dimensions?.match(/(\d+(\.\d+)?)\s*x\s*(\d+(\.\d+)?)\s*x\s*(\d+(\.\d+)?)/)
+      if (!dimsMatch) return { qty: 0, brickVolume: 0, mortarVolume: 0 };
+
+      const brickDimsIn = [
         parseFloat(dimsMatch[1]), 
         parseFloat(dimsMatch[3]), 
         parseFloat(dimsMatch[5])
-    ].sort((a, b) => b - a); // Sort descending to easily find largest dimension
+      ].sort((a, b) => b - a);
 
-    const brickL_in = brickDimsIn[0]; // Largest dimension
-    const brickW_in = brickDimsIn[1]; // Second largest
-    const brickH_in = brickDimsIn[2]; // Smallest
+      const brickVolume_m3 = (brickDimsIn[0] * brickDimsIn[1] * brickDimsIn[2]) * IN_TO_FT * IN_TO_FT * IN_TO_FT * FT_TO_M * FT_TO_M * FT_TO_M;
+      const totalL_m = (brickDimsIn[0] + jt_in) * IN_TO_FT * FT_TO_M;
+      const totalW_m = (brickDimsIn[1] + jt_in) * IN_TO_FT * FT_TO_M;
+      const totalH_m = (brickDimsIn[2] + jt_in) * IN_TO_FT * FT_TO_M;
+      const totalVolumePerBrick_m3 = totalL_m * totalW_m * totalH_m;
 
-    // Validate Wall Thickness against Brick Dimensions
-    const effectiveBrickWidth = brickW_in + jt_in; // Brick's width + one joint
-    const effectiveBrickLength = brickL_in + jt_in; // Brick's length + one joint
-    const effectiveBrickHeight = brickH_in + jt_in; // Brick's height + one joint
+      const qty = Math.round(volume / totalVolumePerBrick_m3);
+      const totalBrickVolume = qty * brickVolume_m3;
+      const mortarVolume = volume - totalBrickVolume;
 
-    // Check if Wall Thickness is a sensible multiple of brick's width or length (the cross-sectional dims)
-    const isSensibleThickness = 
-        Math.abs(wt_in - effectiveBrickWidth) < 0.5 || // Close to one width (e.g. 4.5 inch wall)
-        Math.abs(wt_in - effectiveBrickLength) < 0.5 || // Close to one length (rare, but possible)
-        Math.abs(wt_in - (effectiveBrickWidth * 2 - jt_in)) < 0.5; // Close to two widths with a joint in between (e.g. 9 inch wall)
+      return { qty, brickVolume: totalBrickVolume, mortarVolume };
+    };
 
-    // Use the maximum of the brick's largest dimension or the wall thickness for the quantity calc.
-    // Assuming the largest brick face is laid along the wall.
-    // The width of the brick + joint in the direction of the wall thickness determines the number of layers.
-    const layers = Math.ceil(wt_in / effectiveBrickWidth); 
-
-    // Volume of one material unit INCLUDING mortar joint (in CUM)
-    const totalL_m = (brickL_in + jt_in) * IN_TO_FT * FT_TO_M;
-    const totalW_m = (brickW_in + jt_in) * IN_TO_FT * FT_TO_M;
-    const totalH_m = (brickH_in + jt_in) * IN_TO_FT * FT_TO_M;
-    const totalVolumePerBrick_m3 = totalL_m * totalW_m * totalH_m;
-
-    // Calculate bricks per unit volume based on layers
-    // The volume of a wall using this brick is: L_wall * H_wall * W_wall
-    // The total volume of wall built by one brick is the volume of the brick + mortar in the L, H direction, times the thickness.
-    // Bricks per M3 of finished wall:
-    const bricksPerM3 = layers / (wallThickness_m * totalH_m * totalL_m);
+    // Calculate for Load-Bearing
+    const loadBearingCalc = calculateForBrickType(selectedLoadBearing, loadBearingVolume_m3, WALL_TYPE_SPECS['Load Bearing']);
     
-    // A SIMPLER, MORE ROBUST WAY to calculate total units:
-    const totalUnits = Math.round(totalVolume_m3 / totalVolumePerBrick_m3);
+    // Calculate for Partition
+    const partitionCalc = calculateForBrickType(selectedPartition, partitionVolume_m3, WALL_TYPE_SPECS['Non-Load Bearing']);
 
-
-    // --- 3. Mortar Volume Calculation ---
-    const brickVolume_m3 = (brickL_in * brickW_in * brickH_in) * IN_TO_FT * IN_TO_FT * IN_TO_FT * FT_TO_M * FT_TO_M * FT_TO_M;
-    const totalBrickVolume_m3 = totalUnits * brickVolume_m3;
-    const totalMortarVolume_m3 = totalVolume_m3 - totalBrickVolume_m3; // Total WET Mortar (Total Wall Vol - Total Brick Vol)
-    
+    // --- 3. Combined Mortar and Material Quantities ---
+    const totalMortarVolume_m3 = loadBearingCalc.mortarVolume + partitionCalc.mortarVolume;
     const dryMortar_m3 = totalMortarVolume_m3 * DRY_VOL_MULTIPLIER;
 
-    // --- 4. Cement & Sand Quantity (Based on 1:N Mortar Mix) ---
-    const parts = spec.cementMortar + spec.sandMortar;
-    const cementVol_m3 = dryMortar_m3 * (spec.cementMortar / parts);
-    const sandVol_m3 = dryMortar_m3 * (spec.sandMortar / parts);
+    // --- For cement/sand, use weighted average of mortar specs ---
+    const avgCementParts = (WALL_TYPE_SPECS['Load Bearing'].cementMortar * avgMainWallRatio) + 
+                           (WALL_TYPE_SPECS['Non-Load Bearing'].cementMortar * avgPartitionWallRatio);
+    const avgSandParts = (WALL_TYPE_SPECS['Load Bearing'].sandMortar * avgMainWallRatio) + 
+                         (WALL_TYPE_SPECS['Non-Load Bearing'].sandMortar * avgPartitionWallRatio);
+    const parts = avgCementParts + avgSandParts;
+
+    const cementVol_m3 = dryMortar_m3 * (avgCementParts / parts);
+    const sandVol_m3 = dryMortar_m3 * (avgSandParts / parts);
 
     const cementBags = Math.ceil(cementVol_m3 * CEMENT_BAGS_PER_M3);
     const sandUnit = selections['Sand']?.unit?.toLowerCase() || 'cft';
     let finalSandQty: number;
     let sandUnitDisplay: string;
     
-    // Convert sand volume to the unit specified in the database
     if (sandUnit.includes('cft')) {
         finalSandQty = sandVol_m3 * CFT_PER_M3;
         sandUnitDisplay = 'cft';
@@ -193,25 +255,31 @@ export default function WallScreen({ route, navigation }: any) {
     }
     finalSandQty = parseFloat(finalSandQty.toFixed(2));
 
-    // --- 5. Cost Calculation ---
-    const bPrice = parseFloat(selections['Bricks']?.pricePerUnit || 0);
+    // --- 4. Cost Calculation ---
+    const lbPrice = parseFloat(selectedLoadBearing?.pricePerUnit || 0);
+    const pbPrice = parseFloat(selectedPartition?.pricePerUnit || 0);
     const cPrice = parseFloat(selections['Cement']?.pricePerUnit || 0);
     const sPrice = parseFloat(selections['Sand']?.pricePerUnit || 0);
 
-    const bCost = Math.round(bPrice * totalUnits);
+    const lbCost = Math.round(lbPrice * loadBearingCalc.qty);
+    const pbCost = Math.round(pbPrice * partitionCalc.qty);
     const cCost = Math.round(cPrice * cementBags);
     const sCost = Math.round(sPrice * finalSandQty);
     
     return {
-      brickQty: totalUnits, cementBags, sandQty: finalSandQty, sandUnit: sandUnitDisplay,
-      brickBrand: selectedBrick.name || 'Not Selected',
+      brickQty: loadBearingCalc.qty + partitionCalc.qty, 
+      loadBearingQty: loadBearingCalc.qty,
+      partitionQty: partitionCalc.qty,
+      cementBags, sandQty: finalSandQty, sandUnit: sandUnitDisplay,
+      loadBearingBrand: selectedLoadBearing?.name || 'Not Selected',
+      partitionBrand: selectedPartition?.name || 'Not Selected',
       cementBrand: selections['Cement']?.name || 'Not Selected',
       sandBrand: selections['Sand']?.name || 'Not Selected',
-      mortarMix: `1:${spec.sandMortar}`,
-      totalCost: Math.round(bCost + cCost + sCost),
-      costBreakdown: { bricks: bCost, cement: cCost, sand: sCost }
+      mortarMix: `1:${(avgSandParts).toFixed(1)}`,
+      totalCost: Math.round(lbCost + pbCost + cCost + sCost),
+      costBreakdown: { bricks: lbCost + pbCost, cement: cCost, sand: sCost }
     };
-  }, [height, wallThickness, jointThickness, openingDeduction, selections, wallType, totalArea, rooms]);
+  }, [height, wallThickness, jointThickness, openingDeduction, selections, loadBearingBrick, partitionBrick, totalArea, rooms, avgMainWallRatio, avgPartitionWallRatio]);
 
   // 5. Save Logic
   const handleSaveWallEstimate = async () => {
@@ -221,32 +289,71 @@ export default function WallScreen({ route, navigation }: any) {
     // Validation checks
     const h_ft = parseFloat(height) || 0;
     const wt_in = parseFloat(wallThickness) || 0;
-    const selectedBrick = selections['Bricks'];
     
     if (h_ft <= 0) return Alert.alert("Validation Error", "Please enter a valid height.");
     if (wt_in <= 0) return Alert.alert("Validation Error", "Please enter a valid wall thickness.");
-    if (!selectedBrick) return Alert.alert("Validation Error", "Please select a brick/block type.");
+    if (!loadBearingBrick && !partitionBrick) return Alert.alert("Validation Error", "Please select at least one material type.");
     if (calculation.totalCost === 0) return Alert.alert("Error", "Cost calculation failed. Check dimensions and material selections.");
     if (wallThicknessError) return Alert.alert("Validation Error", wallThicknessError);
 
     setSaving(true);
     try {
-        const lineItems = [
-            { name: calculation.brickBrand || 'Not Selected', desc: 'Bricks/Blocks', qty: calculation.brickQty, unit: 'Nos', total: calculation.costBreakdown.bricks, rate: selections['Bricks']?.pricePerUnit || 0 },
-            { name: calculation.cementBrand || 'Not Selected', desc: `Mortar Cement (Mix ${calculation.mortarMix})`, qty: calculation.cementBags, unit: 'Bags', total: calculation.costBreakdown.cement, rate: selections['Cement']?.pricePerUnit || 0 },
-            { name: calculation.sandBrand || 'Not Selected', desc: `Mortar Sand (Mix ${calculation.mortarMix})`, qty: calculation.sandQty, unit: calculation.sandUnit || 'cft', total: calculation.costBreakdown.sand, rate: selections['Sand']?.pricePerUnit || 0 },
-        ];
+        const lineItems = [];
+        
+        // Load Bearing bricks
+        if (calculation.loadBearingQty > 0) {
+          lineItems.push({
+            name: calculation.loadBearingBrand || 'Not Selected',
+            desc: 'Load-Bearing Bricks/Blocks',
+            qty: calculation.loadBearingQty,
+            unit: 'Nos',
+            total: Math.round((calculation.costBreakdown.bricks * (calculation.loadBearingQty / calculation.brickQty)) || 0),
+            rate: loadBearingBrick?.pricePerUnit || 0
+          });
+        }
+
+        // Partition bricks
+        if (calculation.partitionQty > 0) {
+          lineItems.push({
+            name: calculation.partitionBrand || 'Not Selected',
+            desc: 'Partition Bricks/Blocks',
+            qty: calculation.partitionQty,
+            unit: 'Nos',
+            total: Math.round((calculation.costBreakdown.bricks * (calculation.partitionQty / calculation.brickQty)) || 0),
+            rate: partitionBrick?.pricePerUnit || 0
+          });
+        }
+
+        // Cement
+        lineItems.push({
+          name: calculation.cementBrand || 'Not Selected',
+          desc: `Mortar Cement (Mix ${calculation.mortarMix})`,
+          qty: calculation.cementBags,
+          unit: 'Bags',
+          total: calculation.costBreakdown.cement,
+          rate: selections['Cement']?.pricePerUnit || 0
+        });
+
+        // Sand
+        lineItems.push({
+          name: calculation.sandBrand || 'Not Selected',
+          desc: `Mortar Sand (Mix ${calculation.mortarMix})`,
+          qty: calculation.sandQty,
+          unit: calculation.sandUnit || 'cft',
+          total: calculation.costBreakdown.sand,
+          rate: selections['Sand']?.pricePerUnit || 0
+        });
         
         // Sanitize data to remove undefined values
         const estimateData = {
             projectId: projectId || '',
             userId: auth.currentUser!.uid,
-            itemName: `${wallType} Wall Masonry`,
+            itemName: `Wall Masonry (Load-Bearing & Partition)`,
             category: 'Wall',
             totalCost: calculation.totalCost || 0, 
             lineItems: lineItems.filter(item => item.name !== undefined),
             specifications: {
-                wallType: wallType || '',
+                wallComposition: `${(avgMainWallRatio * 100).toFixed(0)}% Load-Bearing, ${(avgPartitionWallRatio * 100).toFixed(0)}% Partition`,
                 height: `${height} ft`,
                 thickness: `${wallThickness} in`,
                 jointThickness: `${jointThickness} in`,
@@ -267,23 +374,27 @@ export default function WallScreen({ route, navigation }: any) {
   };
 
   const materialTypeOptions = useMemo(() => {
-    // @ts-ignore
-    const options = CONSTRUCTION_HIERARCHY.Wall.subCategories[wallType] || [];
-    return ['All', ...options];
-  }, [wallType]);
+    return ['Brick', 'Block', 'Stone'];
+  }, []);
 
-  const openSelector = (key: 'Cement' | 'Sand') => {
+  const openSelector = (key: 'Cement' | 'Sand' | 'LoadBearingBrick' | 'PartitionBrick') => {
     setActiveSelectionKey(key);
     setIsModalVisible(true);
   };
 
-  // 4. Filtering Logic for horizontal scroll (Bricks/Blocks)
-  const filteredBricks = materials.filter(m => {
-    const matchesWall = m.category === 'Wall' && m.subCategory === wallType;
-    if (!matchesWall) return false;
-    if (materialType === 'All') return true;
-    return m.type === materialType;
-  });
+  // Filter materials based on active selection
+  const getModalItems = () => {
+    if (activeSelectionKey === 'LoadBearingBrick') {
+      return materials.filter(m => m.category === 'Wall' && m.subCategory === 'Load Bearing');
+    } else if (activeSelectionKey === 'PartitionBrick') {
+      return materials.filter(m => m.category === 'Wall' && m.subCategory === 'Non-Load Bearing');
+    } else if (activeSelectionKey === 'Cement') {
+      return materials.filter(m => m.type === 'Cement');
+    } else if (activeSelectionKey === 'Sand') {
+      return materials.filter(m => m.type === 'Sand');
+    }
+    return [];
+  };
 
   if (loading) return <View style={styles.centered}><ActivityIndicator size="large" color="#315b76" /></View>;
 
@@ -300,6 +411,30 @@ export default function WallScreen({ route, navigation }: any) {
         </View>
 
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+          
+          {/* AI EXTRACTED METADATA INFO - TOP SECTION */}
+          {(avgMainWallRatio > 0 || avgPartitionWallRatio > 0) && (
+            <View style={styles.metadataInfoCard}>
+              <Text style={styles.metadataInfoTitle}>📊 AI-Detected Wall Composition</Text>
+              <View style={styles.metadataInfoRow}>
+                <View style={styles.metadataInfoItem}>
+                  <Text style={styles.metadataInfoLabel}>Load-Bearing</Text>
+                  <Text style={styles.metadataInfoValue}>{(avgMainWallRatio * 100).toFixed(0)}%</Text>
+                  <View style={{height: 4, backgroundColor: '#ef4444', borderRadius: 2, marginTop: 4, width: '100%'}} />
+                </View>
+                <View style={styles.metadataInfoItem}>
+                  <Text style={styles.metadataInfoLabel}>Partition</Text>
+                  <Text style={styles.metadataInfoValue}>{(avgPartitionWallRatio * 100).toFixed(0)}%</Text>
+                  <View style={{height: 4, backgroundColor: '#3b82f6', borderRadius: 2, marginTop: 4, width: '100%'}} />
+                </View>
+                <View style={styles.metadataInfoItem}>
+                  <Text style={styles.metadataInfoLabel}>Openings</Text>
+                  <Text style={styles.metadataInfoValue}>{avgOpeningPercentage}%</Text>
+                  <View style={{height: 4, backgroundColor: '#f59e0b', borderRadius: 2, marginTop: 4, width: '100%'}} />
+                </View>
+              </View>
+            </View>
+          )}
           
           {/* 1. Dimensions Card (Updated Inputs and Error Display) */}
           <View style={styles.inputCard}>
@@ -334,26 +469,100 @@ export default function WallScreen({ route, navigation }: any) {
             </View>
           </View>
 
-          {/* 2. Wall Type Tabs */}
-          <Text style={styles.sectionLabel}>WALL TYPE</Text>
-          <View style={styles.wallTypeContainer}>
-            {(Object.keys(WALL_TYPE_SPECS) as WallType[]).map((type) => (
-              <TouchableOpacity 
-                key={type} 
-                style={[styles.wallTypeTab, wallType === type && styles.wallTypeTabActive]} 
-                onPress={() => { setWallType(type); setMaterialType('All'); }}
-              >
-                <Ionicons 
-                  name={type === 'Load Bearing' ? 'cube' : type === 'Non-Load Bearing' ? 'business' : 'grid-outline'} 
-                  size={14} 
-                  color={wallType === type ? '#fff' : '#64748b'} 
-                />
-                <Text style={[styles.wallTypeText, wallType === type && styles.wallTypeTextActive]}>{WALL_TYPE_SPECS[type].label}</Text>
-              </TouchableOpacity>
-            ))}
+          {/* 2. Dual Material Selection (Load-Bearing & Partition) */}
+          <Text style={styles.sectionLabel}>WALL MATERIALS</Text>
+          
+          {/* Load-Bearing Material Card with Horizontal Scroll Inside */}
+          <View style={styles.materialCard}>
+            <View style={styles.materialCardHeader}>
+              <View style={{flex: 1}}>
+                <Text style={styles.materialLabel}>Load-Bearing Walls</Text>
+                <Text style={styles.materialSubLabel}>{(avgMainWallRatio * 100).toFixed(0)}% of structure</Text>
+              </View>
+              <View style={{backgroundColor: '#ef4444', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6}}>
+                <Text style={{color: '#fff', fontSize: 9, fontWeight: '700'}}>9 inch</Text>
+              </View>
+            </View>
+
+            {/* Display Selected Material Info */}
+            {loadBearingBrick && (
+              <Text style={styles.selectedMaterialText}>✓ Selected: {loadBearingBrick.name}</Text>
+            )}
+
+            {/* Horizontal Scroll - Load-Bearing Materials */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={[styles.brandScroll, {marginVertical: 10}]}>
+              {(() => {
+                const loadBearingMaterials = materials.filter(m => m.category === 'Wall' && m.subCategory === 'Load Bearing');
+                return loadBearingMaterials.length > 0 ? loadBearingMaterials.map(item => (
+                  <TouchableOpacity 
+                    key={item.id} 
+                    style={[styles.brandCard, styles.materialBrandCard, loadBearingBrick?.id === item.id && styles.activeBrand]} 
+                    onPress={() => setLoadBearingBrick(item)}
+                  >
+                    <View style={styles.imagePlaceholder}>
+                      {item.imageUrl ? <Image source={{ uri: item.imageUrl }} style={styles.brandImg} /> : <Ionicons name="cube-outline" size={24} color="#cbd5e1" />}
+                    </View>
+                    <Text style={styles.brandName} numberOfLines={1}>{item.name}</Text>
+                    <Text style={styles.brandPrice}>₹{item.pricePerUnit}/{item.unit}</Text>
+                    <Text style={styles.brandDim}>{item.dimensions || 'Dimensions N/A'}</Text>
+                  </TouchableOpacity>
+                )) : (
+                  <Text style={styles.emptyText}>No load-bearing materials available.</Text>
+                );
+              })()}
+            </ScrollView>
+
+            {loadBearingBrick && (
+              <Text style={styles.materialQty}>{calculation.loadBearingQty} units needed</Text>
+            )}
           </View>
 
-          {/* 3. Material Type Filter Chips (Brick, Block, Stone) */}
+          {/* Partition Material Card with Horizontal Scroll Inside */}
+          <View style={[styles.materialCard, {marginTop: 12}]}>
+            <View style={styles.materialCardHeader}>
+              <View style={{flex: 1}}>
+                <Text style={styles.materialLabel}>Partition Walls</Text>
+                <Text style={styles.materialSubLabel}>{(avgPartitionWallRatio * 100).toFixed(0)}% of structure</Text>
+              </View>
+              <View style={{backgroundColor: '#3b82f6', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6}}>
+                <Text style={{color: '#fff', fontSize: 9, fontWeight: '700'}}>4.5 inch</Text>
+              </View>
+            </View>
+
+            {/* Display Selected Material Info */}
+            {partitionBrick && (
+              <Text style={styles.selectedMaterialText}>✓ Selected: {partitionBrick.name}</Text>
+            )}
+
+            {/* Horizontal Scroll - Partition Materials */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={[styles.brandScroll, {marginVertical: 10}]}>
+              {(() => {
+                const partitionMaterials = materials.filter(m => m.category === 'Wall' && m.subCategory === 'Non-Load Bearing');
+                return partitionMaterials.length > 0 ? partitionMaterials.map(item => (
+                  <TouchableOpacity 
+                    key={item.id} 
+                    style={[styles.brandCard, styles.materialBrandCard, partitionBrick?.id === item.id && styles.activeBrand]} 
+                    onPress={() => setPartitionBrick(item)}
+                  >
+                    <View style={styles.imagePlaceholder}>
+                      {item.imageUrl ? <Image source={{ uri: item.imageUrl }} style={styles.brandImg} /> : <Ionicons name="cube-outline" size={24} color="#cbd5e1" />}
+                    </View>
+                    <Text style={styles.brandName} numberOfLines={1}>{item.name}</Text>
+                    <Text style={styles.brandPrice}>₹{item.pricePerUnit}/{item.unit}</Text>
+                    <Text style={styles.brandDim}>{item.dimensions || 'Dimensions N/A'}</Text>
+                  </TouchableOpacity>
+                )) : (
+                  <Text style={styles.emptyText}>No partition materials available.</Text>
+                );
+              })()}
+            </ScrollView>
+
+            {partitionBrick && (
+              <Text style={styles.materialQty}>{calculation.partitionQty} units needed</Text>
+            )}
+          </View>
+
+          {/* Material Type Filter Chips (Brick, Block, Stone) */}
           <Text style={styles.sectionLabel}>MATERIAL CLASSIFICATION</Text>
           <View style={styles.materialTypeContainer}>
             {materialTypeOptions.map((type) => (
@@ -367,29 +576,35 @@ export default function WallScreen({ route, navigation }: any) {
             ))}
           </View>
 
-          {/* 4. Horizontal Bricks Selection */}
+          {/* Horizontal Bricks/Blocks/Stone Selection (View Materials) */}
           <Text style={styles.sectionLabel}>SELECT SPECIFIC {materialType.toUpperCase()}</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.brandScroll}>
-            {filteredBricks.length > 0 ? filteredBricks.map(item => (
-              <TouchableOpacity 
-                key={item.id} 
-                style={[styles.brandCard, selections['Bricks']?.id === item.id && styles.activeBrand]} 
-                onPress={() => setSelections({...selections, 'Bricks': item})}
-              >
-                <View style={styles.imagePlaceholder}>
-                  {item.imageUrl ? <Image source={{ uri: item.imageUrl }} style={styles.brandImg} /> : <Ionicons name="cube-outline" size={24} color="#cbd5e1" />}
-                </View>
-                <Text style={styles.brandName} numberOfLines={1}>{item.name}</Text>
-                <Text style={styles.brandPrice}>₹{item.pricePerUnit}/{item.unit}</Text>
-                <Text style={styles.brandDim}>{item.dimensions || 'Dimensions N/A'}</Text>
-              </TouchableOpacity>
-            )) : (
-              <Text style={styles.emptyText}>No materials found for this category.</Text>
-            )}
+            {(() => {
+              const filteredMaterials = materials.filter(m => m.category === 'Wall' && m.type === materialType);
+              return filteredMaterials.length > 0 ? filteredMaterials.map(item => (
+                <TouchableOpacity 
+                  key={item.id} 
+                  style={[styles.brandCard]} 
+                  onPress={() => {
+                    // Guide user to use Load-Bearing or Partition selector
+                    Alert.alert("Info", "Please select Load-Bearing or Partition materials from the dedicated sections above.");
+                  }}
+                >
+                  <View style={styles.imagePlaceholder}>
+                    {item.imageUrl ? <Image source={{ uri: item.imageUrl }} style={styles.brandImg} /> : <Ionicons name="cube-outline" size={24} color="#cbd5e1" />}
+                  </View>
+                  <Text style={styles.brandName} numberOfLines={1}>{item.name}</Text>
+                  <Text style={styles.brandPrice}>₹{item.pricePerUnit}/{item.unit}</Text>
+                  <Text style={styles.brandDim}>{item.dimensions || 'Dimensions N/A'}</Text>
+                </TouchableOpacity>
+              )) : (
+                <Text style={styles.emptyText}>No {materialType.toLowerCase()} found in this category.</Text>
+              );
+            })()}
           </ScrollView>
 
-          {/* 5. Mortar Materials Selectors */}
-          <Text style={styles.sectionLabel}>MORTAR MATERIALS (1:{WALL_TYPE_SPECS[wallType].sandMortar} Mix)</Text>
+          {/* 3. Mortar Materials Selectors */}
+          <Text style={styles.sectionLabel}>MORTAR MATERIALS</Text>
           <View style={styles.materialGrid}>
             <TouchableOpacity style={styles.materialCard} onPress={() => openSelector('Cement')}>
               <Text style={styles.materialLabel}>Cement Brand</Text>
@@ -410,10 +625,12 @@ export default function WallScreen({ route, navigation }: any) {
             </TouchableOpacity>
           </View>
 
-          {/* 6. Summary Result Card */}
+          {/* 4. Summary Result Card */}
           <View style={styles.resultCard}>
             <Text style={styles.resultHeader}>ESTIMATION SUMMARY</Text>
-            <View style={styles.resRow}><Text style={styles.resLabel}>{selections['Bricks']?.name?.includes('Block') ? 'Block' : 'Brick'} Qty</Text><Text style={styles.resVal}>{calculation.brickQty} Nos</Text></View>
+            <View style={styles.resRow}><Text style={styles.resLabel}>Load-Bearing Bricks</Text><Text style={styles.resVal}>{calculation.loadBearingQty} Nos</Text></View>
+            <View style={styles.resRow}><Text style={styles.resLabel}>Partition Bricks</Text><Text style={styles.resVal}>{calculation.partitionQty} Nos</Text></View>
+            <View style={styles.resRow}><Text style={styles.resLabel}>Total Bricks</Text><Text style={styles.resVal}>{calculation.brickQty} Nos</Text></View>
             <View style={styles.resRow}><Text style={styles.resLabel}>Cement Qty (Bags)</Text><Text style={styles.resVal}>{calculation.cementBags} Bags</Text></View>
             <View style={styles.resRow}><Text style={styles.resLabel}>Sand Qty ({calculation.sandUnit})</Text><Text style={styles.resVal}>{calculation.sandQty} {calculation.sandUnit}</Text></View>
             <View style={styles.divider} />
@@ -440,24 +657,34 @@ export default function WallScreen({ route, navigation }: any) {
           )}
         </TouchableOpacity>
 
-        {/* Selection Modal for Cement/Sand */}
+        {/* Selection Modal for Materials */}
         <Modal visible={isModalVisible} animationType="slide" transparent>
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Choose {activeSelectionKey}</Text>
+                <Text style={styles.modalTitle}>
+                  {activeSelectionKey === 'LoadBearingBrick' ? 'Load-Bearing Materials' :
+                   activeSelectionKey === 'PartitionBrick' ? 'Partition Materials' :
+                   `Choose ${activeSelectionKey}`}
+                </Text>
                 <TouchableOpacity onPress={() => setIsModalVisible(false)}>
                   <Ionicons name="close" size={26} color="#1e293b" />
                 </TouchableOpacity>
               </View>
               <FlatList
-                data={materials.filter(m => m.type === activeSelectionKey)}
+                data={getModalItems()}
                 keyExtractor={item => item.id}
                 renderItem={({item}) => (
                   <TouchableOpacity 
                     style={styles.selectorItem} 
                     onPress={() => {
-                      setSelections({...selections, [activeSelectionKey!]: item});
+                      if (activeSelectionKey === 'LoadBearingBrick') {
+                        setLoadBearingBrick(item);
+                      } else if (activeSelectionKey === 'PartitionBrick') {
+                        setPartitionBrick(item);
+                      } else {
+                        setSelections({...selections, [activeSelectionKey!]: item});
+                      }
                       setIsModalVisible(false);
                     }}
                   >
@@ -465,7 +692,10 @@ export default function WallScreen({ route, navigation }: any) {
                       <Text style={styles.selectorItemName}>{item.name}</Text>
                       <Text style={styles.selectorItemPrice}>₹{item.pricePerUnit} / {item.unit}</Text>
                     </View>
-                    {selections[activeSelectionKey!]?.id === item.id && <Ionicons name="checkmark-circle" size={24} color="#10b981" />}
+                    {((activeSelectionKey === 'LoadBearingBrick' && loadBearingBrick?.id === item.id) ||
+                      (activeSelectionKey === 'PartitionBrick' && partitionBrick?.id === item.id) ||
+                      (activeSelectionKey !== 'LoadBearingBrick' && activeSelectionKey !== 'PartitionBrick' && selections[activeSelectionKey!]?.id === item.id)) && 
+                      <Ionicons name="checkmark-circle" size={24} color="#10b981" />}
                   </TouchableOpacity>
                 )}
                 contentContainerStyle={{ paddingBottom: 30 }}
@@ -497,6 +727,14 @@ const styles = StyleSheet.create({
   input: { backgroundColor: '#f1f5f9', padding: 12, borderRadius: 10, fontSize: 15, fontWeight: '700', color: '#1e293b', borderWidth: 1, borderColor: '#e2e8f0' },
   inputErrorText: { color: '#ef4444', fontSize: 10, marginTop: 5, marginLeft: 2, fontWeight: '600' }, // New Style
   
+  // AI Metadata Info Display
+  metadataInfoCard: { backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#bbf7d0', borderRadius: 12, padding: 12, marginTop: 0, marginBottom: 15 },
+  metadataInfoTitle: { fontSize: 12, fontWeight: '700', color: '#15803d', marginBottom: 10 },
+  metadataInfoRow: { flexDirection: 'row', gap: 10, justifyContent: 'space-around' },
+  metadataInfoItem: { flex: 1, alignItems: 'center' },
+  metadataInfoLabel: { fontSize: 10, color: '#22c55e', fontWeight: '600', marginBottom: 4 },
+  metadataInfoValue: { fontSize: 16, fontWeight: '800', color: '#15803d' },
+  
   wallTypeContainer: { flexDirection: 'row', gap: 8 },
   wallTypeTab: { flex: 1, paddingVertical: 12, backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 },
   wallTypeTabActive: { backgroundColor: '#315b76', borderColor: '#315b76' },
@@ -520,10 +758,14 @@ const styles = StyleSheet.create({
   emptyText: { color: '#94a3b8', fontSize: 12, fontStyle: 'italic', marginLeft: 5 },
 
   materialGrid: { flexDirection: 'row', gap: 12 },
-  materialCard: { flex: 1, backgroundColor: '#fff', padding: 15, borderRadius: 15, borderWidth: 1, borderColor: '#e2e8f0' },
+  materialCard: { flex: 1, backgroundColor: '#fff', padding: 15, borderRadius: 15, borderWidth: 1, borderColor: '#e2e8f0', marginBottom: 0 },
+  materialCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   materialLabel: { fontSize: 10, fontWeight: '700', color: '#64748b', marginBottom: 8 },
+  materialSubLabel: { fontSize: 9, color: '#94a3b8', fontWeight: '500', marginTop: 2 },
+  selectedMaterialText: { fontSize: 11, fontWeight: '600', color: '#10b981', marginBottom: 10 },
   materialSelector: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#f1f5f9', padding: 10, borderRadius: 8 },
   materialValue: { fontSize: 11, fontWeight: '700', color: '#1e293b', flex: 1, marginRight: 5 },
+  materialBrandCard: { width: 100, marginRight: 10 },
   materialQty: { fontSize: 11, fontWeight: '600', color: '#315b76', marginTop: 10 },
 
   resultCard: { backgroundColor: '#ffffff', padding: 20, borderRadius: 15, marginTop: 20, borderWidth: 1, borderColor: '#e2e8f0', elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5 },

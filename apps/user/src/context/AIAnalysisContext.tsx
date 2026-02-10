@@ -9,11 +9,29 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { imageCacheService, localDatabaseService, type CachedAnalysis } from '@archlens/shared';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+export interface RoomMetadata {
+  name: string;
+  length: number;
+  width: number;
+  area?: number;
+  roomType: "standard" | "balcony" | "wash_area";
+  wallMetadata: {
+    mainWallRatio: number;    // Load-Bearing wall proportion (0.0-1.0)
+    partitionWallRatio: number; // Partition wall proportion (0.0-1.0)
+  };
+  openingPercentage: number;   // Window/door percentage of perimeter (0-100)
+  features?: string[];
+}
+
 export interface AIAnalysisResult {
   id: string;
   type: 'floor_plan' | 'cost_estimate' | 'materials';
   timestamp: number;
-  data: Record<string, any>;
+  data: {
+    rooms: RoomMetadata[];
+    totalArea: number;
+    summary?: string;
+  };
   metadata?: {
     roomCount?: number;
     totalArea?: number;
@@ -27,8 +45,20 @@ export interface AIAnalysisResult {
   imageName?: string;
 }
 
-interface AIAnalysisContextType {
+export interface ActiveProject {
+  id: string;
+  name: string;
+  totalArea: number;
+  userId: string;
+  status: string;
+  rooms?: any[];
+  [key: string]: any;
+}
+
+export interface AIAnalysisContextType {
   analyses: AIAnalysisResult[];
+  activeProject: ActiveProject | null;
+  setActiveProject: (project: ActiveProject | null) => void;
   addAnalysis: (analysis: AIAnalysisResult) => void;
   removeAnalysis: (id: string) => void;
   clearAnalyses: () => void;
@@ -51,6 +81,7 @@ const AIAnalysisContext = createContext<AIAnalysisContextType | undefined>(undef
 
 export const AIAnalysisProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [analyses, setAnalyses] = useState<AIAnalysisResult[]>([]);
+  const [activeProject, setActiveProject] = useState<ActiveProject | null>(null);
   const [dbInitialized, setDbInitialized] = useState(false);
 
   // Initialize local database on mount
@@ -172,6 +203,7 @@ export const AIAnalysisProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   /**
    * Cache floor plan analysis result in both in-memory and persistent storage
+   * Also persists to AsyncStorage for cross-session availability
    */
   const cacheFloorPlanAnalysis = async (
     imageData: string,
@@ -207,6 +239,21 @@ export const AIAnalysisProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       } catch (error) {
         console.warn('Failed to save to persistent database:', error);
       }
+    }
+
+    // Persist analysis results to AsyncStorage for cross-session availability
+    try {
+      const cacheKey = `floor_plan_analysis_${name}`;
+      const cacheData = {
+        id: analysisResult.id,
+        timestamp: analysisResult.timestamp,
+        data: analysisResult.data,
+        metadata: analysisResult.metadata,
+      };
+      await AsyncStorage.setItem(cacheKey, JSON.stringify(cacheData));
+      console.log(`Floor plan analysis cached in AsyncStorage: ${cacheKey}`);
+    } catch (error) {
+      console.warn('Failed to save to AsyncStorage:', error);
     }
   };
 
@@ -289,6 +336,8 @@ export const AIAnalysisProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     <AIAnalysisContext.Provider
       value={{
         analyses,
+        activeProject,
+        setActiveProject,
         addAnalysis,
         removeAnalysis,
         clearAnalyses,

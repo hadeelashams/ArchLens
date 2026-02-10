@@ -16,7 +16,14 @@ interface RoomData {
   name: string;
   length: string;
   width: string;
-  area: string; 
+  area: string;
+  roomType?: "standard" | "balcony" | "wash_area";
+  wallMetadata?: {
+    mainWallRatio: number;
+    partitionWallRatio: number;
+  };
+  openingPercentage?: number;
+  features?: string[];
 }
 
 export default function PlanVerificationScreen({ route, navigation }: any) {
@@ -42,8 +49,8 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
         const a = parseFloat(r.area);
         return acc + (isNaN(a) ? 0 : a);
     }, 0);
-    
-    setTotalArea(Number(calculatedTotal.toFixed(2)));
+    // Multiply by 1.15 to convert Carpet Area to Built-up Area (includes wall thickness)
+    setTotalArea(Number((calculatedTotal * 1.15).toFixed(2)));
   }, [rooms]);
 
   const uploadAndAnalyze = async () => {
@@ -72,7 +79,11 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
           name: room.name || `Room ${index + 1}`,
           length: String(room.length || '0'),
           width: String(room.width || '0'),
-          area: String(room.area || (room.length * room.width) || '0')
+          area: String(room.area || (room.length * room.width) || '0'),
+          roomType: room.roomType || 'standard',
+          wallMetadata: room.wallMetadata || { mainWallRatio: 0.6, partitionWallRatio: 0.4 },
+          openingPercentage: room.openingPercentage || 20,
+          features: room.features || []
         }));
         setRooms(roomsWithIds);
         setIsCached(true);
@@ -89,7 +100,14 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
             "name": "string",
             "length": "number",
             "width": "number",
-            "area": "number"
+            "area": "number",
+            "roomType": "standard | balcony | wash_area",
+            "wallMetadata": {
+              "mainWallRatio": "number",
+              "partitionWallRatio": "number"
+            },
+            "openingPercentage": "number",
+            "features": ["string"]
           }
         ],
         "totalArea": "number"
@@ -113,7 +131,11 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
           name: room.name || `Room ${index + 1}`,
           length: String(room.length || '0'),
           width: String(room.width || '0'),
-          area: String(room.area || (room.length * room.width) || '0')
+          area: String(room.area || (room.length * room.width) || '0'),
+          roomType: room.roomType || 'standard',
+          wallMetadata: room.wallMetadata || { mainWallRatio: 0.6, partitionWallRatio: 0.4 },
+          openingPercentage: room.openingPercentage || 20,
+          features: room.features || []
         }));
         setRooms(roomsWithIds);
 
@@ -359,6 +381,72 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
                    <Text style={styles.areaUnit}>sq.ft</Text>
                 </View>
               </View>
+
+              {/* --- AI EXTRACTED METADATA --- */}
+              <View style={styles.metadataSection}>
+                <Text style={styles.metadataTitle}>AI Analysis - Metadata</Text>
+                
+                {/* Room Type */}
+                <View style={styles.metadataRow}>
+                  <Text style={styles.metadataLabel}>Room Type:</Text>
+                  <Text style={[styles.metadataValue, { 
+                    backgroundColor: room.roomType === 'balcony' ? '#fef3c7' : room.roomType === 'wash_area' ? '#dbeafe' : '#f0fdf4',
+                    paddingHorizontal: 10,
+                    paddingVertical: 4,
+                    borderRadius: 6
+                  }]}>
+                    {room.roomType || 'standard'}
+                  </Text>
+                </View>
+
+                {/* Wall Metadata - Load Bearing Ratio */}
+                {room.wallMetadata && (
+                  <>
+                    <View style={styles.metadataRow}>
+                      <Text style={styles.metadataLabel}>Load-Bearing Wall:</Text>
+                      <View style={styles.ratioBar}>
+                        <View style={{
+                          width: `${(room.wallMetadata.mainWallRatio || 0) * 100}%`,
+                          backgroundColor: '#ef4444',
+                          height: '100%',
+                          borderRadius: 4
+                        }} />
+                      </View>
+                      <Text style={styles.ratioValue}>{((room.wallMetadata.mainWallRatio || 0) * 100).toFixed(0)}%</Text>
+                    </View>
+
+                    {/* Wall Metadata - Partition Ratio */}
+                    <View style={styles.metadataRow}>
+                      <Text style={styles.metadataLabel}>Partition Wall:</Text>
+                      <View style={styles.ratioBar}>
+                        <View style={{
+                          width: `${(room.wallMetadata.partitionWallRatio || 0) * 100}%`,
+                          backgroundColor: '#3b82f6',
+                          height: '100%',
+                          borderRadius: 4
+                        }} />
+                      </View>
+                      <Text style={styles.ratioValue}>{((room.wallMetadata.partitionWallRatio || 0) * 100).toFixed(0)}%</Text>
+                    </View>
+                  </>
+                )}
+
+                {/* Opening Percentage */}
+                {room.openingPercentage !== undefined && (
+                  <View style={styles.metadataRow}>
+                    <Text style={styles.metadataLabel}>Window/Door:</Text>
+                    <View style={styles.ratioBar}>
+                      <View style={{
+                        width: `${Math.min(room.openingPercentage, 100)}%`,
+                        backgroundColor: '#f59e0b',
+                        height: '100%',
+                        borderRadius: 4
+                      }} />
+                    </View>
+                    <Text style={styles.ratioValue}>{Math.round(room.openingPercentage)}%</Text>
+                  </View>
+                )}
+              </View>
             </View>
           ))}
         </ScrollView>
@@ -513,6 +601,16 @@ const styles = StyleSheet.create({
   areaBadge: { marginLeft: 'auto', backgroundColor: '#e0f2fe', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, marginBottom: 2, flexDirection: 'row', alignItems: 'baseline' },
   areaInput: { color: '#0284c7', fontWeight: 'bold', fontSize: 16, minWidth: 40, textAlign: 'right' },
   areaUnit: { color: '#0284c7', fontSize: 12, marginLeft: 4, fontWeight: '600' },
+
+  // Metadata Styles (AI Extracted Data)
+  metadataSection: { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#f1f5f9', backgroundColor: '#f8fafc', borderRadius: 8, padding: 10 },
+  metadataTitle: { fontSize: 11, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', marginBottom: 8, letterSpacing: 0.5 },
+  metadataRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 8 },
+  metadataLabel: { fontSize: 12, color: '#475569', fontWeight: '600', minWidth: 110 },
+  metadataValue: { fontSize: 12, color: '#1e293b', fontWeight: '500' },
+  ratioBar: { flex: 1, height: 6, backgroundColor: '#e2e8f0', borderRadius: 4, overflow: 'hidden' },
+  ratioValue: { fontSize: 11, color: '#475569', fontWeight: '700', minWidth: 40, textAlign: 'right' },
+
   footer: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 20, backgroundColor: '#fff', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderColor: '#e2e8f0', shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10, elevation: 10 },
   totalLabel: { fontSize: 12, color: '#64748b', fontWeight: '600', textTransform: 'uppercase' },
   totalValue: { fontSize: 24, fontWeight: '800', color: '#315b76' },

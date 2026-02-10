@@ -24,6 +24,7 @@ export default function DashboardScreen({ navigation }: any) {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('All');
   const [isModalVisible, setModalVisible] = useState(false);
+  const [isUnitPickerVisible, setUnitPickerVisible] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
   // --- FORM STATE ---
@@ -372,15 +373,46 @@ export default function DashboardScreen({ navigation }: any) {
                     />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.label}>Unit</Text>
-                    <TextInput style={styles.input} placeholder="Unit" value={unit} onChangeText={setUnit} />
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
-                         {MATERIAL_UNITS.slice(0, 5).map(u => (
-                           <TouchableOpacity key={u} onPress={() => setUnit(u)} style={styles.miniChip}>
-                             <Text style={styles.miniChipText}>{u}</Text>
-                           </TouchableOpacity>
-                         ))}
-                    </ScrollView>
+                    <Text style={styles.label}>Unit (Strict Selection)</Text>
+                    {/* Unit Picker - Force selection from predefined list for consistency */}
+                    <TouchableOpacity 
+                      style={[styles.input, { justifyContent: 'center', paddingVertical: 0 }]}
+                      onPress={() => setUnitPickerVisible(true)}
+                    >
+                      <Text style={{ color: unit ? '#1e293b' : '#a0aec0', fontSize: 16 }}>
+                        {unit || 'Select Unit...'}
+                      </Text>
+                    </TouchableOpacity>
+                    {/* Unit Selection Modal */}
+                    <Modal visible={isUnitPickerVisible} animationType="fade" transparent onRequestClose={() => setUnitPickerVisible(false)}>
+                      <View style={styles.pickerOverlay}>
+                        <View style={styles.pickerContent}>
+                          <View style={styles.pickerHeader}>
+                            <Text style={styles.pickerTitle}>Select Unit</Text>
+                            <TouchableOpacity onPress={() => setUnitPickerVisible(false)}>
+                              <Feather name="x" size={20} color="#64748b" />
+                            </TouchableOpacity>
+                          </View>
+                          <FlatList
+                            data={MATERIAL_UNITS}
+                            keyExtractor={(item) => item}
+                            renderItem={({ item }) => (
+                              <TouchableOpacity 
+                                style={[styles.pickerItem, unit === item && styles.pickerItemActive]}
+                                onPress={() => {
+                                  setUnit(item);
+                                  setUnitPickerVisible(false);
+                                }}
+                              >
+                                <Text style={[styles.pickerItemText, unit === item && styles.pickerItemTextActive]}>
+                                  {item}
+                                </Text>
+                              </TouchableOpacity>
+                            )}
+                          />
+                        </View>
+                      </View>
+                    </Modal>
                   </View>
                 </View>
               </View>
@@ -460,4 +492,14 @@ const styles = StyleSheet.create({
 
   saveBtn: { backgroundColor: BLUE_ARCH, padding: 18, borderRadius: 14, alignItems: 'center', marginTop: 30 },
   saveBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+
+  // Unit Picker Styles
+  pickerOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.7)', justifyContent: 'center', alignItems: 'center' },
+  pickerContent: { backgroundColor: '#fff', width: 400, borderRadius: 16, maxHeight: '70%', overflow: 'hidden' },
+  pickerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  pickerTitle: { fontSize: 16, fontWeight: 'bold', color: '#1e293b' },
+  pickerItem: { paddingVertical: 16, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  pickerItemActive: { backgroundColor: '#f0f4f8' },
+  pickerItemText: { fontSize: 14, color: '#475569' },
+  pickerItemTextActive: { color: BLUE_ARCH, fontWeight: '700' },
 });
