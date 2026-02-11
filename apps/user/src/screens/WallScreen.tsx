@@ -7,6 +7,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons'; 
 import { LinearGradient } from 'expo-linear-gradient';
+import { MaterialSelectionModal } from '../components/MaterialSelectionModal';
+import { MaterialCard } from '../components/MaterialCard';
 import { 
   db, 
   WALL_TYPE_SPECS, 
@@ -930,52 +932,144 @@ export default function WallScreen({ route, navigation }: any) {
           )}
         </TouchableOpacity>
 
-        {/* Selection Modal for Materials */}
-        <Modal visible={isModalVisible} animationType="slide" transparent>
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>
-                  {activeSelectionKey === 'LoadBearingBrick' ? 'Load-Bearing Materials' :
-                   activeSelectionKey === 'PartitionBrick' ? 'Partition Materials' :
-                   `Choose ${activeSelectionKey}`}
-                </Text>
-                <TouchableOpacity onPress={() => setIsModalVisible(false)}>
-                  <Ionicons name="close" size={26} color="#1e293b" />
-                </TouchableOpacity>
-              </View>
-              <FlatList
-                data={getModalItems()}
-                keyExtractor={item => item.id}
-                renderItem={({item}) => (
-                  <TouchableOpacity 
-                    style={styles.selectorItem} 
-                    onPress={() => {
-                      if (activeSelectionKey === 'LoadBearingBrick') {
-                        setLoadBearingBrick(item);
-                      } else if (activeSelectionKey === 'PartitionBrick') {
-                        setPartitionBrick(item);
-                      } else {
-                        setSelections({...selections, [activeSelectionKey!]: item});
-                      }
-                      setIsModalVisible(false);
-                    }}
-                  >
-                    <View>
-                      <Text style={styles.selectorItemName}>{item.name}</Text>
-                      <Text style={styles.selectorItemPrice}>₹{item.pricePerUnit} / {item.unit}</Text>
-                    </View>
-                    {((activeSelectionKey === 'LoadBearingBrick' && loadBearingBrick?.id === item.id) ||
-                      (activeSelectionKey === 'PartitionBrick' && partitionBrick?.id === item.id) ||
-                      (activeSelectionKey !== 'LoadBearingBrick' && activeSelectionKey !== 'PartitionBrick' && selections[activeSelectionKey!]?.id === item.id)) && 
-                      <Ionicons name="checkmark-circle" size={24} color="#10b981" />}
-                  </TouchableOpacity>
-                )}
-                contentContainerStyle={{ paddingBottom: 30 }}
-              />
-            </View>
-          </View>
-        </Modal>
+        {/* Selection Modal for Materials - Using New Component */}
+        {activeSelectionKey === 'LoadBearingBrick' && (
+          <MaterialSelectionModal
+            visible={isModalVisible}
+            title="Select Load-Bearing Brick Material"
+            materials={materials
+              .filter(m => m.category === 'Wall' && m.subCategory === 'Load Bearing')
+              .map(m => ({
+                id: m.id,
+                name: m.name,
+                brand: m.brand,
+                imageUrl: m.imageUrl,
+                pricePerUnit: parseFloat(m.pricePerUnit),
+                currency: '₹',
+                unit: m.unit || 'Nos',
+                dimensions: m.dimensions,
+                category: m.category,
+                subCategory: m.subCategory,
+                availability: m.availability || 'In Stock',
+                rating: m.rating || 0,
+                reviews: m.reviews || 0,
+                discount: m.discount || 0,
+              }))}
+            selectedMaterialId={loadBearingBrick?.id}
+            onMaterialSelect={(material) => {
+              const selectedMaterial = materials.find(m => m.id === material.id);
+              if (selectedMaterial) {
+                setLoadBearingBrick(selectedMaterial);
+              }
+            }}
+            onClose={() => setIsModalVisible(false)}
+            filterByCategory="Wall"
+            filterBySubCategory="Load Bearing"
+            displayMode="list"
+          />
+        )}
+
+        {activeSelectionKey === 'PartitionBrick' && (
+          <MaterialSelectionModal
+            visible={isModalVisible}
+            title="Select Partition Brick Material"
+            materials={materials
+              .filter(m => m.category === 'Wall' && m.subCategory === 'Non-Load Bearing')
+              .map(m => ({
+                id: m.id,
+                name: m.name,
+                brand: m.brand,
+                imageUrl: m.imageUrl,
+                pricePerUnit: parseFloat(m.pricePerUnit),
+                currency: '₹',
+                unit: m.unit || 'Nos',
+                dimensions: m.dimensions,
+                category: m.category,
+                subCategory: m.subCategory,
+                availability: m.availability || 'In Stock',
+                rating: m.rating || 0,
+                reviews: m.reviews || 0,
+                discount: m.discount || 0,
+              }))}
+            selectedMaterialId={partitionBrick?.id}
+            onMaterialSelect={(material) => {
+              const selectedMaterial = materials.find(m => m.id === material.id);
+              if (selectedMaterial) {
+                setPartitionBrick(selectedMaterial);
+              }
+            }}
+            onClose={() => setIsModalVisible(false)}
+            filterByCategory="Wall"
+            filterBySubCategory="Non-Load Bearing"
+            displayMode="list"
+          />
+        )}
+
+        {activeSelectionKey === 'Cement' && (
+          <MaterialSelectionModal
+            visible={isModalVisible}
+            title="Select Cement Material"
+            materials={materials
+              .filter(m => m.type === 'Cement')
+              .map(m => ({
+                id: m.id,
+                name: m.name,
+                brand: m.brand,
+                imageUrl: m.imageUrl,
+                pricePerUnit: parseFloat(m.pricePerUnit),
+                currency: '₹',
+                unit: m.unit || 'Bag',
+                dimensions: m.dimensions,
+                category: 'Materials',
+                availability: m.availability || 'In Stock',
+                rating: m.rating || 0,
+                reviews: m.reviews || 0,
+                discount: m.discount || 0,
+              }))}
+            selectedMaterialId={selections['Cement']?.id}
+            onMaterialSelect={(material) => {
+              const selectedMaterial = materials.find(m => m.id === material.id);
+              if (selectedMaterial) {
+                setSelections({...selections, Cement: selectedMaterial});
+              }
+            }}
+            onClose={() => setIsModalVisible(false)}
+            displayMode="list"
+          />
+        )}
+
+        {activeSelectionKey === 'Sand' && (
+          <MaterialSelectionModal
+            visible={isModalVisible}
+            title="Select Sand Material"
+            materials={materials
+              .filter(m => m.type === 'Sand')
+              .map(m => ({
+                id: m.id,
+                name: m.name,
+                brand: m.brand,
+                imageUrl: m.imageUrl,
+                pricePerUnit: parseFloat(m.pricePerUnit),
+                currency: '₹',
+                unit: m.unit || 'cft',
+                dimensions: m.dimensions,
+                category: 'Materials',
+                availability: m.availability || 'In Stock',
+                rating: m.rating || 0,
+                reviews: m.reviews || 0,
+                discount: m.discount || 0,
+              }))}
+            selectedMaterialId={selections['Sand']?.id}
+            onMaterialSelect={(material) => {
+              const selectedMaterial = materials.find(m => m.id === material.id);
+              if (selectedMaterial) {
+                setSelections({...selections, Sand: selectedMaterial});
+              }
+            }}
+            onClose={() => setIsModalVisible(false)}
+            displayMode="list"
+          />
+        )}
 
       </SafeAreaView>
     </View>

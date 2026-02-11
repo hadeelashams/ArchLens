@@ -5,9 +5,9 @@ import {
 } from 'react-native';
 import { 
   db, createDocument, updateDocument, deleteDocument, 
-  CONSTRUCTION_HIERARCHY, MATERIAL_UNITS 
+  CONSTRUCTION_HIERARCHY, MATERIAL_UNITS, WALL_MATERIALS_SEED_DATA
 } from '@archlens/shared';
-import { collection, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, serverTimestamp, doc, writeBatch } from 'firebase/firestore';
 import { Feather } from '@expo/vector-icons';
 import { Sidebar } from './Sidebar';
 
@@ -19,6 +19,9 @@ export default function DashboardScreen({ navigation }: any) {
   const [filteredMaterials, setFilteredMaterials] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saveLoading, setSaveLoading] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [isSeedingWallMaterials, setIsSeedingWallMaterials] = useState(false);
+  const [showSeedConfirm, setShowSeedConfirm] = useState(false);
 
   // --- UI STATE ---
   const [searchQuery, setSearchQuery] = useState('');
@@ -41,12 +44,17 @@ export default function DashboardScreen({ navigation }: any) {
 
   // 1. Fetch Data
   useEffect(() => {
+    console.log('📡 Setting up real-time listener for materials...');
     const q = query(collection(db, 'materials'), orderBy('updatedAt', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
+      console.log(`📥 Received ${snapshot.docs.length} materials from Firestore`);
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setMaterials(data);
       setFilteredMaterials(data);
       setLoading(false);
+    }, (error) => {
+      console.error('❌ Firestore Listener Error:', error.message);
+      Alert.alert('Firestore Error', `Listener failed: ${error.message}`);
     });
     return unsubscribe;
   }, []);
@@ -114,11 +122,35 @@ export default function DashboardScreen({ navigation }: any) {
         updatedAt: serverTimestamp()
       };
       
-      if (editingId) await updateDocument('materials', editingId, payload);
-      else await createDocument('materials', payload);
-      setModalVisible(false);
-      resetForm();
-    } catch (e: any) { Alert.alert("Error", e.message); }
+      console.log('📤 Attempting to save material:', payload);
+      
+      let savedId = null;
+      if (editingId) {
+        await updateDocument('materials', editingId, payload);
+        savedId = editingId;
+        console.log('✅ Material updated:', editingId);
+      } else {
+        savedId = await createDocument('materials', payload);
+        console.log('✅ Material created with ID:', savedId);
+      }
+      
+      // Wait briefly for real-time listener to update
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+      
+      Alert.alert(
+        "✅ Saved Successfully!", 
+        `"${name}" has been added.\n\nIt will appear in the list within seconds.`,
+        [{ text: "Got It", onPress: () => { setModalVisible(false); resetForm(); } }]
+      );
+    } catch (e: any) { 
+      console.error('❌ Save Error Details:', {
+        message: e.message,
+        code: e.code,
+        fullError: e
+      });
+      Alert.alert("Save Failed ❌", `${e.message || 'Unknown error'}\n\nCheck console for details.`); 
+    }
     setSaveLoading(false);
   };
 
@@ -126,6 +158,62 @@ export default function DashboardScreen({ navigation }: any) {
     setEditingId(null); setSelCategory(null); setSelSubCategory(null); setSelIngredient(null);
     setName(''); setPrice(''); setUnit(''); setGrade(''); setDimensions(''); setImageUrl('');
   };
+
+  // ===== SEED WALL MATERIALS FUNCTION =====
+  const handleSeedWallMaterials = async () => {
+    console.log('🔘 Seed button clicked!');
+    console.log('WALL_MATERIALS_SEED_DATA available:', !!WALL_MATERIALS_SEED_DATA);
+    console.log('Data length:', WALL_MATERIALS_SEED_DATA?.length);
+    setShowSeedConfirm(true);
+  };
+
+  const confirmSeed = async () => {
+    setShowSeedConfirm(false);
+    console.log('Starting seed process...');
+    setIsSeedingWallMaterials(true);
+    await seedMaterials();
+  };
+
+  const seedMaterials = async () => {
+    try {
+      console.log('📝 Creating batch write...');
+      console.log('Materials to seed:', WALL_MATERIALS_SEED_DATA.length);
+      
+      const batch = writeBatch(db);
+      let count = 0;
+
+      for (const material of WALL_MATERIALS_SEED_DATA) {
+        const ref = doc(collection(db, 'materials'));
+        
+        batch.set(ref, {
+          ...material,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        count++;
+      }
+
+      console.log(`✅ Batch ready: ${count} materials`);
+      await batch.commit();
+      
+      console.log('✨ Batch successfully committed to Firestore!');
+      setIsSeedingWallMaterials(false);
+      
+      Alert.alert(
+        "✨ Success!",
+        `All 19 wall materials have been added!\n\nThey will appear in the list below.`
+      );
+    } catch (error: any) {
+      console.error('❌ Batch Error:', {
+        message: error.message,
+        code: error.code,
+        fullError: error
+      });
+      setIsSeedingWallMaterials(false);
+      Alert.alert("❌ Seed Failed", error.message || "Unknown error occurred");
+    }
+  };
+
 
   const openEdit = (item: any) => {
     setEditingId(item.id); 
@@ -183,6 +271,20 @@ export default function DashboardScreen({ navigation }: any) {
                 onChangeText={setSearchQuery}
               />
             </View>
+            <TouchableOpacity 
+              style={[styles.secondaryBtn, isSeedingWallMaterials && { opacity: 0.6 }]} 
+              onPress={handleSeedWallMaterials}
+              disabled={isSeedingWallMaterials}
+            >
+              {isSeedingWallMaterials ? (
+                <ActivityIndicator color="#1e293b" size={18} />
+              ) : (
+                <>
+                  <Feather name="download" size={18} color="#1e293b" />
+                  <Text style={[styles.btnText, { color: '#1e293b' }]}>Seed Wall (19)</Text>
+                </>
+              )}
+            </TouchableOpacity>
             <TouchableOpacity style={styles.primaryBtn} onPress={() => { resetForm(); setModalVisible(true); }}>
               <Feather name="plus" size={18} color="#fff" />
               <Text style={styles.btnText}>Add Material</Text>
@@ -203,6 +305,25 @@ export default function DashboardScreen({ navigation }: any) {
               </TouchableOpacity>
             ))}
           </ScrollView>
+        </View>
+
+        {/* SYNC STATUS BAR */}
+        <View style={{ 
+          flexDirection: 'row', 
+          alignItems: 'center', 
+          gap: 8,
+          paddingHorizontal: 16,
+          paddingVertical: 10,
+          backgroundColor: '#f0fdf4',
+          borderRadius: 12,
+          marginBottom: 15,
+          borderLeftWidth: 4,
+          borderLeftColor: '#10b981'
+        }}>
+          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#10b981' }} />
+          <Text style={{ fontSize: 12, color: '#166534', fontWeight: '500' }}>
+            🔄 Real-time sync active • {materials.length} materials loaded
+          </Text>
         </View>
 
         {/* DATA TABLE */}
@@ -419,9 +540,74 @@ export default function DashboardScreen({ navigation }: any) {
 
             </ScrollView>
 
-            <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={saveLoading}>
-              {saveLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>Save Material</Text>}
-            </TouchableOpacity>
+            {/* SAVE BUTTON WITH FEEDBACK */}
+            <View style={{ gap: 10 }}>
+              <TouchableOpacity 
+                style={[
+                  styles.saveBtn, 
+                  saveLoading && { opacity: 0.6 },
+                  saveSuccess && { backgroundColor: '#10b981' }
+                ]} 
+                onPress={handleSave} 
+                disabled={saveLoading}
+              >
+                {saveLoading ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                    <ActivityIndicator color="#fff" />
+                    <Text style={styles.saveBtnText}>Saving...</Text>
+                  </View>
+                ) : saveSuccess ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                    <Text style={styles.saveBtnText}>✅ Saved!</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.saveBtnText}>💾 Save Material</Text>
+                )}
+              </TouchableOpacity>
+              <Text style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center' }}>
+                Data syncs to Firestore automatically
+              </Text>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* SEED CONFIRMATION MODAL */}
+      <Modal visible={showSeedConfirm} animationType="fade" transparent>
+        <View style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.7)', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 24, padding: 40, width: 500, gap: 20 }}>
+            <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#0f172a' }}>🌱 Seed Wall Materials?</Text>
+            <Text style={{ fontSize: 14, color: '#64748b', lineHeight: 20 }}>
+              This will add all 19 wall materials (bricks, blocks, cement, sand) to Firestore.
+            </Text>
+            
+            <View style={{ backgroundColor: '#f0fdf4', padding: 15, borderRadius: 12, gap: 6 }}>
+              <Text style={{ fontSize: 13, fontWeight: '600', color: '#166534' }}>✓ 3 brick types (load bearing)</Text>
+              <Text style={{ fontSize: 13, fontWeight: '600', color: '#166534' }}>✓ 4 concrete blocks (load bearing)</Text>
+              <Text style={{ fontSize: 13, fontWeight: '600', color: '#166534' }}>✓ 2 natural stones</Text>
+              <Text style={{ fontSize: 13, fontWeight: '600', color: '#166534' }}>✓ 4 partition blocks (AAC+Hollow)</Text>
+              <Text style={{ fontSize: 13, fontWeight: '600', color: '#166534' }}>✓ 6 mortar materials (Cement+Sand)</Text>
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <TouchableOpacity 
+                style={{ flex: 1, padding: 14, borderRadius: 12, backgroundColor: '#e2e8f0', alignItems: 'center' }}
+                onPress={() => setShowSeedConfirm(false)}
+              >
+                <Text style={{ fontWeight: '600', color: '#475569' }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={{ flex: 1, padding: 14, borderRadius: 12, backgroundColor: '#10b981', alignItems: 'center' }}
+                onPress={confirmSeed}
+                disabled={isSeedingWallMaterials}
+              >
+                {isSeedingWallMaterials ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={{ fontWeight: '600', color: '#fff' }}>Seed Now 🚀</Text>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -439,6 +625,7 @@ const styles = StyleSheet.create({
   searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 12, paddingHorizontal: 15, width: 350, borderWidth: 1, borderColor: '#e2e8f0' },
   searchInput: { flex: 1, paddingVertical: 12, marginLeft: 10, fontSize: 14, outlineStyle: 'none' } as any,
   primaryBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: BLUE_ARCH, paddingHorizontal: 22, borderRadius: 12, gap: 8 },
+  secondaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f0f4f8', paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12, gap: 8, borderWidth: 2, borderColor: '#cbd5e1' },
   btnText: { color: '#fff', fontWeight: 'bold' },
   filterRow: { marginBottom: 25, height: 45 },
   filterChip: { paddingHorizontal: 20, paddingVertical: 10, backgroundColor: '#fff', borderRadius: 12, marginRight: 12, borderWidth: 1, borderColor: '#e2e8f0', justifyContent: 'center' },
@@ -490,7 +677,7 @@ const styles = StyleSheet.create({
   miniChip: { backgroundColor: '#f1f5f9', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, marginRight: 6 },
   miniChipText: { fontSize: 11, color: '#64748b' },
 
-  saveBtn: { backgroundColor: BLUE_ARCH, padding: 18, borderRadius: 14, alignItems: 'center', marginTop: 30 },
+  saveBtn: { backgroundColor: BLUE_ARCH, padding: 18, borderRadius: 14, alignItems: 'center', marginTop: 20, justifyContent: 'center' },
   saveBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
 
   // Unit Picker Styles
