@@ -12,7 +12,9 @@ import {
   WALL_TYPE_SPECS, 
   WallType, 
   CONSTRUCTION_HIERARCHY, 
-  auth
+  auth,
+  getComponentRecommendation,
+  detectWallComposition
 } from '@archlens/shared';
 import { collection, query, onSnapshot, serverTimestamp, addDoc } from 'firebase/firestore';
 
@@ -28,7 +30,7 @@ const CFT_PER_M3 = 35.3147;
 // -----------------------------------------------------------------
 
 export default function WallScreen({ route, navigation }: any) {
-  const { totalArea = 1000, rooms = [], projectId, tier = 'Standard' } = route.params || {};
+  const { totalArea = 1000, rooms = [], projectId, tier = 'Standard', wallComposition } = route.params || {};
 
   // --- DATA STATE ---
   const [loading, setLoading] = useState(true);
@@ -47,16 +49,28 @@ export default function WallScreen({ route, navigation }: any) {
   const [loadBearingBrick, setLoadBearingBrick] = useState<any>(null);
   const [partitionBrick, setPartitionBrick] = useState<any>(null);
   
-  // --- INPUT FIELDS (Inches for thickness, Feet for height) ---
+  // --- INPUT FIELDS (Inches for thickness, Feet for height) - VALUES FROM AI ONLY ---
   const [height, setHeight] = useState('10.5');
-  const [wallThickness, setWallThickness] = useState('9'); // Wall Thickness in INCHES (e.g., 9 for a 9" wall)
+  const [wallThickness, setWallThickness] = useState(''); // Wall Thickness in INCHES - from AI detection only
   const [jointThickness, setJointThickness] = useState('0.375'); // Mortar Joint Thickness in INCHES (3/8 inch)
-  const [openingDeduction, setOpeningDeduction] = useState('20');
+  const [openingDeduction, setOpeningDeduction] = useState(''); // From AI detection only
   
-  // --- METADATA FROM AI ANALYSIS ---
-  const [avgOpeningPercentage, setAvgOpeningPercentage] = useState(20); // Will be updated from rooms data
-  const [avgMainWallRatio, setAvgMainWallRatio] = useState(0.6); // Load-Bearing wall proportion
-  const [avgPartitionWallRatio, setAvgPartitionWallRatio] = useState(0.4); // Partition wall proportion
+  // --- METADATA FROM AI ANALYSIS (NO DEFAULTS - AI ONLY) ---
+  const [avgOpeningPercentage, setAvgOpeningPercentage] = useState(0); // Will be updated from AI detection only
+  const [avgMainWallRatio, setAvgMainWallRatio] = useState(0); // Load-Bearing wall proportion from AI
+  const [avgPartitionWallRatio, setAvgPartitionWallRatio] = useState(0); // Partition wall proportion from AI
+  const [isDetectingComposition, setIsDetectingComposition] = useState(false);
+  const [compositionDetected, setCompositionDetected] = useState(false); // Track if AI detection was successful
+
+  // --- AI RECOMMENDATION STATE ---
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [aiAdvice, setAiAdvice] = useState("");
+  const [aiRecommendations, setAiRecommendations] = useState<Record<string, string>>({
+    loadBearingBrick: null,
+    partitionBrick: null,
+    cement: null,
+    sand: null
+  });
 
   // 1. Fetch Materials Once
   useEffect(() => {
@@ -69,10 +83,125 @@ export default function WallScreen({ route, navigation }: any) {
     return unsub;
   }, []);
 
-  // 1.5. Extract Wall Metadata from Rooms (Deep Metadata Extraction)
+  // 1.5. AI Detect Wall Composition from Floor Plan (or use pre-computed from floor plan analysis)
   useEffect(() => {
+    // If wall composition was already computed during floor plan analysis, use it directly
+    if (wallComposition && typeof wallComposition === 'object') {
+      console.log('📊 Using pre-computed wall composition from floor plan analysis:', wallComposition);
+      
+      const loadBearing = Math.round(parseFloat(wallComposition.loadBearingPercentage));
+      const partition = Math.round(parseFloat(wallComposition.partitionPercentage));
+      const opening = Math.round(parseFloat(wallComposition.openingPercentage));
+      const thickness = parseFloat(wallComposition.averageWallThickness);
+
+      // Validate the values
+      if (!isNaN(loadBearing) && !isNaN(partition) && !isNaN(opening) && loadBearing >= 0 && partition >= 0) {
+        setAvgMainWallRatio(loadBearing / 100);
+        setAvgPartitionWallRatio(partition / 100);
+        setAvgOpeningPercentage(opening);
+        setCompositionDetected(true);
+
+        // Set wall thickness from AI analysis
+        if (!isNaN(thickness) && thickness > 0) {
+          setWallThickness(thickness.toFixed(2));
+        } else {
+          // Fallback thickness calculation
+          const estimatedThickness = (loadBearing / 100 * 9) + (partition / 100 * 4.5);
+          setWallThickness(estimatedThickness.toFixed(2));
+        }
+        setOpeningDeduction(opening.toString());
+
+        console.log('✓ Applied pre-computed wall composition:', {
+          loadBearingPercentage: loadBearing,
+          partitionPercentage: partition,
+          openingPercentage: opening,
+          wallThickness: thickness || 'calculated',
+          confidence: wallComposition.confidence
+        });
+      } else {
+        console.warn('Wall composition values invalid, will detect from rooms:', { loadBearing, partition, opening });
+      }
+      return; // Skip AI detection since we already have the data
+    }
+
+    // Otherwise, detect wall composition from room data
+    if (rooms && rooms.length > 0 && totalArea > 0) {
+      setIsDetectingComposition(true);
+      detectWallComposition(rooms, totalArea)
+        .then((composition: any) => {
+          console.log('📊 Received wall composition:', composition);
+          
+          // Validate and parse AI response
+          const loadBearing = Math.round(parseFloat(composition.loadBearingPercentage));
+          const partition = Math.round(parseFloat(composition.partitionPercentage));
+          const opening = Math.round(parseFloat(composition.openingPercentage));
+
+          // Validate the values
+          if (isNaN(loadBearing) || isNaN(partition) || isNaN(opening)) {
+            throw new Error('AI returned invalid numeric values');
+          }
+
+          if (loadBearing < 0 || loadBearing > 100 || partition < 0 || partition > 100) {
+            throw new Error('AI returned out-of-range percentages');
+          }
+
+          // Convert percentages to ratios - AI values only
+          const totalPercent = loadBearing + partition;
+          if (totalPercent === 0) {
+            throw new Error('AI returned zero total wall percentage');
+          }
+          
+          setAvgMainWallRatio(loadBearing / 100);
+          setAvgPartitionWallRatio(partition / 100);
+          setAvgOpeningPercentage(opening);
+          setCompositionDetected(true);
+
+          // Update wall thickness based on detected composition
+          const avgMain = loadBearing / 100;
+          const estimatedThickness = (avgMain * 9) + ((100 - loadBearing) / 100 * 4.5);
+          setWallThickness(estimatedThickness.toFixed(2));
+          setOpeningDeduction(opening.toString());
+
+          console.log('✓ AI Detected Wall Composition:', {
+            loadBearingPercentage: loadBearing,
+            partitionPercentage: partition,
+            openingPercentage: opening,
+            confidence: composition.confidence
+          });
+        })
+        .catch((error: any) => {
+          // No fallback - always require AI detection
+          console.error('❌ Wall composition AI detection failed:', {
+            message: error?.message,
+            roomCount: rooms?.length,
+            totalArea,
+            error
+          });
+          setCompositionDetected(false);
+          setIsDetectingComposition(false);
+          // Notify user that AI detection is required
+          Alert.alert(
+            'AI Analysis Required',
+            `Wall composition detection failed: ${error?.message || 'Unknown error'}. Please try again or check your internet connection.`,
+            [{ text: 'OK' }]
+          );
+        })
+        .finally(() => {
+          setIsDetectingComposition(false);
+        });
+    }
+  }, [rooms, totalArea, wallComposition]);
+
+  // 1.6. Extract Wall Metadata from Rooms (AI-Only Metadata Extraction)
+  // Skip if we already have wall composition from floor plan analysis
+  useEffect(() => {
+    // Skip if we already have pre-computed wall composition
+    if (wallComposition) {
+      return;
+    }
+
     if (rooms && rooms.length > 0) {
-      // Calculate averages from room metadata
+      // Calculate averages from room metadata - AI-generated only
       let totalMainRatio = 0;
       let totalPartitionRatio = 0;
       let totalOpeningPercentage = 0;
@@ -80,8 +209,8 @@ export default function WallScreen({ route, navigation }: any) {
 
       rooms.forEach((room: any) => {
         if (room.wallMetadata) {
-          totalMainRatio += room.wallMetadata.mainWallRatio || 0.6;
-          totalPartitionRatio += room.wallMetadata.partitionWallRatio || 0.4;
+          totalMainRatio += room.wallMetadata.mainWallRatio;
+          totalPartitionRatio += room.wallMetadata.partitionWallRatio;
           roomsWithMetadata++;
         }
         if (room.openingPercentage) {
@@ -89,6 +218,7 @@ export default function WallScreen({ route, navigation }: any) {
         }
       });
 
+      // Only use AI-generated metadata - no defaults
       if (roomsWithMetadata > 0) {
         const avgMain = totalMainRatio / roomsWithMetadata;
         const avgPartition = totalPartitionRatio / roomsWithMetadata;
@@ -104,18 +234,21 @@ export default function WallScreen({ route, navigation }: any) {
         const estimatedThickness = (avgMain * 9) + (avgPartition * 4.5);
         setWallThickness(estimatedThickness.toFixed(2));
 
-        // Update opening deduction based on AI analysis
+        // Update opening deduction based on detected data
         setOpeningDeduction(avgOpening.toString());
 
-        console.log(`Wall Metadata Extracted:`, {
+        console.log(`Wall Metadata Extracted (AI-Only):`, {
           mainWallRatio: avgMain.toFixed(2),
           partitionWallRatio: avgPartition.toFixed(2),
           estimatedThickness: estimatedThickness.toFixed(2),
           estimatedOpeningDeduction: avgOpening,
+          source: 'ai-metadata'
         });
+      } else {
+        console.warn('No AI-generated wall metadata available - waiting for AI analysis');
       }
     }
-  }, [rooms]);
+  }, [rooms, wallComposition]);
 
   // 2. Default Selections Logic
   useEffect(() => {
@@ -154,13 +287,14 @@ export default function WallScreen({ route, navigation }: any) {
     }
   }, [materials, tier]);
 
-  // 3. Calculation Engine (Updated for weighted material-specific quantity)
+  // 3. Calculation Engine (Layer Logic with Wythes & Orientation Awareness)
   const calculation = useMemo(() => { 
     
     const h_ft = parseFloat(height) || 0; // Height in Feet
-    const wt_in = parseFloat(wallThickness) || 0; // Wall Thickness in Inches
-    const jt_in = parseFloat(jointThickness) || 0; // Joint Thickness in Inches
+    const wt_in = parseFloat(wallThickness) || 0; // Wall Thickness in INCHES - CRITICAL for layer calculation
     const ded = (parseFloat(openingDeduction) || 0) / 100;
+    const jt_in = parseFloat(jointThickness) || 0; // Joint thickness in inches
+    
     const selectedLoadBearing = loadBearingBrick;
     const selectedPartition = partitionBrick;
 
@@ -172,112 +306,153 @@ export default function WallScreen({ route, navigation }: any) {
       partitionBrand: 'Not Selected',
       cementBrand: 'Not Selected', 
       sandBrand: 'Not Selected', 
-      mortarMix: '1:0' 
+      mortarMix: '1:0',
+      layers: 0
     };
 
-    // --- 1. Running Length & Total Volume (in CUM) ---
-    const runningLength_ft = (rooms?.length > 0) 
-      ? (rooms.reduce((acc: number, r: any) => acc + (2 * (parseFloat(r.length || 0) + parseFloat(r.width || 0))), 0)) * 0.7
-      : 4 * Math.sqrt(totalArea || 1000) * 0.7;
-    
-    const wallLength_m = runningLength_ft * FT_TO_M;
-    const wallHeight_m = h_ft * FT_TO_M;
-    const wallThickness_m = wt_in * IN_TO_FT * FT_TO_M; 
-
-    const totalVolume_m3 = (wallLength_m * wallHeight_m * wallThickness_m) * (1 - ded);
-
-    // --- 2. Split Volume based on AI Detected Ratios ---
-    const loadBearingVolume_m3 = totalVolume_m3 * avgMainWallRatio;
-    const partitionVolume_m3 = totalVolume_m3 * avgPartitionWallRatio;
-
+    // --- Helper: Calculate Material Quantity with Layer Logic ---
     /**
-     * Helper function to calculate quantities for a given brick type and volume
+     * Layer Logic (Wythes): Calculates how many layers of bricks are needed
+     * to fill the wall thickness, then multiplies by the number of bricks
+     * needed per layer based on face area.
      */
-    const calculateForBrickType = (brick: any, volume: number, mortarSpec: {cementMortar: number, sandMortar: number}) => {
-      if (!brick || volume <= 0) return { qty: 0, brickVolume: 0, mortarVolume: 0 };
+    const calculateType = (brick: any, faceArea_sqft: number, targetWallThick_in: number) => {
+      if (!brick || faceArea_sqft <= 0) return { qty: 0, mortarVol_ft3: 0, layers: 0 };
 
-      const dimsMatch = brick.dimensions?.match(/(\d+(\.\d+)?)\s*x\s*(\d+(\.\d+)?)\s*x\s*(\d+(\.\d+)?)/)
-      if (!dimsMatch) return { qty: 0, brickVolume: 0, mortarVolume: 0 };
+      // 1. Parse Dimensions (Length x Width x Height) from string
+      // Example: "7 x 3 x 2" -> L:7, W:3 (thickness), H:2
+      const dims = brick.dimensions?.toLowerCase().split('x').map((v: string) => parseFloat(v.trim())) || [9, 4, 3];
+      const bL_in = dims[0]; // Face length
+      const bW_in = dims[1]; // Brick width (thickness)
+      const bH_in = dims[2]; // Face height
 
-      const brickDimsIn = [
-        parseFloat(dimsMatch[1]), 
-        parseFloat(dimsMatch[3]), 
-        parseFloat(dimsMatch[5])
-      ].sort((a, b) => b - a);
+      // 2. Calculate Layers (Wythes)
+      // If wall is 9" and brick is 3" wide, you need 3 layers
+      const layers = Math.max(1, Math.round(targetWallThick_in / bW_in));
 
-      const brickVolume_m3 = (brickDimsIn[0] * brickDimsIn[1] * brickDimsIn[2]) * IN_TO_FT * IN_TO_FT * IN_TO_FT * FT_TO_M * FT_TO_M * FT_TO_M;
-      const totalL_m = (brickDimsIn[0] + jt_in) * IN_TO_FT * FT_TO_M;
-      const totalW_m = (brickDimsIn[1] + jt_in) * IN_TO_FT * FT_TO_M;
-      const totalH_m = (brickDimsIn[2] + jt_in) * IN_TO_FT * FT_TO_M;
-      const totalVolumePerBrick_m3 = totalL_m * totalW_m * totalH_m;
+      // 3. Face Area of one brick WITH mortar joint
+      const bL_ft = (bL_in + jt_in) * IN_TO_FT;
+      const bH_ft = (bH_in + jt_in) * IN_TO_FT;
+      const brickFaceArea_sqft = bL_ft * bH_ft;
 
-      const qty = Math.round(volume / totalVolumePerBrick_m3);
-      const totalBrickVolume = qty * brickVolume_m3;
-      const mortarVolume = volume - totalBrickVolume;
+      // 4. Calculate Quantity
+      // (Wall Face Area / Brick Face Area) * number of layers * 1.05 (5% wastage)
+      const baseQty = faceArea_sqft / brickFaceArea_sqft;
+      const qty = Math.ceil(baseQty * layers * 1.05);
 
-      return { qty, brickVolume: totalBrickVolume, mortarVolume };
+      // 5. Calculate Mortar Volume (The "Void" Logic)
+      // Total Wall Volume - Total Physical Brick Volume
+      const totalWallVol_ft3 = faceArea_sqft * (targetWallThick_in * IN_TO_FT);
+      const singleBrickPhysVol_ft3 = (bL_in * bW_in * bH_in) * Math.pow(IN_TO_FT, 3);
+      const totalBrickPhysVol_ft3 = qty * singleBrickPhysVol_ft3;
+      
+      const mortarVol_ft3 = Math.max(0, totalWallVol_ft3 - totalBrickPhysVol_ft3);
+
+      return { qty, mortarVol_ft3, layers };
     };
 
-    // Calculate for Load-Bearing
-    const loadBearingCalc = calculateForBrickType(selectedLoadBearing, loadBearingVolume_m3, WALL_TYPE_SPECS['Load Bearing']);
+    // --- 1. Calculate Total Wall Face Area (Length × Height) ---
+    const runningLength_ft = (rooms?.length > 0) 
+      ? (rooms.reduce((acc: number, r: any) => acc + (2 * (parseFloat(r.length || 0) + parseFloat(r.width || 0))), 0)) * 0.55
+      : 4 * Math.sqrt(totalArea || 1000) * 0.55;
     
-    // Calculate for Partition
-    const partitionCalc = calculateForBrickType(selectedPartition, partitionVolume_m3, WALL_TYPE_SPECS['Non-Load Bearing']);
+    const wallFaceArea_sqft = runningLength_ft * h_ft;
+    const netWallFaceArea_sqft = wallFaceArea_sqft * (1 - ded); // Deduct openings
 
-    // --- 3. Combined Mortar and Material Quantities ---
-    const totalMortarVolume_m3 = loadBearingCalc.mortarVolume + partitionCalc.mortarVolume;
-    const dryMortar_m3 = totalMortarVolume_m3 * DRY_VOL_MULTIPLIER;
+    // --- 2. Split Face Area based on AI Detected Wall Composition ---
+    const lbFaceArea_sqft = netWallFaceArea_sqft * avgMainWallRatio;
+    const pbFaceArea_sqft = netWallFaceArea_sqft * avgPartitionWallRatio;
 
-    // --- For cement/sand, use weighted average of mortar specs ---
-    const avgCementParts = (WALL_TYPE_SPECS['Load Bearing'].cementMortar * avgMainWallRatio) + 
-                           (WALL_TYPE_SPECS['Non-Load Bearing'].cementMortar * avgPartitionWallRatio);
-    const avgSandParts = (WALL_TYPE_SPECS['Load Bearing'].sandMortar * avgMainWallRatio) + 
-                         (WALL_TYPE_SPECS['Non-Load Bearing'].sandMortar * avgPartitionWallRatio);
-    const parts = avgCementParts + avgSandParts;
+    // --- 3. Calculate quantities using Layer Logic ---
+    // For Load-Bearing walls, use the selected wall thickness (9" typical)
+    const lbCalc = calculateType(selectedLoadBearing, lbFaceArea_sqft, wt_in);
+    
+    // For Partition walls, ALWAYS use standard thickness (4.5")
+    // Partition walls are independent of overall wall thickness composition
+    const pbWallThick_in = 4.5;
+    const pbCalc = calculateType(selectedPartition, pbFaceArea_sqft, pbWallThick_in);
 
-    const cementVol_m3 = dryMortar_m3 * (avgCementParts / parts);
-    const sandVol_m3 = dryMortar_m3 * (avgSandParts / parts);
+    // --- 4. Convert Mortar Volume (ft³) to m³ and apply dry factor ---
+    const FT3_TO_M3 = Math.pow(FT_TO_M, 3);
+    const lbMortarVol_m3 = lbCalc.mortarVol_ft3 * FT3_TO_M3;
+    const pbMortarVol_m3 = pbCalc.mortarVol_ft3 * FT3_TO_M3;
 
-    const cementBags = Math.ceil(cementVol_m3 * CEMENT_BAGS_PER_M3);
+    const totalMortarVolume_m3 = lbMortarVol_m3 + pbMortarVol_m3;
+
+    // --- 5. Calculate Cement and Sand using actual mortar specs ---
+    const lbMortarSpec = WALL_TYPE_SPECS['Load Bearing'];
+    const pbMortarSpec = WALL_TYPE_SPECS['Non-Load Bearing'];
+
+    // Apply dry volume multiplier ONCE to get total dry mortar, then split by ratio
+    const lbDryMortar_m3 = lbMortarVol_m3 * DRY_VOL_MULTIPLIER;
+    const pbDryMortar_m3 = pbMortarVol_m3 * DRY_VOL_MULTIPLIER;
+
+    const lbCementVol = lbDryMortar_m3 * (lbMortarSpec.cementMortar / (lbMortarSpec.cementMortar + lbMortarSpec.sandMortar));
+    const lbSandVol = lbDryMortar_m3 * (lbMortarSpec.sandMortar / (lbMortarSpec.cementMortar + lbMortarSpec.sandMortar));
+
+    const pbCementVol = pbDryMortar_m3 * (pbMortarSpec.cementMortar / (pbMortarSpec.cementMortar + pbMortarSpec.sandMortar));
+    const pbSandVol = pbDryMortar_m3 * (pbMortarSpec.sandMortar / (pbMortarSpec.cementMortar + pbMortarSpec.sandMortar));
+
+    const totalCementVol_m3 = lbCementVol + pbCementVol;
+    const totalSandVol_m3 = lbSandVol + pbSandVol;
+
+    const cementBags = Math.ceil(totalCementVol_m3 * CEMENT_BAGS_PER_M3);
+
+    // --- 6. Mortar Ratio (Cement:Sand in 1:X format) ---
+    const mortarRatio = totalCementVol_m3 > 0 ? (totalSandVol_m3 / totalCementVol_m3).toFixed(1) : '0';
+
+    // --- 7. Sand Quantity with Unit-Price Sync ---
     const sandUnit = selections['Sand']?.unit?.toLowerCase() || 'cft';
     let finalSandQty: number;
     let sandUnitDisplay: string;
     
-    if (sandUnit.includes('cft')) {
-        finalSandQty = sandVol_m3 * CFT_PER_M3;
+    if (sandUnit.includes('cft') || sandUnit.includes('cubic')) {
+        finalSandQty = totalSandVol_m3 * CFT_PER_M3;
         sandUnitDisplay = 'cft';
-    } else if (sandUnit.includes('ton')) {
-        finalSandQty = (sandVol_m3 * SAND_DENSITY_KG_M3) / 1000;
+    } else if (sandUnit.includes('ton') || sandUnit.includes('tonne')) {
+        finalSandQty = (totalSandVol_m3 * SAND_DENSITY_KG_M3) / 1000;
         sandUnitDisplay = 'Ton';
-    } else {
-        finalSandQty = sandVol_m3 * SAND_DENSITY_KG_M3;
+    } else if (sandUnit.includes('kg')) {
+        finalSandQty = totalSandVol_m3 * SAND_DENSITY_KG_M3;
         sandUnitDisplay = 'kg';
+    } else {
+        finalSandQty = totalSandVol_m3 * CFT_PER_M3;
+        sandUnitDisplay = 'cft';
     }
     finalSandQty = parseFloat(finalSandQty.toFixed(2));
 
-    // --- 4. Cost Calculation ---
+    // --- 8. Cost Calculation with Unit-Price Sync ---
     const lbPrice = parseFloat(selectedLoadBearing?.pricePerUnit || 0);
     const pbPrice = parseFloat(selectedPartition?.pricePerUnit || 0);
     const cPrice = parseFloat(selections['Cement']?.pricePerUnit || 0);
     const sPrice = parseFloat(selections['Sand']?.pricePerUnit || 0);
 
-    const lbCost = Math.round(lbPrice * loadBearingCalc.qty);
-    const pbCost = Math.round(pbPrice * partitionCalc.qty);
+    const lbCost = Math.round(lbPrice * lbCalc.qty);
+    const pbCost = Math.round(pbPrice * pbCalc.qty);
     const cCost = Math.round(cPrice * cementBags);
-    const sCost = Math.round(sPrice * finalSandQty);
+    
+    // Sand cost must match unit in database
+    let sCost = 0;
+    if (sandUnit.includes('ton')) {
+        const sandQtyInTon = (totalSandVol_m3 * SAND_DENSITY_KG_M3) / 1000;
+        sCost = Math.round(sandQtyInTon * sPrice);
+    } else {
+        sCost = Math.round(finalSandQty * sPrice);
+    }
     
     return {
-      brickQty: loadBearingCalc.qty + partitionCalc.qty, 
-      loadBearingQty: loadBearingCalc.qty,
-      partitionQty: partitionCalc.qty,
+      brickQty: lbCalc.qty + pbCalc.qty, 
+      loadBearingQty: lbCalc.qty,
+      partitionQty: pbCalc.qty,
       cementBags, sandQty: finalSandQty, sandUnit: sandUnitDisplay,
       loadBearingBrand: selectedLoadBearing?.name || 'Not Selected',
       partitionBrand: selectedPartition?.name || 'Not Selected',
       cementBrand: selections['Cement']?.name || 'Not Selected',
       sandBrand: selections['Sand']?.name || 'Not Selected',
-      mortarMix: `1:${(avgSandParts).toFixed(1)}`,
+      mortarMix: `1:${mortarRatio}`,
       totalCost: Math.round(lbCost + pbCost + cCost + sCost),
-      costBreakdown: { bricks: lbCost + pbCost, cement: cCost, sand: sCost }
+      costBreakdown: { bricks: lbCost + pbCost, cement: cCost, sand: sCost },
+      layers: `LB: ${lbCalc.layers} layers, PB: ${pbCalc.layers} layers`
     };
   }, [height, wallThickness, jointThickness, openingDeduction, selections, loadBearingBrick, partitionBrick, totalArea, rooms, avgMainWallRatio, avgPartitionWallRatio]);
 
@@ -373,6 +548,58 @@ export default function WallScreen({ route, navigation }: any) {
     }
   };
 
+  // 6. AI Auto-Select Handler
+  const handleAiAutoSelect = async () => {
+    setIsAiLoading(true);
+    try {
+      const result = await getComponentRecommendation('Wall', tier, totalArea, materials);
+      
+      // Track which materials the AI recommended
+      const recommendedIds: Record<string, string> = {
+        loadBearingBrick: null,
+        partitionBrick: null,
+        cement: null,
+        sand: null
+      };
+
+      // Apply AI recommendations to selected materials
+      if (result.recommendations && Array.isArray(result.recommendations)) {
+        result.recommendations.forEach((rec: any) => {
+          const match = materials.find(m => m.id === rec.id);
+          if (!match) return;
+
+          // Match recommendation type to state variable
+          const typeStr = rec.type.toLowerCase();
+          
+          if (typeStr.includes('load-bearing') || typeStr.includes('load bearing brick')) {
+            setLoadBearingBrick(match);
+            recommendedIds.loadBearingBrick = rec.id;
+          } else if (typeStr.includes('partition') || typeStr.includes('partition brick')) {
+            setPartitionBrick(match);
+            recommendedIds.partitionBrick = rec.id;
+          } else if (typeStr.includes('cement')) {
+            setSelections(prev => ({...prev, Cement: match}));
+            recommendedIds.cement = rec.id;
+          } else if (typeStr.includes('sand')) {
+            setSelections(prev => ({...prev, Sand: match}));
+            recommendedIds.sand = rec.id;
+          }
+        });
+      }
+
+      // Store recommendations for badge display
+      setAiRecommendations(recommendedIds);
+      setAiAdvice(result.advice || '');
+      
+      Alert.alert("✓ AI Selection Applied", `Materials selected for ${tier} tier. You can still change them manually.`);
+    } catch (error: any) {
+      console.error('AI Selection Error:', error);
+      Alert.alert("AI Error", error.message || "Could not get recommendations. Please select materials manually.");
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
+
   const materialTypeOptions = useMemo(() => {
     return ['Brick', 'Block', 'Stone'];
   }, []);
@@ -412,10 +639,16 @@ export default function WallScreen({ route, navigation }: any) {
 
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           
-          {/* AI EXTRACTED METADATA INFO - TOP SECTION */}
-          {(avgMainWallRatio > 0 || avgPartitionWallRatio > 0) && (
-            <View style={styles.metadataInfoCard}>
-              <Text style={styles.metadataInfoTitle}>📊 AI-Detected Wall Composition</Text>
+          {/* AI EXTRACTED METADATA INFO - TOP SECTION (Always Display) */}
+          <View style={[styles.metadataInfoCard, isDetectingComposition && {opacity: 0.8}]}>
+            <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 12}}>
+              <Text style={styles.metadataInfoTitle}>📊 Wall Composition</Text>
+              {rooms && rooms.length > 0 && (
+                <View style={{marginLeft: 8, backgroundColor: '#10b981', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4}}>
+                  <Text style={{color: '#fff', fontSize: 8, fontWeight: '700'}}>From Rooms</Text>
+                </View>
+              )}
+            </View>
               <View style={styles.metadataInfoRow}>
                 <View style={styles.metadataInfoItem}>
                   <Text style={styles.metadataInfoLabel}>Load-Bearing</Text>
@@ -434,7 +667,6 @@ export default function WallScreen({ route, navigation }: any) {
                 </View>
               </View>
             </View>
-          )}
           
           {/* 1. Dimensions Card (Updated Inputs and Error Display) */}
           <View style={styles.inputCard}>
@@ -445,12 +677,14 @@ export default function WallScreen({ route, navigation }: any) {
                 <TextInput style={styles.input} value={height} onChangeText={setHeight} keyboardType="decimal-pad" />
               </View>
               <View style={styles.inputBox}>
-                <Text style={styles.label}>Wall Thickness (in)</Text>
+                <Text style={styles.label}>Wall Thickness (in)*</Text>
+                <Text style={{fontSize: 11, color: '#666', marginBottom: 4, fontStyle: 'italic'}}>Affects layers & mortar</Text>
                 <TextInput 
                     style={[styles.input, wallThicknessError && {borderColor: '#ef4444'}]} 
                     value={wallThickness} 
                     onChangeText={setWallThickness} 
                     keyboardType="decimal-pad" 
+                    placeholder="e.g. 9"
                 />
               </View>
             </View>
@@ -470,9 +704,26 @@ export default function WallScreen({ route, navigation }: any) {
           </View>
 
           {/* 2. Dual Material Selection (Load-Bearing & Partition) */}
-          <Text style={styles.sectionLabel}>WALL MATERIALS</Text>
+          <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15}}>
+            <Text style={styles.sectionLabel}>WALL MATERIALS</Text>
+            {/* AI Chip Button */}
+            <TouchableOpacity 
+              style={[styles.aiChipButton, isAiLoading && {opacity: 0.6}]} 
+              onPress={handleAiAutoSelect}
+              disabled={isAiLoading}
+            >
+              {isAiLoading ? (
+                <ActivityIndicator size="small" color="#315b76" />
+              ) : (
+                <>
+                  <Ionicons name="sparkles" size={12} color="#315b76" />
+                  <Text style={styles.aiChipText}>AI Select</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
           
-          {/* Load-Bearing Material Card with Horizontal Scroll Inside */}
+          {/* Load-Bearing Material Card with AI Detection Inside */}
           <View style={styles.materialCard}>
             <View style={styles.materialCardHeader}>
               <View style={{flex: 1}}>
@@ -484,10 +735,24 @@ export default function WallScreen({ route, navigation }: any) {
               </View>
             </View>
 
-            {/* Display Selected Material Info */}
-            {loadBearingBrick && (
-              <Text style={styles.selectedMaterialText}>✓ Selected: {loadBearingBrick.name}</Text>
-            )}
+            {aiAdvice ? (
+              <View style={styles.adviceBoxCompact}>
+                <Text style={styles.adviceTextCompact}>💡 {aiAdvice}</Text>
+              </View>
+            ) : null}
+
+            {/* Display Selected Material Info with AI Badge */}
+            <View style={styles.materialSelectionRow}>
+              {loadBearingBrick && (
+                <Text style={styles.selectedMaterialText}>✓ Selected: {loadBearingBrick.name}</Text>
+              )}
+              {aiRecommendations.loadBearingBrick && loadBearingBrick?.id === aiRecommendations.loadBearingBrick && (
+                <View style={styles.aiBadge}>
+                  <Ionicons name="sparkles" size={12} color="#fff" />
+                  <Text style={styles.aiBadgeText}>AI Recommended</Text>
+                </View>
+              )}
+            </View>
 
             {/* Horizontal Scroll - Load-Bearing Materials */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={[styles.brandScroll, {marginVertical: 10}]}>
@@ -529,10 +794,18 @@ export default function WallScreen({ route, navigation }: any) {
               </View>
             </View>
 
-            {/* Display Selected Material Info */}
-            {partitionBrick && (
-              <Text style={styles.selectedMaterialText}>✓ Selected: {partitionBrick.name}</Text>
-            )}
+            {/* Display Selected Material Info with AI Badge */}
+            <View style={styles.materialSelectionRow}>
+              {partitionBrick && (
+                <Text style={styles.selectedMaterialText}>✓ Selected: {partitionBrick.name}</Text>
+              )}
+              {aiRecommendations.partitionBrick && partitionBrick?.id === aiRecommendations.partitionBrick && (
+                <View style={styles.aiBadge}>
+                  <Ionicons name="sparkles" size={12} color="#fff" />
+                  <Text style={styles.aiBadgeText}>AI Recommended</Text>
+                </View>
+              )}
+            </View>
 
             {/* Horizontal Scroll - Partition Materials */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={[styles.brandScroll, {marginVertical: 10}]}>
@@ -734,6 +1007,24 @@ const styles = StyleSheet.create({
   metadataInfoItem: { flex: 1, alignItems: 'center' },
   metadataInfoLabel: { fontSize: 10, color: '#22c55e', fontWeight: '600', marginBottom: 4 },
   metadataInfoValue: { fontSize: 16, fontWeight: '800', color: '#15803d' },
+  
+  // AI Chip Button Styles (Compact Pill)
+  aiChipButton: { backgroundColor: '#e0f2fe', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: '#315b76' },
+  aiChipText: { color: '#315b76', fontSize: 11, fontWeight: '700', letterSpacing: 0.3 },
+  adviceBoxCompact: { marginBottom: 12, marginTop: 10, backgroundColor: '#e0f2fe', borderLeftWidth: 3, borderLeftColor: '#315b76', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 6 },
+  adviceTextCompact: { fontSize: 11, color: '#064e78', fontWeight: '500', lineHeight: 16 },
+  aiHeader: { marginVertical: 15 },
+  aiMagicButton: { backgroundColor: '#315b76', paddingVertical: 14, paddingHorizontal: 16, borderRadius: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, elevation: 3, shadowColor: '#315b76', shadowOpacity: 0.3, shadowRadius: 8 },
+  aiMagicText: { color: '#fff', fontSize: 14, fontWeight: '700', letterSpacing: 0.3 },
+  adviceBox: { marginTop: 10, backgroundColor: '#e0f2fe', borderLeftWidth: 4, borderLeftColor: '#315b76', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8 },
+  adviceText: { fontSize: 12, color: '#064e78', fontWeight: '500', lineHeight: 18 },
+  aiMagicButtonInline: { backgroundColor: '#315b76', paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, marginBottom: 12, elevation: 2, shadowColor: '#315b76', shadowOpacity: 0.25, shadowRadius: 6 },
+  aiMagicTextInline: { color: '#fff', fontSize: 12, fontWeight: '600', letterSpacing: 0.2 },
+  adviceBoxInline: { marginBottom: 12, backgroundColor: '#e0f2fe', borderLeftWidth: 3, borderLeftColor: '#315b76', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 6 },
+  adviceTextInline: { fontSize: 11, color: '#064e78', fontWeight: '500', lineHeight: 16 },
+  materialSelectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  aiBadge: { backgroundColor: '#315b76', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 4 },
+  aiBadgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
   
   wallTypeContainer: { flexDirection: 'row', gap: 8 },
   wallTypeTab: { flex: 1, paddingVertical: 12, backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 },

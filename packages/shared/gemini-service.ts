@@ -203,11 +203,22 @@ export const analyzeFloorPlan = async (
            - "balcony": Outdoor space with parapet. Use 3.5 ft height for calculations.
            - "wash_area": Bathroom, Toilet, Laundry (small, utility spaces).
         6. UNIT CONVERSION: Convert all dimensions to DECIMAL FEET (e.g., 10'6" becomes 10.5).
+        7. OVERALL WALL COMPOSITION: After analyzing all rooms, calculate the overall percentages:
+           - Average load-bearing wall percentage across the entire floor plan
+           - Average partition wall percentage
+           - Average opening percentage
 
         RETURN DATA STRUCTURE (Strict JSON, no markdown):
         {
           "summary": "Brief architectural summary (e.g., 3 Bedroom, 2 Bath with balcony, modern open-plan)",
           "totalArea": "Number (Sum of all room areas in sq ft)",
+          "wallComposition": {
+            "loadBearingPercentage": "Number 0-100 (overall % of load-bearing walls)",
+            "partitionPercentage": "Number 0-100 (overall % of partition walls)",
+            "openingPercentage": "Number 0-100 (overall % of wall area with openings)",
+            "averageWallThickness": "Number in inches (weighted average, typically 6-9 inches)",
+            "confidence": "Number 0-100 (confidence in analysis)"
+          },
           "rooms": [
             {
               "id": "unique_room_id",
@@ -388,6 +399,219 @@ IMPORTANT: Return ONLY valid JSON with no markdown code blocks, no formatting, a
       return jsonText;
     } catch (error) {
       console.error('Error extracting structured data from Gemini:', error);
+      throw error;
+    }
+  });
+};
+
+/**
+ * Get AI Recommendations for Materials based on project context
+ * Works for any category (Wall, Foundation, Flooring, Roofing, etc.)
+ * Returns recommended materials with engineering advice
+ * 
+ * @param category - Component category (e.g., "Wall", "Foundation", "Flooring")
+ * @param tier - Budget tier ("Economy", "Standard", "Luxury")
+ * @param area - Built-up area in square feet
+ * @param availableMaterials - Array of all available materials
+ * @returns Promise with recommendations array and engineering advice
+ */
+export const getComponentRecommendation = async (
+  category: string,
+  tier: string,
+  area: number,
+  availableMaterials: any[]
+) => {
+  return retryWithBackoff(async () => {
+    try {
+      if (!currentModel) {
+        throw new Error('Gemini model not initialized. Check Firebase configuration.');
+      }
+
+      // Simplify material list for AI to reduce token cost
+      // Only include materials from the specified category
+      const relevantMaterials = availableMaterials.filter(m => m.category === category);
+      
+      const materialsSummary = relevantMaterials
+        .map(m => `ID: ${m.id}, Name: ${m.name}, Price: ₹${m.pricePerUnit}, Type: ${m.type}, SubCategory: ${m.subCategory || 'N/A'}`)
+        .join("\n");
+
+      const prompt = `
+Act as a Civil Engineer and Construction Expert. Recommend the best materials from the list below for ${category} construction.
+
+PROJECT CONTEXT:
+- Category: ${category}
+- Budget Tier: ${tier}
+- Built-up Area: ${area} sq ft
+- Tier Preference: ${tier === 'Economy' ? 'Most cost-effective options' : tier === 'Standard' ? 'Balanced quality and cost' : 'Premium quality materials'}
+
+AVAILABLE MATERIALS:
+${materialsSummary}
+
+RECOMMENDATION RULES:
+1. For "Wall" category: Recommend both Load-Bearing AND Partition bricks
+2. For "Foundation" category: Recommend concrete mix and reinforcement
+3. For "Flooring" category: Recommend floor finish and base materials
+4. Match materials to the specified ${tier} budget tier
+5. Consider the ${area} sq ft area in your recommendations
+6. Prioritize durability and standard construction practices
+
+Return ONLY valid JSON (no markdown, no explanatory text):
+{
+  "recommendations": [
+    {
+      "type": "Load-Bearing Brick",
+      "id": "material_id_here",
+      "reason": "Brief explanation why this material for this tier"
+    },
+    {
+      "type": "Partition Brick",
+      "id": "material_id_here",
+      "reason": "Brief explanation"
+    }
+  ],
+  "advice": "One practical engineering tip for ${category} construction in ${tier} tier",
+  "estimatedCost": "Brief cost estimate note"
+}
+      `;
+
+      const result = await currentModel.generateContent({
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: prompt }],
+          },
+        ],
+      });
+
+      const response = result.response;
+      const responseText = response.text();
+      
+      // Robust JSON extraction
+      let jsonText = responseText.trim();
+      if (jsonText.startsWith('```')) {
+        jsonText = jsonText.replace(/^```json\n?/, '').replace(/^```\n?/, '').replace(/\n?```$/, '');
+      }
+      const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        jsonText = jsonMatch[0];
+      }
+
+      const parsedResult = JSON.parse(jsonText);
+      return parsedResult;
+    } catch (error) {
+      console.error('Error getting component recommendations from Gemini:', error);
+      throw error;
+    }
+  });
+};
+
+/**
+ * Detect Wall Composition from Floor Plan Data
+ * Analyzes room dimensions and layout to determine wall type proportions
+ * Returns analyzed Load-Bearing, Partition, and Opening percentages
+ */
+export const detectWallComposition = async (
+  rooms: any[],
+  totalArea: number
+) => {
+  return retryWithBackoff(async () => {
+    try {
+      if (!currentModel) {
+        throw new Error('Gemini model not initialized. Check Firebase configuration.');
+      }
+
+      console.log('🔍 Detecting wall composition for:', { 
+        roomCount: rooms.length, 
+        totalArea,
+        sampleRoom: rooms[0] 
+      });
+
+      // Prepare room data summary for analysis
+      const roomsSummary = rooms
+        .map((r: any, i: number) => {
+          const roomName = r.name || `Room ${i + 1}`;
+          const roomType = r.roomType || 'standard';
+          const area = parseFloat(r.area || 0);
+          const length = parseFloat(r.length || 0);
+          const width = parseFloat(r.width || 0);
+          const openings = r.openingPercentage ? `${r.openingPercentage}%` : 'unknown';
+          const wallMeta = r.wallMetadata ? `(LB: ${(r.wallMetadata.mainWallRatio * 100).toFixed(0)}%, P: ${(r.wallMetadata.partitionWallRatio * 100).toFixed(0)}%)` : '';
+          
+          return `${roomName} [${roomType}]: ${area.toFixed(1)} sqft (${length.toFixed(1)}' × ${width.toFixed(1)}'), Openings: ${openings} ${wallMeta}`;
+        })
+        .join('\n');
+
+      const prompt = `
+Act as a Structural Engineer specializing in residential construction cost estimation.
+
+FLOOR PLAN DATA:
+\`\`\`
+${roomsSummary}
+\`\`\`
+Total Built-up Area: ${totalArea} sq.ft
+Number of Rooms: ${rooms.length}
+
+TASK: Analyze the floor plan and determine the overall wall composition percentages for construction cost estimation.
+
+ANALYSIS GUIDELINES:
+1. **Load-Bearing Walls (9" thick):**
+   - All exterior perimeter walls
+   - Walls separating major living spaces (bedroom-to-bedroom, bedroom-to-living room)
+   - Walls running perpendicular to floor joists/beams
+   - Typical range: 50-70% of total wall area
+
+2. **Partition Walls (4.5" thick):**
+   - Interior walls within rooms (closet dividers, bathroom partitions)
+   - Non-structural divider walls
+   - Walls parallel to structural beams
+   - Typical range: 30-50% of total wall area
+
+3. **Door/Window Openings:**
+   - Consider room types: Bedrooms (20-30%), Living areas (25-35%), Bathrooms (10-20%), Corridors (10-15%)
+   - If room-specific opening data exists, calculate weighted average
+   - Otherwise estimate based on room count and types
+
+CRITICAL: Ensure loadBearingPercentage + partitionPercentage = 100
+
+Return ONLY valid JSON (no markdown, no code blocks, no explanation):
+{
+  "loadBearingPercentage": number,
+  "partitionPercentage": number,
+  "openingPercentage": number,
+  "confidence": number,
+  "analysis": "Brief reasoning (1-2 sentences)"
+}
+      `;
+
+      const response = await currentModel.generateContent({
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: prompt }],
+          },
+        ],
+      });
+
+      const result = response.response;
+      const responseText = result.text();
+      
+      console.log('🤖 AI Response for wall composition:', responseText.substring(0, 200));
+      
+      // Robust JSON extraction
+      let jsonText = responseText.trim();
+      if (jsonText.startsWith('```')) {
+        jsonText = jsonText.replace(/^```json\n?/, '').replace(/^```\n?/, '').replace(/\n?```$/, '');
+      }
+      const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        jsonText = jsonMatch[0];
+      }
+
+      const wallComposition = JSON.parse(jsonText);
+      console.log('✅ Parsed wall composition:', wallComposition);
+      return wallComposition;
+    } catch (error) {
+      console.error('Error detecting wall composition from Gemini:', error);
       throw error;
     }
   });

@@ -24,6 +24,7 @@ export interface ProjectData {
   totalArea?: number;
   rooms?: any[];        // Array of room objects containing dimensions
   planImageUrl?: string; // URL if image is uploaded to storage
+  wallComposition?: any; // AI-analyzed wall composition (loadBearing%, partition%, opening%, thickness)
   // ------------------
 
   createdAt?: any;

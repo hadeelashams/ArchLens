@@ -65,7 +65,7 @@ export const CONSTRUCTION_HIERARCHY = {
     label: "Wall",
     subCategories: {
       'Load Bearing': ["Brick Wall", "Block Wall", "Stone Wall"],
-      'Non-Load Bearing': ["Brick Partition", "Block Partition", "Dry Wall", "Glass","Wood Wall"],
+      'Partition': ["Brick Partition", "Block Partition", "Dry Wall", "Glass","Wood Wall"],
     },
   },
   'Roof': {

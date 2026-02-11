@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   View, Text, StyleSheet, TouchableOpacity, ScrollView, 
-  Dimensions, Platform, TextInput, ActivityIndicator, Image, Switch 
+  Dimensions, Platform, TextInput, ActivityIndicator, Image, Switch, Alert 
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons'; 
 import { StatusBar } from 'expo-status-bar';
-import { db } from '@archlens/shared';
+import { db, getComponentRecommendation } from '@archlens/shared';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 
 const { width } = Dimensions.get('window');
@@ -49,6 +49,10 @@ export default function FoundationSelection({ route, navigation }: any) {
 
   const [loading, setLoading] = useState(true);
   const [materials, setMaterials] = useState<any[]>([]);
+  
+  // AI Recommendation State
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [aiAdvice, setAiAdvice] = useState("");
   
   const [foundationType, setFoundationType] = useState<FoundationType>('RCC');
   const [hasPCC, setHasPCC] = useState(true);
@@ -138,6 +142,46 @@ export default function FoundationSelection({ route, navigation }: any) {
     }
   };
 
+  // AI Auto-Select Handler for Foundation
+  const handleAiAutoSelect = async () => {
+    setIsAiLoading(true);
+    try {
+      const result = await getComponentRecommendation('Foundation', tier, area, materials);
+      
+      // Apply AI recommendations to selected materials
+      if (result.recommendations && Array.isArray(result.recommendations)) {
+        const updatedSelections: Record<string, any> = { ...selections };
+        
+        result.recommendations.forEach((rec: any) => {
+          const match = materials.find(m => m.id === rec.id);
+          if (!match) return;
+
+          // Match recommendation type to selection key
+          Object.keys(ALL_LAYER_MAPS).forEach(layer => {
+            ALL_LAYER_MAPS[layer as keyof typeof ALL_LAYER_MAPS].forEach(type => {
+              const selectionKey = `${layer}_${type}`;
+              const typeStr = rec.type.toLowerCase();
+              
+              if (typeStr.includes(type.toLowerCase()) && (typeStr.includes(layer.toLowerCase()) || !updatedSelections[selectionKey])) {
+                updatedSelections[selectionKey] = match;
+              }
+            });
+          });
+        });
+        
+        setSelections(updatedSelections);
+      }
+
+      setAiAdvice(result.advice || 'Materials optimized based on your tier preference.');
+      Alert.alert("✓ AI Selection Applied", `Foundation materials selected for ${tier} tier. You can still customize them.`);
+    } catch (error: any) {
+      console.error('AI Selection Error:', error);
+      Alert.alert("AI Error", error.message || "Could not get recommendations. Please select materials manually.");
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
+
   if (loading) return <View style={styles.centered}><ActivityIndicator size="large" color="#315b76" /></View>;
 
   return (
@@ -154,13 +198,38 @@ export default function FoundationSelection({ route, navigation }: any) {
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
           <Text style={styles.sectionLabel}>FOUNDATION TYPE</Text>
-          <View style={styles.methodContainer}>
-            {['RCC', 'StoneMasonry'].map((type) => (
-              <TouchableOpacity key={type} style={[styles.methodTab, foundationType === type && styles.methodTabActive]} onPress={() => setFoundationType(type as FoundationType)}>
-                <Text style={[styles.methodText, foundationType === type && styles.methodTextActive]}>{type === 'RCC' ? 'RCC Footing' : 'Stone Masonry'}</Text>
-              </TouchableOpacity>
-            ))}
+          <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15}}>
+            <View style={{flex: 1}}>
+              <View style={styles.methodContainer}>
+                {['RCC', 'StoneMasonry'].map((type) => (
+                  <TouchableOpacity key={type} style={[styles.methodTab, foundationType === type && styles.methodTabActive]} onPress={() => setFoundationType(type as FoundationType)}>
+                    <Text style={[styles.methodText, foundationType === type && styles.methodTextActive]}>{type === 'RCC' ? 'RCC Footing' : 'Stone Masonry'}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+            {/* AI Chip Button */}
+            <TouchableOpacity 
+              style={[styles.aiChipButton, isAiLoading && {opacity: 0.6}]} 
+              onPress={handleAiAutoSelect}
+              disabled={isAiLoading}
+            >
+              {isAiLoading ? (
+                <ActivityIndicator size="small" color="#315b76" />
+              ) : (
+                <>
+                  <Ionicons name="sparkles" size={12} color="#315b76" />
+                  <Text style={styles.aiChipText}>AI</Text>
+                </>
+              )}
+            </TouchableOpacity>
           </View>
+
+          {aiAdvice ? (
+            <View style={styles.adviceBoxCompact}>
+              <Text style={styles.adviceText}>💡 {aiAdvice}</Text>
+            </View>
+          ) : null}
 
           {foundationType === 'RCC' ? (
             <View style={styles.paramsSection}>
@@ -290,6 +359,13 @@ const styles = StyleSheet.create({
   methodTabActive: { backgroundColor: '#315b76', borderColor: '#315b76' },
   methodText: { fontWeight: '700', color: '#64748b', fontSize: 12 },
   methodTextActive: { color: '#fff' },
+  aiChipButton: { backgroundColor: '#e0f2fe', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 20, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 5, borderWidth: 1, borderColor: '#315b76' },
+  aiChipText: { color: '#315b76', fontSize: 10, fontWeight: '700', letterSpacing: 0.3 },
+  aiMagicButton: { backgroundColor: '#315b76', paddingVertical: 14, paddingHorizontal: 16, borderRadius: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, marginBottom: 15, elevation: 3, shadowColor: '#315b76', shadowOpacity: 0.3, shadowRadius: 8 },
+  aiMagicText: { color: '#fff', fontSize: 14, fontWeight: '700', letterSpacing: 0.3 },
+  adviceBox: { marginBottom: 15, backgroundColor: '#e0f2fe', borderLeftWidth: 4, borderLeftColor: '#315b76', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8 },
+  adviceBoxCompact: { marginBottom: 15, backgroundColor: '#e0f2fe', borderLeftWidth: 3, borderLeftColor: '#315b76', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 6 },
+  adviceText: { fontSize: 12, color: '#064e78', fontWeight: '500', lineHeight: 18 },
   toggleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff', padding: 15, borderRadius: 16, borderWidth: 1, borderColor: '#e2e8f0', marginBottom: 12 },
   toggleTitle: { fontSize: 14, fontWeight: '700', color: '#1e293b' },
   toggleSub: { fontSize: 11, color: '#64748b', marginTop: 2 },

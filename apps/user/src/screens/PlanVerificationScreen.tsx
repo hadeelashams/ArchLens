@@ -34,6 +34,7 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
   const [totalArea, setTotalArea] = useState(0);
   const [isCached, setIsCached] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [wallComposition, setWallComposition] = useState<any>(null); // Store AI-analyzed wall composition
   
   // --- NEW STATE FOR ZOOM MODAL ---
   const [isZoomVisible, setZoomVisible] = useState(false);
@@ -73,7 +74,8 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
       // CHECK CACHE FIRST
       const cachedAnalysis = getCachedFloorPlanAnalysis(base64String);
       if (cachedAnalysis) {
-        console.log('Using cached floor plan analysis');
+        console.log('Using cached floor plan analysis (AI-only)');
+        console.log('📊 Cached wall composition:', cachedAnalysis.data?.wallComposition);
         const roomsWithIds = (cachedAnalysis.data.rooms || []).map((room: any, index: number) => ({
           id: room.id || `room-${index}-${Date.now()}`,
           name: room.name || `Room ${index + 1}`,
@@ -81,11 +83,12 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
           width: String(room.width || '0'),
           area: String(room.area || (room.length * room.width) || '0'),
           roomType: room.roomType || 'standard',
-          wallMetadata: room.wallMetadata || { mainWallRatio: 0.6, partitionWallRatio: 0.4 },
-          openingPercentage: room.openingPercentage || 20,
+          wallMetadata: room.wallMetadata, // AI-only, no defaults
+          openingPercentage: room.openingPercentage, // AI-only, no defaults
           features: room.features || []
         }));
         setRooms(roomsWithIds);
+        setWallComposition(cachedAnalysis.data.wallComposition); // Store wall composition
         setIsCached(true);
         setLoading(false);
         return;
@@ -110,7 +113,14 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
             "features": ["string"]
           }
         ],
-        "totalArea": "number"
+        "totalArea": "number",
+        "wallComposition": {
+          "loadBearingPercentage": "number",
+          "partitionPercentage": "number",
+          "openingPercentage": "number",
+          "averageWallThickness": "number",
+          "confidence": "number"
+        }
       }`;
 
       const structuredData = await extractStructuredData(analysis, schema);
@@ -124,6 +134,8 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
       }
 
       const parsedData = JSON.parse(cleanedData);
+      console.log('📋 Parsed analysis data keys:', Object.keys(parsedData));
+      console.log('📋 Has wallComposition?', !!parsedData.wallComposition);
 
       if (parsedData.rooms && Array.isArray(parsedData.rooms)) {
         const roomsWithIds = parsedData.rooms.map((room: any, index: number) => ({
@@ -133,11 +145,16 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
           width: String(room.width || '0'),
           area: String(room.area || (room.length * room.width) || '0'),
           roomType: room.roomType || 'standard',
-          wallMetadata: room.wallMetadata || { mainWallRatio: 0.6, partitionWallRatio: 0.4 },
-          openingPercentage: room.openingPercentage || 20,
+          wallMetadata: room.wallMetadata, // AI-only, no defaults
+          openingPercentage: room.openingPercentage, // AI-only, no defaults
           features: room.features || []
         }));
         setRooms(roomsWithIds);
+        
+        // Extract wall composition with safe defaults
+        const wallComp = parsedData.wallComposition || null;
+        setWallComposition(wallComp);
+        console.log('📊 Wall Composition from new analysis:', wallComp);
 
         // CACHE THE ANALYSIS
         cacheFloorPlanAnalysis(base64String, {
@@ -222,20 +239,27 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
 
     setSaving(true);
     try {
-      const projectData = {
+      const projectData: any = {
         userId: auth.currentUser.uid,
         name: `Floor Plan ${new Date().toLocaleDateString()}`,
-        status: 'active' as const,
+        status: 'active',
         totalArea: totalArea,
         rooms: rooms
       };
+
+      // Only include wallComposition if it was successfully analyzed
+      if (wallComposition && typeof wallComposition === 'object') {
+        projectData.wallComposition = wallComposition;
+      }
 
       const newProjectId = await createProject(projectData);
 
       setSaving(false);
       navigation.navigate('ConstructionLevel', { 
         totalArea: totalArea,
-        projectId: newProjectId 
+        projectId: newProjectId,
+        rooms: rooms,
+        wallComposition: wallComposition || null // Pass null if undefined
       });
 
     } catch (error: any) {

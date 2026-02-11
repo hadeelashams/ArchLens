@@ -73,10 +73,10 @@ let geminiModel: any = null;
 
 // Model priority list - tries primary first, then falls back to secondaries
 const GEMINI_MODELS = [
-  'gemini-flash-lite-latest',  // Primary: Lite version for higher rate limits
   'gemini-3-flash-preview',    // Fallback: Latest with extended thinking
   'gemini-flash-latest',       // Fallback: Stable latest
   'gemini-2.5-flash',          // Fallback: Previous stable
+  'gemini-flash-lite-latest',  // Primary: Lite version for higher rate limits
 ];
 
 // Map of model names to display names

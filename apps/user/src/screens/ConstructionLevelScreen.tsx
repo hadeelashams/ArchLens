@@ -76,7 +76,7 @@ const BUDGET_TIERS = [
 ];
 
 export default function ConstructionLevelScreen({ route, navigation }: any) {
-  const { totalArea, projectId, rooms } = route.params || { totalArea: 0, projectId: null, rooms: [] };
+  const { totalArea, projectId, rooms, wallComposition } = route.params || { totalArea: 0, projectId: null, rooms: [], wallComposition: null };
   
   // CHANGED: Initial state is NULL to force selection
   const [activeTab, setActiveTab] = useState<string | null>(null);
@@ -109,7 +109,7 @@ export default function ConstructionLevelScreen({ route, navigation }: any) {
       navigation.navigate('FoundationSelection', { totalArea, projectId, tier: activeTab }); 
     } 
     else if (item.title === 'Wall and Masonry') {
-      navigation.navigate('WallDetails', { totalArea, projectId, rooms, tier: activeTab });
+      navigation.navigate('WallDetails', { totalArea, projectId, rooms, tier: activeTab, wallComposition });
     } 
     else if (item.title === 'Roofing') {
       navigation.navigate('RoofingScreen', { totalArea, projectId, tier: activeTab });
