@@ -172,49 +172,49 @@ export default function AdminHomeScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, flexDirection: 'row', backgroundColor: '#f8fafc' },
+  container: { flex: 1, flexDirection: 'row', backgroundColor: '#f0f4f8' },
   mainContent: { flex: 1 },
   
   // Header
   header: { marginBottom: 35, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
-  dateText: { fontSize: 13, color: '#64748b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1 },
-  welcomeText: { fontSize: 34, fontWeight: '800', color: SLATE_900, marginTop: 4 },
-  profileBtn: { width: 48, height: 48, borderRadius: 14, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#e2e8f0' },
-  notifDot: { position: 'absolute', top: 12, right: 12, width: 8, height: 8, borderRadius: 4, backgroundColor: '#ef4444', borderWidth: 2, borderColor: '#fff' },
+  dateText: { fontSize: 12, color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1.5 },
+  welcomeText: { fontSize: 32, fontWeight: '800', color: SLATE_900, marginTop: 6 },
+  profileBtn: { width: 48, height: 48, borderRadius: 14, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#e2e8f0', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4 },
+  notifDot: { position: 'absolute', top: 10, right: 10, width: 10, height: 10, borderRadius: 5, backgroundColor: '#ef4444', borderWidth: 2.5, borderColor: '#fff' },
 
   // Stats
-  statsRow: { flexDirection: 'row', gap: 20, marginBottom: 40 },
-  statCard: { flex: 1, backgroundColor: '#fff', padding: 20, borderRadius: 20, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#e2e8f0', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.02, shadowRadius: 10 },
-  statIconContainer: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
+  statsRow: { flexDirection: 'row', gap: 16, marginBottom: 40 },
+  statCard: { flex: 1, backgroundColor: '#fff', padding: 20, borderRadius: 18, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#e2e8f0', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 12 },
+  statIconContainer: { width: 48, height: 48, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 16 },
   statInfo: { flex: 1 },
-  statLabel: { fontSize: 12, color: '#64748b', fontWeight: '600', marginBottom: 2 },
-  statValue: { fontSize: 22, fontWeight: '800', color: SLATE_900 },
+  statLabel: { fontSize: 12, color: '#64748b', fontWeight: '700', marginBottom: 4, letterSpacing: 0.5 },
+  statValue: { fontSize: 24, fontWeight: '800', color: SLATE_900 },
 
   // Grid
   gridContainer: { flexDirection: 'row' },
-  sectionHeader: { marginBottom: 25 },
-  sectionTitle: { fontSize: 20, fontWeight: '700', color: SLATE_900, marginBottom: 6 },
-  sectionSub: { fontSize: 14, color: '#64748b' },
+  sectionHeader: { marginBottom: 28 },
+  sectionTitle: { fontSize: 20, fontWeight: '800', color: SLATE_900, marginBottom: 6 },
+  sectionSub: { fontSize: 14, color: '#64748b', fontWeight: '500' },
   
   // Category Grid
-  categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 20 },
-  categoryTile: { width: '47%', backgroundColor: '#fff', borderRadius: 24, padding: 24, borderWidth: 1, borderColor: '#e2e8f0' },
-  categoryHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
+  categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
+  categoryTile: { width: '47%', backgroundColor: '#fff', borderRadius: 20, padding: 22, borderWidth: 1, borderColor: '#e2e8f0', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.03, shadowRadius: 8 },
+  categoryHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   categoryIconCircle: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#f1f5f9', justifyContent: 'center', alignItems: 'center' },
   categoryCount: { fontSize: 20, fontWeight: '800', color: SLATE_900 },
-  categoryName: { fontSize: 16, fontWeight: '700', color: SLATE_800, marginBottom: 12 },
-  progressBarBg: { height: 6, backgroundColor: '#f1f5f9', borderRadius: 3, overflow: 'hidden' },
+  categoryName: { fontSize: 15, fontWeight: '700', color: SLATE_800, marginBottom: 12 },
+  progressBarBg: { height: 6, backgroundColor: '#e2e8f0', borderRadius: 3, overflow: 'hidden' },
   progressBarFill: { height: '100%', backgroundColor: SKY_500 },
 
   // Quick Actions
-  mainActionCard: { borderRadius: 28, overflow: 'hidden', marginBottom: 20, elevation: 4 },
-  actionGradient: { padding: 30 },
-  actionIconCircle: { width: 50, height: 50, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
-  actionTitle: { fontSize: 22, fontWeight: '700', color: '#fff', marginBottom: 10 },
-  actionDesc: { fontSize: 14, color: '#94a3b8', lineHeight: 20, marginBottom: 25 },
+  mainActionCard: { borderRadius: 24, overflow: 'hidden', marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 16 },
+  actionGradient: { padding: 28 },
+  actionIconCircle: { width: 52, height: 52, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center', marginBottom: 18 },
+  actionTitle: { fontSize: 20, fontWeight: '700', color: '#fff', marginBottom: 8 },
+  actionDesc: { fontSize: 13, color: '#cbd5e1', lineHeight: 20, marginBottom: 22 },
   actionFooter: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  actionLink: { color: SKY_500, fontWeight: '700', fontSize: 14 },
+  actionLink: { color: '#0ea5e9', fontWeight: '700', fontSize: 13 },
   
-  secondaryActionCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', padding: 20, borderRadius: 18, marginBottom: 12, borderWidth: 1, borderColor: '#e2e8f0' },
-  secondaryActionText: { marginLeft: 15, fontSize: 15, fontWeight: '600', color: SLATE_800 }
+  secondaryActionCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', padding: 18, borderRadius: 16, marginBottom: 12, borderWidth: 1, borderColor: '#e2e8f0', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.03, shadowRadius: 6 },
+  secondaryActionText: { marginLeft: 14, fontSize: 14, fontWeight: '600', color: SLATE_800 }
 });

@@ -14,7 +14,7 @@ export const MATERIAL_UNITS = [
   "Bundle"
 ] as const;
 
-export type WallType = 'Load Bearing' | 'Non-Load Bearing' | 'Partition';
+export type WallType = 'Load Bearing' | 'Non-Load Bearing' | 'Partition Wall' | 'Partition';
 
 export const WALL_TYPE_SPECS: Record<WallType, {
   label: string;
@@ -39,6 +39,14 @@ export const WALL_TYPE_SPECS: Record<WallType, {
     sandMortar: 5,
     bricksPerCuFt: 1.1,
     description: 'Lightweight walls using AAC and hollow blocks'
+  },
+  'Partition Wall': {
+    label: 'Partition Wall',
+    mortarRatio: 0.15,
+    cementMortar: 1,
+    sandMortar: 5,
+    bricksPerCuFt: 1.1,
+    description: 'Partition walls using AAC blocks, hollow blocks, and other lightweight materials'
   },
   'Partition': {
     label: 'Partition',

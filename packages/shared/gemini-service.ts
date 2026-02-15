@@ -432,9 +432,10 @@ export const getComponentRecommendation = async (
       const relevantMaterials = availableMaterials.filter(m => m.category === category);
       
       const materialsSummary = relevantMaterials
-        .map(m => `ID: ${m.id}, Name: ${m.name}, Price: ₹${m.pricePerUnit}, Type: ${m.type}, SubCategory: ${m.subCategory || 'N/A'}`)
+        .map(m => `ID: ${m.id}, Name: ${m.name}, Price: ₹${m.pricePerUnit}, Type: ${m.type}, SubCategory: ${m.subCategory || 'N/A'}, Dimensions: ${m.dimensions || 'N/A'}`)
         .join("\n");
 
+      // Enhanced prompt for Economy tier with cost-per-unit and finished-wall-cost optimization
       const prompt = `
 Act as a Civil Engineer and Construction Expert. Recommend the best materials from the list below for ${category} construction.
 
@@ -442,18 +443,27 @@ PROJECT CONTEXT:
 - Category: ${category}
 - Budget Tier: ${tier}
 - Built-up Area: ${area} sq ft
-- Tier Preference: ${tier === 'Economy' ? 'Most cost-effective options' : tier === 'Standard' ? 'Balanced quality and cost' : 'Premium quality materials'}
+- Tier Preference: ${tier === 'Economy' ? 'MOST COST-EFFECTIVE with emphasis on TOTAL PROJECT COST, not just price per unit. Larger blocks/bricks = fewer joints = less mortar = lower total cost even if per-unit price is higher' : tier === 'Standard' ? 'Balanced quality and cost' : 'Premium quality materials'}
 
 AVAILABLE MATERIALS:
 ${materialsSummary}
 
-RECOMMENDATION RULES:
-1. For "Wall" category: Recommend both Load-Bearing AND Partition bricks
-2. For "Foundation" category: Recommend concrete mix and reinforcement
-3. For "Flooring" category: Recommend floor finish and base materials
+EXPERT RECOMMENDATION RULES:
+1. For "Wall" category: Recommend BOTH Load-Bearing AND Partition bricks + Cement + Sand
+2. For Economy tier ONLY:
+   - PRIORITIZE "Finished Wall Cost" = (quantity needed) × (price per unit)
+   - Recommend AAC blocks (24x3" or similar) over traditional clay bricks for partitions because:
+     * Larger size = fewer bricks needed per unit area
+     * 80% less mortar required due to fewer joints
+     * Faster construction (less labor cost)
+     * Example: 24"×3" AAC block covers MORE area than 9"×3" clay brick with 80% less cement/sand
+   - Recommend Fly Ash bricks over Red Clay for load-bearing sections (15-20% cost savings, same strength)
+   - NOTE: A ₹45 per-unit AAC block is CHEAPER in total project cost than ₹8 per-unit clay brick because you need 5x fewer blocks
+3. For Standard/Luxury: Focus on quality, then cost
 4. Match materials to the specified ${tier} budget tier
-5. Consider the ${area} sq ft area in your recommendations
-6. Prioritize durability and standard construction practices
+5. Consider the ${area} sq ft area and wall requirements in your recommendations
+6. Prioritize durability and professional construction practices
+7. For Cement & Sand in Economy tier, recommend leaner mixes (1:6 for partitions, 1:4 for load-bearing) to reduce material consumption
 
 Return ONLY valid JSON (no markdown, no explanatory text):
 {
@@ -461,16 +471,27 @@ Return ONLY valid JSON (no markdown, no explanatory text):
     {
       "type": "Load-Bearing Brick",
       "id": "material_id_here",
-      "reason": "Brief explanation why this material for this tier"
+      "reason": "Brief explanation why this material optimizes cost or quality for ${tier}"
     },
     {
       "type": "Partition Brick",
       "id": "material_id_here",
+      "reason": "Brief explanation - emphasize cost-per-sqft or total project savings if Economy"
+    },
+    {
+      "type": "Cement",
+      "id": "material_id_here",
+      "reason": "Brief explanation"
+    },
+    {
+      "type": "Sand",
+      "id": "material_id_here",
       "reason": "Brief explanation"
     }
   ],
-  "advice": "One practical engineering tip for ${category} construction in ${tier} tier",
-  "estimatedCost": "Brief cost estimate note"
+  "advice": "${tier === 'Economy' ? 'One cost-saving engineering tip for Economy tier wall construction (e.g., 80% less mortar with AAC blocks, Fly Ash savings, leaner mixes)' : 'One practical engineering tip for ' + tier + ' tier wall construction'}",
+  "costSavingsRecommendation": "${tier === 'Economy' ? 'Explain why recommended materials save money (e.g., Fly Ash saves 20% vs clay, AAC uses 80% less mortar)' : 'Cost-effectiveness note for ' + tier + ' tier'}",
+  "estimatedCost": "Brief cost estimate note for ${area} sq ft area"
 }
       `;
 

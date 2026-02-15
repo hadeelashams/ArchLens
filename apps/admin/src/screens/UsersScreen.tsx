@@ -232,37 +232,37 @@ export default function UsersScreen({ navigation }: any) {
 
 // --- STYLES ---
 const styles = StyleSheet.create({
-  container: { flex: 1, flexDirection: 'row', backgroundColor: '#f1f5f9' },
-  mainContent: { flex: 1, padding: 40 },
+  container: { flex: 1, flexDirection: 'row', backgroundColor: '#f0f4f8' },
+  mainContent: { flex: 1, padding: 36 },
   
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 30 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 },
   pageTitle: { fontSize: 28, fontWeight: '800', color: '#0f172a' },
-  subHeaderText: { fontSize: 14, color: '#64748b', marginTop: 4 },
+  subHeaderText: { fontSize: 13, color: '#64748b', marginTop: 4, fontWeight: '500' },
   
-  searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 12, paddingHorizontal: 15, width: 350, borderWidth: 1, borderColor: '#e2e8f0' },
-  searchInput: { flex: 1, paddingVertical: 12, marginLeft: 10, fontSize: 14, outlineStyle: 'none' } as any,
+  searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, paddingHorizontal: 16, width: 360, borderWidth: 1, borderColor: '#e2e8f0', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.03, shadowRadius: 6 },
+  searchInput: { flex: 1, paddingVertical: 12, marginLeft: 10, fontSize: 14, outlineStyle: 'none', color: '#1e293b' } as any,
 
-  tableContainer: { flex: 1, backgroundColor: '#fff', borderRadius: 24, borderWidth: 1, borderColor: '#e2e8f0', overflow: 'hidden', elevation: 2 },
+  tableContainer: { flex: 1, backgroundColor: '#fff', borderRadius: 22, borderWidth: 1, borderColor: '#e2e8f0', overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 12 },
   tableHeader: { flexDirection: 'row', backgroundColor: '#f8fafc', padding: 20, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
-  th: { fontSize: 11, fontWeight: '800', color: '#94a3b8', letterSpacing: 1, textTransform: 'uppercase' },
-  tr: { flexDirection: 'row', padding: 20, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', alignItems: 'center' },
+  th: { fontSize: 10, fontWeight: '800', color: '#94a3b8', letterSpacing: 1.2, textTransform: 'uppercase' },
+  tr: { flexDirection: 'row', padding: 18, borderBottomWidth: 1, borderBottomColor: '#f8fafc', alignItems: 'center' },
   emptyState: { padding: 40, alignItems: 'center', justifyContent: 'center' },
 
-  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#f1f5f9', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#e2e8f0', overflow: 'hidden' },
+  avatar: { width: 42, height: 42, borderRadius: 12, backgroundColor: '#f1f5f9', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#e2e8f0', overflow: 'hidden' },
   avatarImage: { width: '100%', height: '100%' },
-  avatarText: { fontSize: 16, fontWeight: 'bold', color: '#64748b' },
+  avatarText: { fontSize: 16, fontWeight: '700', color: '#64748b' },
   tdName: { fontSize: 14, fontWeight: '700', color: '#1e293b' },
-  tdRole: { fontSize: 12, color: '#64748b', marginTop: 1 },
+  tdRole: { fontSize: 11, color: '#94a3b8', marginTop: 2, fontWeight: '500' },
 
   contactRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  tdText: { fontSize: 13, color: '#475569' },
+  tdText: { fontSize: 13, color: '#475569', fontWeight: '500' },
 
-  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, alignSelf: 'flex-start' },
-  badgeActive: { backgroundColor: '#dcfce7' },
-  badgeInactive: { backgroundColor: '#f1f5f9' },
-  statusText: { fontSize: 11, fontWeight: '700' },
+  statusBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, alignSelf: 'flex-start' },
+  badgeActive: { backgroundColor: '#dcfce7', borderWidth: 1, borderColor: '#bbf7d0' },
+  badgeInactive: { backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0' },
+  statusText: { fontSize: 12, fontWeight: '700' },
   textActive: { color: '#166534' },
   textInactive: { color: '#64748b' },
 
-  actionCell: { flex: 0.5, flexDirection: 'row', justifyContent: 'flex-end' },
+  actionCell: { flex: 0.5, flexDirection: 'row', justifyContent: 'flex-end', paddingRight: 8 },
 });

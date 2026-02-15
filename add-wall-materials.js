@@ -153,7 +153,7 @@ const wallMaterialsData = [
   {
     name: "Ultratech AAC Block 100mm",
     category: "Wall",
-    subCategory: "Non-Load Bearing",
+    subCategory: "Partition Wall",
     type: "Block",
     grade: "AAC 600",
     dimensions: "24x4x7.5",
@@ -168,7 +168,7 @@ const wallMaterialsData = [
   {
     name: "Bilcon AAC Block",
     category: "Wall",
-    subCategory: "Non-Load Bearing",
+    subCategory: "Partition Wall",
     type: "Block",
     grade: "AAC 700",
     dimensions: "24x4x7.5",
@@ -185,7 +185,7 @@ const wallMaterialsData = [
   {
     name: "Standard Hollow Concrete Block",
     category: "Wall",
-    subCategory: "Non-Load Bearing",
+    subCategory: "Partition Wall",
     type: "Block",
     grade: "Standard",
     dimensions: "15x7.5x7.5",
@@ -200,7 +200,7 @@ const wallMaterialsData = [
   {
     name: "Interlocking Hollow Block",
     category: "Wall",
-    subCategory: "Non-Load Bearing",
+    subCategory: "Partition Wall",
     type: "Block",
     grade: "Interlocking",
     dimensions: "15x7.5x7.5",

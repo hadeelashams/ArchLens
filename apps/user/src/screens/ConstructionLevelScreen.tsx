@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -76,11 +76,22 @@ const BUDGET_TIERS = [
 ];
 
 export default function ConstructionLevelScreen({ route, navigation }: any) {
-  const { totalArea, projectId, rooms, wallComposition } = route.params || { totalArea: 0, projectId: null, rooms: [], wallComposition: null };
+  const { totalArea, projectId, rooms, wallComposition: initialWallComposition } = route.params || { totalArea: 0, projectId: null, rooms: [], wallComposition: null };
+  
+  // Store wall composition in state so it persists across navigations
+  const [wallComposition, setWallComposition] = useState(initialWallComposition);
   
   // CHANGED: Initial state is NULL to force selection
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const [searchText, setSearchText] = useState('');
+
+  // Update wall composition when route params change (when returning from WallScreen with updated data)
+  useEffect(() => {
+    if (route.params?.wallComposition) {
+      console.log('📊 Received updated wall composition from WallScreen:', route.params.wallComposition);
+      setWallComposition(route.params.wallComposition);
+    }
+  }, [route.params?.wallComposition]);
 
   // --- HOME NAVIGATION HANDLER ---
   const goHome = () => {

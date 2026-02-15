@@ -25,6 +25,7 @@ import FoundationSelection from './screens/FoundationSelection';
 import FoundationCost from './screens/FoundationCost';
 
 import WallScreen from './screens/WallScreen'; 
+import WallCostSummaryScreen from './screens/WallCostSummaryScreen';
 import RoofingScreen from './screens/RoofingScreen';
 import FlooringScreen from './screens/FlooringScreen';
 import PaintingScreen from './screens/PaintingScreen';
@@ -64,6 +65,25 @@ export type RootStackParamList = {
 
   // Other Estimates
   WallDetails: { totalArea: number; projectId: string; rooms: any[]; tier: string }; 
+  WallCostSummary: { 
+    totalArea: number; 
+    rooms: any[]; 
+    projectId: string; 
+    tier: string; 
+    height: string; 
+    wallThickness: string; 
+    jointThickness: string; 
+    openingDeduction: string; 
+    partitionWallThickness: number; 
+    avgMainWallRatio: number; 
+    avgPartitionWallRatio: number; 
+    avgOpeningPercentage: number; 
+    loadBearingBrick: any; 
+    partitionBrick: any; 
+    cement: any; 
+    sand: any; 
+    aiInsights?: any;
+  };
   RoofingScreen: { totalArea: number; projectId: string; tier: string };
   FlooringScreen: { totalArea: number; projectId: string; tier: string };
   PaintingScreen: { totalArea: number; projectId: string; tier: string };
@@ -164,6 +184,7 @@ function AppContent() {
             <Stack.Screen name="FoundationCost" component={FoundationCost} />
 
             <Stack.Screen name="WallDetails" component={WallScreen} />
+            <Stack.Screen name="WallCostSummary" component={WallCostSummaryScreen} />
             <Stack.Screen name="RoofingScreen" component={RoofingScreen} />
             <Stack.Screen name="FlooringScreen" component={FlooringScreen} />
             <Stack.Screen name="PaintingScreen" component={PaintingScreen} />

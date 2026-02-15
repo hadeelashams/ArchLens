@@ -84,34 +84,36 @@ export const Sidebar = ({ navigation, activeRoute }: SidebarProps) => {
 
 const styles = StyleSheet.create({
   sidebar: { 
-    width: 280, 
+    width: 220, 
     backgroundColor: BLUE_ARCH, 
-    paddingVertical: 40, 
-    paddingHorizontal: 24, 
+    paddingVertical: 32, 
+    paddingHorizontal: 18, 
     justifyContent: 'space-between',
-    height: '100%' 
+    height: '100%',
+    borderRightWidth: 1,
+    borderRightColor: 'rgba(255,255,255,0.08)'
   },
-  logoArea: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 10 },
+  logoArea: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
   logoCircle: { 
-    width: 50, 
-    height: 50, 
-    borderRadius: 25, 
+    width: 44, 
+    height: 44, 
+    borderRadius: 22, 
     justifyContent: 'center', 
     alignItems: 'center', 
     borderWidth: 1, 
-    borderColor: 'rgba(255,255,255,0.2)' 
+    borderColor: 'rgba(255,255,255,0.15)' 
   },
   brandTextWrapper: { flexDirection: 'row', alignItems: 'baseline' },
-  archTypography: { fontSize: 18, fontWeight: '900', color: '#fff', letterSpacing: 2 },
-  lensTypography: { fontSize: 18, fontWeight: '300', color: '#bae6fd', letterSpacing: 2, marginLeft: 3 },
-  logoSub: { color: '#94a3b8', fontSize: 10, letterSpacing: 1.5, fontWeight: '700' },
-  sidebarDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.1)', marginVertical: 30 },
+  archTypography: { fontSize: 15, fontWeight: '900', color: '#fff', letterSpacing: 1.8 },
+  lensTypography: { fontSize: 15, fontWeight: '300', color: '#bae6fd', letterSpacing: 1.8, marginLeft: 2 },
+  logoSub: { color: '#94a3b8', fontSize: 9, letterSpacing: 1.2, fontWeight: '700', marginTop: 2 },
+  sidebarDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.08)', marginVertical: 24 },
   
   // Unified Navigation Styles
-  navItem: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 12, marginBottom: 10, gap: 12 },
-  navItemActive: { backgroundColor: 'rgba(255,255,255,0.1)' },
-  navText: { fontWeight: '600', fontSize: 14 },
+  navItem: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 10, marginBottom: 8, gap: 10 },
+  navItemActive: { backgroundColor: 'rgba(14, 165, 233, 0.15)', borderLeftWidth: 3, borderLeftColor: '#0ea5e9' },
+  navText: { fontWeight: '600', fontSize: 13, flex: 1 },
   
-  logoutBtn: { flexDirection: 'row', alignItems: 'center', padding: 14, backgroundColor: 'rgba(248,113,113,0.1)', borderRadius: 12 },
-  logoutText: { color: '#fca5a5', marginLeft: 10, fontWeight: '700' },
+  logoutBtn: { flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: 'rgba(248,113,113,0.12)', borderRadius: 10 },
+  logoutText: { color: '#fca5a5', marginLeft: 8, fontWeight: '700', fontSize: 13 },
 });
