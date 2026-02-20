@@ -8,7 +8,7 @@ export const ROOFING_MATERIALS_SEED_DATA = [
   // ===== RCC SLAB MATERIALS =====
   {
     name: "Lafarge PPC Cement 50kg",
-    category: "Roofing",
+    category: "Roof",
     subCategory: "RCC Slab",
     type: "Cement",
     grade: "PPC",
@@ -22,7 +22,7 @@ export const ROOFING_MATERIALS_SEED_DATA = [
   },
   {
     name: "Ramco OPC Cement 50kg",
-    category: "Roofing",
+    category: "Roof",
     subCategory: "RCC Slab",
     type: "Cement",
     grade: "OPC",
@@ -36,7 +36,7 @@ export const ROOFING_MATERIALS_SEED_DATA = [
   },
   {
     name: "TATA Steel TMT Fe 550",
-    category: "Roofing",
+    category: "Roof",
     subCategory: "RCC Slab",
     type: "Steel (TMT Bar)",
     grade: "550MPa",
@@ -50,7 +50,7 @@ export const ROOFING_MATERIALS_SEED_DATA = [
   },
   {
     name: "Vizag Steel TMT Fe 500",
-    category: "Roofing",
+    category: "Roof",
     subCategory: "RCC Slab",
     type: "Steel (TMT Bar)",
     grade: "500MPa",
@@ -64,7 +64,7 @@ export const ROOFING_MATERIALS_SEED_DATA = [
   },
   {
     name: "River Sand (Washed)",
-    category: "Roofing",
+    category: "Roof",
     subCategory: "RCC Slab",
     type: "Sand",
     grade: "M Grade",
@@ -78,7 +78,7 @@ export const ROOFING_MATERIALS_SEED_DATA = [
   },
   {
     name: "Aggregate 20mm",
-    category: "Roofing",
+    category: "Roof",
     subCategory: "RCC Slab",
     type: "Aggregate",
     grade: "20mm",
@@ -92,7 +92,7 @@ export const ROOFING_MATERIALS_SEED_DATA = [
   },
   {
     name: "Aggregate 40mm",
-    category: "Roofing",
+    category: "Roof",
     subCategory: "RCC Slab",
     type: "Aggregate",
     grade: "40mm",
@@ -108,7 +108,7 @@ export const ROOFING_MATERIALS_SEED_DATA = [
   // ===== SLOPED ROOF - TILE MATERIALS =====
   {
     name: "JSW Steel Truss Profile",
-    category: "Roofing",
+    category: "Roof",
     subCategory: "Sloped Roof - Tile",
     type: "Steel Truss",
     grade: "Grade A",
@@ -122,7 +122,7 @@ export const ROOFING_MATERIALS_SEED_DATA = [
   },
   {
     name: "Premium Teak Wood Truss",
-    category: "Roofing",
+    category: "Roof",
     subCategory: "Sloped Roof - Tile",
     type: "Timber/Wood Truss",
     grade: "Premium Grade",
@@ -136,7 +136,7 @@ export const ROOFING_MATERIALS_SEED_DATA = [
   },
   {
     name: "Clay Roof Tile - Mangalore",
-    category: "Roofing",
+    category: "Roof",
     subCategory: "Sloped Roof - Tile",
     type: "Clay Roof Tile",
     grade: "Standard",
@@ -150,7 +150,7 @@ export const ROOFING_MATERIALS_SEED_DATA = [
   },
   {
     name: "Concrete Roof Tile - Interlocking",
-    category: "Roofing",
+    category: "Roof",
     subCategory: "Sloped Roof - Tile",
     type: "Concrete Roof Tile",
     grade: "Heavy Duty",
@@ -164,7 +164,7 @@ export const ROOFING_MATERIALS_SEED_DATA = [
   },
   {
     name: "Natural Slate Tile",
-    category: "Roofing",
+    category: "Roof",
     subCategory: "Sloped Roof - Tile",
     type: "Slate Tile",
     grade: "Premium",
@@ -178,7 +178,7 @@ export const ROOFING_MATERIALS_SEED_DATA = [
   },
   {
     name: "Waterproof Underlayment - 300gsm",
-    category: "Roofing",
+    category: "Roof",
     subCategory: "Sloped Roof - Tile",
     type: "Roofing Underlayment",
     grade: "300gsm",
@@ -192,7 +192,7 @@ export const ROOFING_MATERIALS_SEED_DATA = [
   },
   {
     name: "Waterproof Membrane - HDPE",
-    category: "Roofing",
+    category: "Roof",
     subCategory: "Sloped Roof - Tile",
     type: "Waterproof Membrane",
     grade: "HDPE 200 micron",
@@ -208,7 +208,7 @@ export const ROOFING_MATERIALS_SEED_DATA = [
   // ===== SLOPED ROOF - SHEET MATERIALS =====
   {
     name: "Structural Steel Beam - Truss",
-    category: "Roofing",
+    category: "Roof",
     subCategory: "Sloped Roof - Sheet",
     type: "Steel Truss",
     grade: "Grade A",
@@ -222,7 +222,7 @@ export const ROOFING_MATERIALS_SEED_DATA = [
   },
   {
     name: "Galvanized Iron Sheet - 0.45mm",
-    category: "Roofing",
+    category: "Roof",
     subCategory: "Sloped Roof - Sheet",
     type: "Galvanized Iron Sheet",
     grade: "GI 350",
@@ -236,7 +236,7 @@ export const ROOFING_MATERIALS_SEED_DATA = [
   },
   {
     name: "Aluminium Sheet Roofing",
-    category: "Roofing",
+    category: "Roof",
     subCategory: "Sloped Roof - Sheet",
     type: "Aluminium Sheet",
     grade: "Grade A",
@@ -250,7 +250,7 @@ export const ROOFING_MATERIALS_SEED_DATA = [
   },
   {
     name: "Polycarbonate Sheet - 6mm",
-    category: "Roofing",
+    category: "Roof",
     subCategory: "Sloped Roof - Sheet",
     type: "Polycarbonate Sheet",
     grade: "Clear",
@@ -264,7 +264,7 @@ export const ROOFING_MATERIALS_SEED_DATA = [
   },
   {
     name: "Anti-condensation Felt - 250gsm",
-    category: "Roofing",
+    category: "Roof",
     subCategory: "Sloped Roof - Sheet",
     type: "Anti-condensation Felt",
     grade: "250gsm",
@@ -278,7 +278,7 @@ export const ROOFING_MATERIALS_SEED_DATA = [
   },
   {
     name: "Waterproof Membrane - Bitumen",
-    category: "Roofing",
+    category: "Roof",
     subCategory: "Sloped Roof - Sheet",
     type: "Waterproof Membrane",
     grade: "APP Modified",

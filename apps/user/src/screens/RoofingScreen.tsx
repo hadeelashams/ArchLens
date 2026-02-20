@@ -82,7 +82,7 @@ export default function RoofingScreen({ route, navigation }: any) {
 
   // 1. Fetch Materials and Initialize Selections based on Roof Type
   useEffect(() => {
-    const q = query(collection(db, 'materials'), where('category', 'in', ['Roofing', 'Foundation', 'Structural']));
+    const q = query(collection(db, 'materials'), where('category', 'in', ['Roof', 'Foundation', 'Structural']));
     const unsub = onSnapshot(q, (snap) => {
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
       setMaterials(data);
