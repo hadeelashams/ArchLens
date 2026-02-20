@@ -417,8 +417,8 @@ export default function WallCostSummaryScreen({ route, navigation }: any) {
             </View>
           </View>
 
-          {/* AI Engineering Insight Badge */}
-          {aiInsights && tier === 'Economy' && (
+          {/* AI Engineering Insight Badge - For all tiers */}
+          {aiInsights && (
             <View style={styles.aiInsightContainer}>
               <View style={styles.aiInsightBadge}>
                 <View style={{flexDirection: 'row', alignItems: 'flex-start', gap: 10}}>
@@ -426,7 +426,7 @@ export default function WallCostSummaryScreen({ route, navigation }: any) {
                     <Ionicons name="bulb-outline" size={18} color="#fff" />
                   </View>
                   <View style={{flex: 1}}>
-                    <Text style={styles.aiInsightTitle}>AI Engineering Insight</Text>
+                    <Text style={styles.aiInsightTitle}>✨ AI Material Recommendation</Text>
                     {aiInsights.costSavingsPercent > 0 && (
                       <Text style={styles.aiInsightSavings}>
                         💰 Saves ~{aiInsights.costSavingsPercent}% vs standard spec

@@ -76,12 +76,23 @@ export const CONSTRUCTION_HIERARCHY = {
       'Partition': ["Brick Partition", "Block Partition", "Dry Wall", "Glass","Wood Wall"],
     },
   },
-  'Roof': {
-    label: "Roof",
+'Roof': {
+    label: "Roofing",
     subCategories: {
-      'RCC Slab': ["Cement", "Steel (TMT Bar)", "Sand", "Waterproofing Chemical"],
-      'Sloped Roof': ["Clay Roof Tile", "Concrete Roof Tile", "Slate", "Timber/Wood", "Steel Truss"],
-      'Metal Sheet': ["Galvanized Iron Sheet", "Polycarbonate Sheet", "Aluminium Sheet"],
+      "RCC Slab": {
+        "Slab Core": ["Cement", "Steel (TMT Bar)", "Sand", "Aggregate"],
+        "Protection": ["Waterproofing Chemical"]
+      },
+      "Sloped Roof - Tile": {
+        "Truss Structure": ["Steel Truss", "Timber/Wood Truss"],
+        "Roof Covering": ["Clay Roof Tile", "Concrete Roof Tile", "Slate Tile"],
+        "Protection": ["Roofing Underlayment", "Waterproof Membrane"]
+      },
+      "Sloped Roof - Sheet": {
+        "Truss Structure": ["Steel Truss"],
+        "Roof Covering": ["Galvanized Iron Sheet", "Aluminium Sheet", "Polycarbonate Sheet"],
+        "Protection": ["Anti-condensation Felt", "Waterproof Membrane"]
+      }
     },
   },
   'Flooring': {

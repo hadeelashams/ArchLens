@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { 
   db, createDocument, updateDocument, deleteDocument, 
-  CONSTRUCTION_HIERARCHY, MATERIAL_UNITS, WALL_MATERIALS_SEED_DATA
+  CONSTRUCTION_HIERARCHY, MATERIAL_UNITS, WALL_MATERIALS_SEED_DATA, ROOFING_MATERIALS_SEED_DATA
 } from '@archlens/shared';
 import { collection, onSnapshot, query, orderBy, serverTimestamp, doc, writeBatch } from 'firebase/firestore';
 import { Feather } from '@expo/vector-icons';
@@ -21,7 +21,9 @@ export default function DashboardScreen({ navigation }: any) {
   const [saveLoading, setSaveLoading] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [isSeedingWallMaterials, setIsSeedingWallMaterials] = useState(false);
+  const [isSeedingRoofingMaterials, setIsSeedingRoofingMaterials] = useState(false);
   const [showSeedConfirm, setShowSeedConfirm] = useState(false);
+  const [seedType, setSeedType] = useState<'wall' | 'roofing' | null>(null);
 
   // --- UI STATE ---
   const [searchQuery, setSearchQuery] = useState('');
@@ -86,7 +88,16 @@ export default function DashboardScreen({ navigation }: any) {
     const root = CONSTRUCTION_HIERARCHY[category]?.subCategories;
     // @ts-ignore
     const leaves = root?.[sub];
-    return Array.isArray(leaves) ? leaves : [];
+    
+    // Handle both array and object (grouped) structures
+    if (Array.isArray(leaves)) {
+      return leaves;
+    } else if (typeof leaves === 'object' && leaves !== null) {
+      // Flatten grouped materials into single array
+      // e.g., {"Slab Core": [...], "Protection": [...]} => [...]
+      return Object.values(leaves).flat() as string[];
+    }
+    return [];
   };
 
   const isWallCategory = () => selCategory?.toLowerCase().includes('wall');
@@ -159,30 +170,37 @@ export default function DashboardScreen({ navigation }: any) {
     setName(''); setPrice(''); setUnit(''); setGrade(''); setDimensions(''); setImageUrl('');
   };
 
-  // ===== SEED WALL MATERIALS FUNCTION =====
-  const handleSeedWallMaterials = async () => {
-    console.log('🔘 Seed button clicked!');
-    console.log('WALL_MATERIALS_SEED_DATA available:', !!WALL_MATERIALS_SEED_DATA);
-    console.log('Data length:', WALL_MATERIALS_SEED_DATA?.length);
+  // ===== SEED MATERIALS FUNCTION (WALL & ROOFING) =====
+  const handleSeedMaterials = (type: 'wall' | 'roofing') => {
+    console.log(`🔘 Seed ${type} materials button clicked!`);
+    setSeedType(type);
     setShowSeedConfirm(true);
   };
 
   const confirmSeed = async () => {
     setShowSeedConfirm(false);
-    console.log('Starting seed process...');
-    setIsSeedingWallMaterials(true);
+    console.log(`Starting ${seedType} seed process...`);
+    if (seedType === 'wall') {
+      setIsSeedingWallMaterials(true);
+    } else {
+      setIsSeedingRoofingMaterials(true);
+    }
     await seedMaterials();
   };
 
   const seedMaterials = async () => {
     try {
+      const seedData = seedType === 'wall' ? WALL_MATERIALS_SEED_DATA : ROOFING_MATERIALS_SEED_DATA;
+      const seedName = seedType === 'wall' ? 'Wall' : 'Roofing';
+      const seedCount = seedData.length;
+      
       console.log('📝 Creating batch write...');
-      console.log('Materials to seed:', WALL_MATERIALS_SEED_DATA.length);
+      console.log(`Materials to seed (${seedName}):`, seedCount);
       
       const batch = writeBatch(db);
       let count = 0;
 
-      for (const material of WALL_MATERIALS_SEED_DATA) {
+      for (const material of seedData) {
         const ref = doc(collection(db, 'materials'));
         
         batch.set(ref, {
@@ -193,15 +211,16 @@ export default function DashboardScreen({ navigation }: any) {
         count++;
       }
 
-      console.log(`✅ Batch ready: ${count} materials`);
+      console.log(`✅ Batch ready: ${count} ${seedName} materials`);
       await batch.commit();
       
-      console.log('✨ Batch successfully committed to Firestore!');
+      console.log(`✨ Batch successfully committed to Firestore!`);
       setIsSeedingWallMaterials(false);
+      setIsSeedingRoofingMaterials(false);
       
       Alert.alert(
         "✨ Success!",
-        `All 19 wall materials have been added!\n\nThey will appear in the list below.`
+        `All ${seedCount} ${seedName.toLowerCase()} materials have been added!\n\nThey will appear in the list below.`
       );
     } catch (error: any) {
       console.error('❌ Batch Error:', {
@@ -210,6 +229,7 @@ export default function DashboardScreen({ navigation }: any) {
         fullError: error
       });
       setIsSeedingWallMaterials(false);
+      setIsSeedingRoofingMaterials(false);
       Alert.alert("❌ Seed Failed", error.message || "Unknown error occurred");
     }
   };
@@ -273,7 +293,7 @@ export default function DashboardScreen({ navigation }: any) {
             </View>
             <TouchableOpacity 
               style={[styles.secondaryBtn, isSeedingWallMaterials && { opacity: 0.6 }]} 
-              onPress={handleSeedWallMaterials}
+              onPress={() => handleSeedMaterials('wall')}
               disabled={isSeedingWallMaterials}
             >
               {isSeedingWallMaterials ? (
@@ -282,6 +302,20 @@ export default function DashboardScreen({ navigation }: any) {
                 <>
                   <Feather name="download" size={18} color="#1e293b" />
                   <Text style={[styles.btnText, { color: '#1e293b' }]}>Seed Wall (19)</Text>
+                </>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.secondaryBtn, isSeedingRoofingMaterials && { opacity: 0.6 }]} 
+              onPress={() => handleSeedMaterials('roofing')}
+              disabled={isSeedingRoofingMaterials}
+            >
+              {isSeedingRoofingMaterials ? (
+                <ActivityIndicator color="#1e293b" size={18} />
+              ) : (
+                <>
+                  <Feather name="download" size={18} color="#1e293b" />
+                  <Text style={[styles.btnText, { color: '#1e293b' }]}>Seed Roofing (21)</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -576,17 +610,31 @@ export default function DashboardScreen({ navigation }: any) {
       <Modal visible={showSeedConfirm} animationType="fade" transparent>
         <View style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.7)', justifyContent: 'center', alignItems: 'center' }}>
           <View style={{ backgroundColor: '#fff', borderRadius: 24, padding: 40, width: 500, gap: 20 }}>
-            <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#0f172a' }}>🌱 Seed Wall Materials?</Text>
+            <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#0f172a' }}>
+              {seedType === 'wall' ? '🧱 Seed Wall Materials?' : '🏠 Seed Roofing Materials?'}
+            </Text>
             <Text style={{ fontSize: 14, color: '#64748b', lineHeight: 20 }}>
-              This will add all 19 wall materials (bricks, blocks, cement, sand) to Firestore.
+              {seedType === 'wall' 
+                ? 'This will add all 19 wall materials (bricks, blocks, cement, sand) to Firestore.'
+                : 'This will add all 21 roofing materials (RCC slab, sloped tiles & sheets) to Firestore.'}
             </Text>
             
             <View style={{ backgroundColor: '#f0fdf4', padding: 15, borderRadius: 12, gap: 6 }}>
-              <Text style={{ fontSize: 13, fontWeight: '600', color: '#166534' }}>✓ 3 brick types (load bearing)</Text>
-              <Text style={{ fontSize: 13, fontWeight: '600', color: '#166534' }}>✓ 4 concrete blocks (load bearing)</Text>
-              <Text style={{ fontSize: 13, fontWeight: '600', color: '#166534' }}>✓ 2 natural stones</Text>
-              <Text style={{ fontSize: 13, fontWeight: '600', color: '#166534' }}>✓ 4 partition blocks (AAC+Hollow)</Text>
-              <Text style={{ fontSize: 13, fontWeight: '600', color: '#166534' }}>✓ 6 mortar materials (Cement+Sand)</Text>
+              {seedType === 'wall' ? (
+                <>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: '#166534' }}>✓ 3 brick types (load bearing)</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: '#166534' }}>✓ 4 concrete blocks (load bearing)</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: '#166534' }}>✓ 2 natural stones</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: '#166534' }}>✓ 4 partition blocks (AAC+Hollow)</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: '#166534' }}>✓ 6 mortar materials (Cement+Sand)</Text>
+                </>
+              ) : (
+                <>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: '#166534' }}>✓ RCC Slab (7 materials): Cement, Steel, Sand, Aggregate</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: '#166534' }}>✓ Sloped Roof - Tile (6 materials): Truss, Clay/Concrete Tiles, Underlayment</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: '#166534' }}>✓ Sloped Roof - Sheet (8 materials): Truss, GI, Aluminium, Polycarbonate Sheets</Text>
+                </>
+              )}
             </View>
 
             <View style={{ flexDirection: 'row', gap: 12 }}>
@@ -599,9 +647,9 @@ export default function DashboardScreen({ navigation }: any) {
               <TouchableOpacity 
                 style={{ flex: 1, padding: 14, borderRadius: 12, backgroundColor: '#10b981', alignItems: 'center' }}
                 onPress={confirmSeed}
-                disabled={isSeedingWallMaterials}
+                disabled={isSeedingWallMaterials || isSeedingRoofingMaterials}
               >
-                {isSeedingWallMaterials ? (
+                {isSeedingWallMaterials || isSeedingRoofingMaterials ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
                   <Text style={{ fontWeight: '600', color: '#fff' }}>Seed Now 🚀</Text>

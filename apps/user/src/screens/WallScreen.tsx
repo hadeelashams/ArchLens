@@ -446,7 +446,30 @@ export default function WallScreen({ route, navigation }: any) {
     const loadBearingQty = calculateBrickQty(loadBearingBrick, lbFaceArea_sqft, wt_in);
     const partitionQty = calculateBrickQty(partitionBrick, pbFaceArea_sqft, partitionWallThickness);
 
-    return { loadBearingQty, partitionQty };
+    // Mortar calculation for cement & sand
+    const calcMortarForBrick = (brick: any, faceArea_sqft: number, targetWallThick_in: number) => {
+      if (!brick || faceArea_sqft <= 0) return { cementBags: 0, sandKg: 0 };
+      const dims = brick.dimensions?.toLowerCase().split('x').map((v: string) => parseFloat(v.trim())) || [9, 4, 3];
+      const bL_in = dims[0]; const bW_in = dims[1]; const bH_in = dims[2];
+      const jt = jt_in || 0.375;
+      const layers = Math.max(1, Math.round(targetWallThick_in / bW_in));
+      const brickVol_ft3 = (bL_in * IN_TO_FT) * (bW_in * IN_TO_FT) * (bH_in * IN_TO_FT);
+      const unitVol_ft3 = ((bL_in + jt) * IN_TO_FT) * ((bW_in + jt) * IN_TO_FT) * ((bH_in + jt) * IN_TO_FT);
+      const mortarFraction = (unitVol_ft3 - brickVol_ft3) / unitVol_ft3;
+      const wallVol_ft3 = faceArea_sqft * (targetWallThick_in * IN_TO_FT) * layers;
+      const mortarVol_m3 = wallVol_ft3 * mortarFraction * DRY_VOL_MULTIPLIER * MORTAR_WASTAGE_FACTOR / CFT_PER_M3;
+      return {
+        cementBags: Math.ceil((mortarVol_m3 / 7) * CEMENT_BAGS_PER_M3),
+        sandKg: Math.ceil((mortarVol_m3 * 6 / 7) * SAND_DENSITY_KG_M3),
+      };
+    };
+
+    const lbMortar = calcMortarForBrick(loadBearingBrick, lbFaceArea_sqft, wt_in);
+    const pbMortar = calcMortarForBrick(partitionBrick, pbFaceArea_sqft, partitionWallThickness);
+    const cementQty = lbMortar.cementBags + pbMortar.cementBags;
+    const sandQty = lbMortar.sandKg + pbMortar.sandKg;
+
+    return { loadBearingQty, partitionQty, cementQty, sandQty };
   }, [height, wallThickness, jointThickness, openingDeduction, loadBearingBrick, partitionBrick, totalArea, rooms, avgMainWallRatio, avgPartitionWallRatio, partitionWallThickness]);
 
   // 5. AI Auto-Select Handler
@@ -678,7 +701,6 @@ export default function WallScreen({ route, navigation }: any) {
               </View>
             </View>
           </View>
-
           {/* 2. Dual Material Selection (Load-Bearing & Partition) */}
           <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15}}>
             <Text style={styles.sectionLabel}>WALL MATERIALS</Text>
@@ -997,7 +1019,7 @@ export default function WallScreen({ route, navigation }: any) {
                   <View style={styles.mortarDividerVertical} />
                   <View>
                     <Text style={styles.mortarFooterLabel}>Quantity</Text>
-                    <Text style={styles.mortarQtyValue}>--</Text>
+                    <Text style={styles.mortarQtyValue}>{calculation.cementQty > 0 ? `${calculation.cementQty} bags` : '--'}</Text>
                   </View>
                 </View>
               </View>
@@ -1035,7 +1057,7 @@ export default function WallScreen({ route, navigation }: any) {
                   <View style={styles.mortarDividerVertical} />
                   <View>
                     <Text style={styles.mortarFooterLabel}>Quantity</Text>
-                    <Text style={styles.mortarQtyValue}>--</Text>
+                    <Text style={styles.mortarQtyValue}>{calculation.sandQty > 0 ? `${calculation.sandQty} kg` : '--'}</Text>
                   </View>
                 </View>
               </View>

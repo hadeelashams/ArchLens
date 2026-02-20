@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   View, Text, StyleSheet, TouchableOpacity, ScrollView, 
-  Dimensions, Platform, TextInput, ActivityIndicator, Image, Switch, Alert 
+  Dimensions, Platform, TextInput, ActivityIndicator, Image, Switch 
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons'; 
@@ -45,14 +45,14 @@ const ALL_LAYER_MAPS = {
 };
 
 export default function FoundationSelection({ route, navigation }: any) {
-  const { totalArea: passedArea, projectId, tier = 'Standard' } = route.params || {};
+  const { totalArea: passedArea, projectId, tier = 'Standard', aiRecommendations: routeAiRecommendations, aiAdvice: routeAiAdvice } = route.params || {};
 
   const [loading, setLoading] = useState(true);
   const [materials, setMaterials] = useState<any[]>([]);
   
   // AI Recommendation State
-  const [isAiLoading, setIsAiLoading] = useState(false);
   const [aiAdvice, setAiAdvice] = useState("");
+  const [isAiLoading, setIsAiLoading] = useState(false);
   
   const [foundationType, setFoundationType] = useState<FoundationType>('RCC');
   const [hasPCC, setHasPCC] = useState(true);
@@ -133,52 +133,72 @@ export default function FoundationSelection({ route, navigation }: any) {
     return typeItems.slice(oneThird, total - oneThird); 
   };
 
+  // Auto-apply AI recommendations from route params after materials load
+  useEffect(() => {
+    if (!routeAiRecommendations || Object.keys(routeAiRecommendations).length === 0 || materials.length === 0) return;
+
+    const updatedSelections: Record<string, any> = { ...selections };
+    let applied = 0;
+
+    Object.entries(routeAiRecommendations).forEach(([type, id]) => {
+      const match = materials.find((m: any) => m.id === id);
+      if (!match) return;
+
+      // Apply to every layer that uses this material type
+      Object.keys(ALL_LAYER_MAPS).forEach(layer => {
+        (ALL_LAYER_MAPS as any)[layer].forEach((layerType: string) => {
+          if (layerType === type) {
+            updatedSelections[`${layer}_${type}`] = match;
+            applied++;
+          }
+        });
+      });
+    });
+
+    if (applied > 0) {
+      console.log(`✓ Applied ${applied} AI foundation material selections`);
+      setSelections(updatedSelections);
+    }
+    if (routeAiAdvice) {
+      setAiAdvice(routeAiAdvice);
+    }
+  }, [materials.length]);
+
+  const generateAndApplyAiRecommendations = async () => {
+    setIsAiLoading(true);
+    try {
+      const foundationMaterials = materials.filter(m => m.category === 'Foundation');
+      const result = await getComponentRecommendation('Foundation', tier, area, foundationMaterials);
+      const updatedSelections: Record<string, any> = { ...selections };
+      if (result.recommendations && Array.isArray(result.recommendations)) {
+        result.recommendations.forEach((rec: any) => {
+          if (!rec.id || !rec.type) return;
+          const match = materials.find(m => m.id === rec.id);
+          if (!match) return;
+          Object.keys(ALL_LAYER_MAPS).forEach(layer => {
+            (ALL_LAYER_MAPS as any)[layer].forEach((layerType: string) => {
+              if (layerType === rec.type) {
+                updatedSelections[`${layer}_${layerType}`] = match;
+              }
+            });
+          });
+        });
+      }
+      setSelections(updatedSelections);
+      if (result.advice) setAiAdvice(result.advice);
+    } catch (error) {
+      console.error('AI Foundation recommendation error:', error);
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
+
   const handleNext = () => {
     const common = { projectId, area, tier, selections: { ...selections, ...aggSelections } };
     if (foundationType === 'RCC') {
       navigation.navigate('FoundationCost', { ...common, foundationType: 'RCC', foundationConfig: { hasPCC, includePlinth, footingCount: parseInt(footingCount) || 0, footingLength: parseFloat(footingLength), footingWidth: parseFloat(footingWidth), pccThickness: parseFloat(pccThickness), rccExcavationDepth: parseFloat(rccExcavationDepth) } });
     } else {
       navigation.navigate('FoundationCost', { ...common, foundationType: 'StoneMasonry', foundationConfig: { wallPerimeter: parseFloat(wallPerimeter), trenchWidth: parseFloat(trenchWidth), masonryExcavationDepth: parseFloat(masonryExcavationDepth), masonryThickness: parseFloat(masonryThickness) } });
-    }
-  };
-
-  // AI Auto-Select Handler for Foundation
-  const handleAiAutoSelect = async () => {
-    setIsAiLoading(true);
-    try {
-      const result = await getComponentRecommendation('Foundation', tier, area, materials);
-      
-      // Apply AI recommendations to selected materials
-      if (result.recommendations && Array.isArray(result.recommendations)) {
-        const updatedSelections: Record<string, any> = { ...selections };
-        
-        result.recommendations.forEach((rec: any) => {
-          const match = materials.find(m => m.id === rec.id);
-          if (!match) return;
-
-          // Match recommendation type to selection key
-          Object.keys(ALL_LAYER_MAPS).forEach(layer => {
-            ALL_LAYER_MAPS[layer as keyof typeof ALL_LAYER_MAPS].forEach(type => {
-              const selectionKey = `${layer}_${type}`;
-              const typeStr = rec.type.toLowerCase();
-              
-              if (typeStr.includes(type.toLowerCase()) && (typeStr.includes(layer.toLowerCase()) || !updatedSelections[selectionKey])) {
-                updatedSelections[selectionKey] = match;
-              }
-            });
-          });
-        });
-        
-        setSelections(updatedSelections);
-      }
-
-      setAiAdvice(result.advice || 'Materials optimized based on your tier preference.');
-      Alert.alert("✓ AI Selection Applied", `Foundation materials selected for ${tier} tier. You can still customize them.`);
-    } catch (error: any) {
-      console.error('AI Selection Error:', error);
-      Alert.alert("AI Error", error.message || "Could not get recommendations. Please select materials manually.");
-    } finally {
-      setIsAiLoading(false);
     }
   };
 
@@ -198,32 +218,31 @@ export default function FoundationSelection({ route, navigation }: any) {
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
           <Text style={styles.sectionLabel}>FOUNDATION TYPE</Text>
-          <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15}}>
-            <View style={{flex: 1}}>
-              <View style={styles.methodContainer}>
-                {['RCC', 'StoneMasonry'].map((type) => (
-                  <TouchableOpacity key={type} style={[styles.methodTab, foundationType === type && styles.methodTabActive]} onPress={() => setFoundationType(type as FoundationType)}>
-                    <Text style={[styles.methodText, foundationType === type && styles.methodTextActive]}>{type === 'RCC' ? 'RCC Footing' : 'Stone Masonry'}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-            {/* AI Chip Button */}
-            <TouchableOpacity 
-              style={[styles.aiChipButton, isAiLoading && {opacity: 0.6}]} 
-              onPress={handleAiAutoSelect}
-              disabled={isAiLoading}
-            >
-              {isAiLoading ? (
-                <ActivityIndicator size="small" color="#315b76" />
-              ) : (
-                <>
-                  <Ionicons name="sparkles" size={12} color="#315b76" />
-                  <Text style={styles.aiChipText}>AI</Text>
-                </>
-              )}
-            </TouchableOpacity>
+          <View style={styles.methodContainer}>
+            {['RCC', 'StoneMasonry'].map((type) => (
+              <TouchableOpacity key={type} style={[styles.methodTab, foundationType === type && styles.methodTabActive]} onPress={() => setFoundationType(type as FoundationType)}>
+                <Text style={[styles.methodText, foundationType === type && styles.methodTextActive]}>{type === 'RCC' ? 'RCC Footing' : 'Stone Masonry'}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
+
+          {/* AI Recommendation Button */}
+          <TouchableOpacity
+            style={[styles.aiMagicButton, isAiLoading && { opacity: 0.7 }]}
+            onPress={generateAndApplyAiRecommendations}
+            disabled={isAiLoading}
+          >
+            {isAiLoading ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Ionicons name="sparkles" size={18} color="#fff" />
+            )}
+            <Text style={styles.aiMagicText}>
+              {isAiLoading
+                ? 'Analyzing best materials...'
+                : `Get AI Recommendation for ${tier}`}
+            </Text>
+          </TouchableOpacity>
 
           {aiAdvice ? (
             <View style={styles.adviceBoxCompact}>

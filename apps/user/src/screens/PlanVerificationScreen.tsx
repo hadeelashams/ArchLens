@@ -7,7 +7,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { analyzeFloorPlan, extractStructuredData, auth } from '@archlens/shared'; 
+import { analyzeFloorPlan, extractStructuredData, auth, getComponentRecommendation, db } from '@archlens/shared'; 
+import { collection, query, getDocs } from 'firebase/firestore';
 import { useAIAnalysis } from '../context/AIAnalysisContext';
 import { createProject } from '../services/projectService';
 
@@ -35,6 +36,8 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
   const [isCached, setIsCached] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [wallComposition, setWallComposition] = useState<any>(null); // Store AI-analyzed wall composition
+  const [selectedTier, setSelectedTier] = useState<string>('Standard'); // Default tier
+  const [aiRecommendations, setAiRecommendations] = useState<any>(null); // Store AI recommendations
   
   // --- NEW STATE FOR ZOOM MODAL ---
   const [isZoomVisible, setZoomVisible] = useState(false);
@@ -231,6 +234,123 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
     setRooms(prev => prev.filter(r => r.id !== id));
   };
 
+  // Helper function to generate AI recommendations for a single tier
+  const generateAiRecommendationsForTier = async (tier: string, area: number, materials: any[]) => {
+    try {
+      console.log(`🔄 Generating AI recommendations for ${tier} tier...`);
+      
+      // Call AI recommendation API
+      const result = await getComponentRecommendation('Wall', tier, area, materials);
+      console.log(`✓ ${tier} recommendations generated`);
+      
+      // Extract recommendation IDs
+      const recommendedIds: Record<string, string> = {
+        loadBearingBrick: null,
+        partitionBrick: null,
+        cement: null,
+        sand: null
+      };
+
+      if (result.recommendations && Array.isArray(result.recommendations)) {
+        result.recommendations.forEach((rec: any) => {
+          const typeStr = rec.type.toLowerCase();
+          if (typeStr.includes('load-bearing') || typeStr.includes('load bearing brick')) {
+            recommendedIds.loadBearingBrick = rec.id;
+          } else if (typeStr.includes('partition') || typeStr.includes('partition brick')) {
+            recommendedIds.partitionBrick = rec.id;
+          } else if (typeStr.includes('cement')) {
+            recommendedIds.cement = rec.id;
+          } else if (typeStr.includes('sand')) {
+            recommendedIds.sand = rec.id;
+          }
+        });
+      }
+      
+      return { success: true, data: recommendedIds, advice: result.advice, insights: result.costSavingsRecommendation };
+    } catch (error: any) {
+      console.warn(`⚠️ AI Wall recommendations failed for ${tier} tier:`, error.message);
+      return { success: false, data: null, error: error.message };
+    }
+  };
+
+  // Generate Foundation AI recommendations for a specific tier
+  const generateFoundationRecommendationsForTier = async (tier: string, area: number, materials: any[]) => {
+    try {
+      const foundationMaterials = materials.filter(m => m.category === 'Foundation');
+      if (foundationMaterials.length === 0) return { success: false, data: null };
+
+      const result = await getComponentRecommendation('Foundation', tier, area, foundationMaterials);
+
+      // Extract by material type (used across all layers in FoundationSelection)
+      const typeToId: Record<string, string> = {};
+      if (result.recommendations && Array.isArray(result.recommendations)) {
+        result.recommendations.forEach((rec: any) => {
+          if (rec.id && rec.type) {
+            typeToId[rec.type] = rec.id;
+          }
+        });
+      }
+
+      return { success: true, data: typeToId, advice: result.advice };
+    } catch (error: any) {
+      console.warn(`⚠️ AI Foundation recommendations failed for ${tier} tier:`, error.message);
+      return { success: false, data: null };
+    }
+  };
+
+  // Helper function to generate AI recommendations for all three tiers
+  const generateAllTierRecommendations = async (area: number) => {
+    try {
+      console.log('📚 Generating AI recommendations for all tiers...');
+      
+      // Fetch all materials once (reuse for all tiers)
+      const q = query(collection(db, 'materials'));
+      const snapshot = await getDocs(q);
+      const materials = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as any));
+      
+      console.log('📦 Fetched materials for AI recommendations:', materials.length);
+      
+      // Generate Wall + Foundation recommendations for all tiers in parallel (6 calls)
+      const [
+        econWallResult, stdWallResult, luxWallResult,
+        econFoundResult, stdFoundResult, luxFoundResult
+      ] = await Promise.allSettled([
+        generateAiRecommendationsForTier('Economy', area, materials),
+        generateAiRecommendationsForTier('Standard', area, materials),
+        generateAiRecommendationsForTier('Luxury', area, materials),
+        generateFoundationRecommendationsForTier('Economy', area, materials),
+        generateFoundationRecommendationsForTier('Standard', area, materials),
+        generateFoundationRecommendationsForTier('Luxury', area, materials),
+      ]);
+
+      const allTierRecommendations: Record<string, any> = {
+        Economy: {
+          ...(econWallResult.status === 'fulfilled' ? econWallResult.value : { success: false, data: null }),
+          foundation: econFoundResult.status === 'fulfilled' ? econFoundResult.value : { success: false, data: null },
+        },
+        Standard: {
+          ...(stdWallResult.status === 'fulfilled' ? stdWallResult.value : { success: false, data: null }),
+          foundation: stdFoundResult.status === 'fulfilled' ? stdFoundResult.value : { success: false, data: null },
+        },
+        Luxury: {
+          ...(luxWallResult.status === 'fulfilled' ? luxWallResult.value : { success: false, data: null }),
+          foundation: luxFoundResult.status === 'fulfilled' ? luxFoundResult.value : { success: false, data: null },
+        },
+      };
+
+      console.log('✓ All tier recommendations generated:', {
+        Economy: allTierRecommendations.Economy.success,
+        Standard: allTierRecommendations.Standard.success,
+        Luxury: allTierRecommendations.Luxury.success
+      });
+
+      return allTierRecommendations;
+    } catch (error: any) {
+      console.error('❌ Error generating all tier recommendations:', error);
+      return { Economy: { success: false, data: null }, Standard: { success: false, data: null }, Luxury: { success: false, data: null } };
+    }
+  };
+
   const handleVerifyAndSave = async () => {
     if (!auth.currentUser) {
       Alert.alert("Login Required", "You must be logged in to save this project.");
@@ -254,12 +374,21 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
 
       const newProjectId = await createProject(projectData);
 
+      // Generate AI recommendations for ALL tiers at floor plan upload time (once, for all tiers)
+      console.log('🚀 Generating AI recommendations for all tiers...');
+      const allTierRecommendations = await generateAllTierRecommendations(totalArea);
+      if (allTierRecommendations) {
+        console.log('✓ All tier recommendations ready to pass');
+        setAiRecommendations(allTierRecommendations);
+      }
+
       setSaving(false);
       navigation.navigate('ConstructionLevel', { 
         totalArea: totalArea,
         projectId: newProjectId,
         rooms: rooms,
-        wallComposition: wallComposition || null // Pass null if undefined
+        wallComposition: wallComposition || null,
+        allTierRecommendations: allTierRecommendations || null // Pass all tier recommendations
       });
 
     } catch (error: any) {

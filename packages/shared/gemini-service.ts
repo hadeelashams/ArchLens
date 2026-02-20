@@ -91,14 +91,7 @@ const retryWithBackoff = async <T>(
                          errorMessage.includes('quota') || 
                          errorMessage.includes('GEMINI_DEVELOPER_OVERLOADED');
 
-      // On quota error, fail fast without retry
-      if (errorMessage.includes('quota')) {
-        const quotaError = new Error('AI_QUOTA_EXCEEDED');
-        (quotaError as any).originalError = error;
-        throw quotaError;
-      }
-
-      // If rate-limited and there are fallback models available, try switching
+      // If rate-limited or quota exceeded and there are fallback models available, try switching
       if (is429Error && currentModelIndex < GEMINI_MODELS.length - 1) {
         const switched = await switchToNextModel();
         if (switched) {
@@ -106,6 +99,13 @@ const retryWithBackoff = async <T>(
           attempt--; // Don't count this as a retry attempt
           continue;
         }
+      }
+
+      // On quota error with no fallback models, throw quota error
+      if (errorMessage.includes('quota') && currentModelIndex >= GEMINI_MODELS.length - 1) {
+        const quotaError = new Error('AI_QUOTA_EXCEEDED');
+        (quotaError as any).originalError = error;
+        throw quotaError;
       }
 
       if (!is429Error || attempt === maxRetries) {
@@ -431,9 +431,21 @@ export const getComponentRecommendation = async (
       // Only include materials from the specified category
       const relevantMaterials = availableMaterials.filter(m => m.category === category);
       
+      // Create STRICT separate lists by type so AI cannot confuse cement with sand
+      const cementMaterials = relevantMaterials.filter(m => m.type === 'Cement');
+      const sandMaterials = relevantMaterials.filter(m => m.type === 'Sand');
+
       const materialsSummary = relevantMaterials
         .map(m => `ID: ${m.id}, Name: ${m.name}, Price: ₹${m.pricePerUnit}, Type: ${m.type}, SubCategory: ${m.subCategory || 'N/A'}, Dimensions: ${m.dimensions || 'N/A'}`)
         .join("\n");
+
+      const cementSummary = cementMaterials.length > 0 
+        ? `\n\n=== CEMENT ONLY (type:Cement) - Use ONLY these IDs for the Cement recommendation ===\n${cementMaterials.map(m => `ID: ${m.id}, Name: ${m.name}, Price: ₹${m.pricePerUnit} per ${m.unit}`).join('\n')}\n=== END CEMENT LIST ===`
+        : '';
+
+      const sandSummary = sandMaterials.length > 0
+        ? `\n\n=== SAND ONLY (type:Sand) - Use ONLY these IDs for the Sand recommendation ===\n${sandMaterials.map(m => `ID: ${m.id}, Name: ${m.name}, Price: ₹${m.pricePerUnit} per ${m.unit}`).join('\n')}\n=== END SAND LIST ===`
+        : '';
 
       // Enhanced prompt for Economy tier with cost-per-unit and finished-wall-cost optimization
       const prompt = `
@@ -447,10 +459,14 @@ PROJECT CONTEXT:
 
 AVAILABLE MATERIALS:
 ${materialsSummary}
+${cementSummary}
+${sandSummary}
 
 EXPERT RECOMMENDATION RULES:
 1. For "Wall" category: Recommend BOTH Load-Bearing AND Partition bricks + Cement + Sand
-2. For Economy tier ONLY:
+2. CEMENT RULE: The "Cement" recommendation ID MUST come ONLY from the "CEMENT ONLY" list above. NEVER use a Sand material ID for Cement.
+3. SAND RULE: The "Sand" recommendation ID MUST come ONLY from the "SAND ONLY" list above. NEVER use a Cement material ID for Sand.
+4. For Economy tier ONLY:
    - PRIORITIZE "Finished Wall Cost" = (quantity needed) × (price per unit)
    - Recommend AAC blocks (24x3" or similar) over traditional clay bricks for partitions because:
      * Larger size = fewer bricks needed per unit area
@@ -459,13 +475,13 @@ EXPERT RECOMMENDATION RULES:
      * Example: 24"×3" AAC block covers MORE area than 9"×3" clay brick with 80% less cement/sand
    - Recommend Fly Ash bricks over Red Clay for load-bearing sections (15-20% cost savings, same strength)
    - NOTE: A ₹45 per-unit AAC block is CHEAPER in total project cost than ₹8 per-unit clay brick because you need 5x fewer blocks
-3. For Standard/Luxury: Focus on quality, then cost
-4. Match materials to the specified ${tier} budget tier
-5. Consider the ${area} sq ft area and wall requirements in your recommendations
-6. Prioritize durability and professional construction practices
-7. For Cement & Sand in Economy tier, recommend leaner mixes (1:6 for partitions, 1:4 for load-bearing) to reduce material consumption
+5. For Standard/Luxury: Focus on quality, then cost
+6. Match materials to the specified ${tier} budget tier
+7. Consider the ${area} sq ft area and wall requirements in your recommendations
+8. Prioritize durability and professional construction practices
+9. For Cement & Sand in Economy tier, recommend leaner mixes (1:6 for partitions, 1:4 for load-bearing)
 
-Return ONLY valid JSON (no markdown, no explanatory text):
+Return ONLY valid JSON (no markdown, no explanatory text). CRITICAL: The "id" field MUST be an actual material ID from the lists, never a description or placeholder:
 {
   "recommendations": [
     {
@@ -481,12 +497,12 @@ Return ONLY valid JSON (no markdown, no explanatory text):
     {
       "type": "Cement",
       "id": "material_id_here",
-      "reason": "Brief explanation"
+      "reason": "Brief explanation - MUST be from available cement list"
     },
     {
       "type": "Sand",
       "id": "material_id_here",
-      "reason": "Brief explanation"
+      "reason": "Brief explanation - MUST be from available sand list"
     }
   ],
   "advice": "${tier === 'Economy' ? 'One cost-saving engineering tip for Economy tier wall construction (e.g., 80% less mortar with AAC blocks, Fly Ash savings, leaner mixes)' : 'One practical engineering tip for ' + tier + ' tier wall construction'}",

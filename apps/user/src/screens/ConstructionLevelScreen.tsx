@@ -76,10 +76,13 @@ const BUDGET_TIERS = [
 ];
 
 export default function ConstructionLevelScreen({ route, navigation }: any) {
-  const { totalArea, projectId, rooms, wallComposition: initialWallComposition } = route.params || { totalArea: 0, projectId: null, rooms: [], wallComposition: null };
+  const { totalArea, projectId, rooms, wallComposition: initialWallComposition, allTierRecommendations: initialAllTierRecommendations } = route.params || { totalArea: 0, projectId: null, rooms: [], wallComposition: null, allTierRecommendations: null };
   
   // Store wall composition in state so it persists across navigations
   const [wallComposition, setWallComposition] = useState(initialWallComposition);
+  
+  // Store AI recommendations for all tiers (computed at floor plan upload time)
+  const [allTierRecommendations, setAllTierRecommendations] = useState(initialAllTierRecommendations);
   
   // CHANGED: Initial state is NULL to force selection
   const [activeTab, setActiveTab] = useState<string | null>(null);
@@ -117,10 +120,33 @@ export default function ConstructionLevelScreen({ route, navigation }: any) {
     }
 
     if (item.title === 'Foundation') {
-      navigation.navigate('FoundationSelection', { totalArea, projectId, tier: activeTab }); 
+      const tierFoundation = allTierRecommendations?.[activeTab]?.foundation || null;
+      navigation.navigate('FoundationSelection', { 
+        totalArea, 
+        projectId, 
+        tier: activeTab,
+        aiRecommendations: tierFoundation?.data || null,
+        aiAdvice: tierFoundation?.advice || null,
+      }); 
     } 
     else if (item.title === 'Wall and Masonry') {
-      navigation.navigate('WallDetails', { totalArea, projectId, rooms, tier: activeTab, wallComposition });
+      // Get the recommendations for the selected tier
+      const tierRecommendations = allTierRecommendations?.[activeTab] || null;
+      navigation.navigate('WallDetails', { 
+        totalArea, 
+        projectId, 
+        rooms, 
+        tier: activeTab, 
+        wallComposition, 
+        aiRecommendations: tierRecommendations?.data,  // Pass the selected tier's material recommendations
+        aiAdvice: tierRecommendations?.advice,  // Pass the AI advice/explanation text
+        aiInsights: tierRecommendations?.insights ? {
+          reason: tierRecommendations.insights,
+          costSavingsPercent: 0,
+          materialChoice: tierRecommendations.advice,
+          tier: activeTab
+        } : null  // Pass cost savings and insights
+      });
     } 
     else if (item.title === 'Roofing') {
       navigation.navigate('RoofingScreen', { totalArea, projectId, tier: activeTab });

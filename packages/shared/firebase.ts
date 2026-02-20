@@ -73,16 +73,16 @@ let geminiModel: any = null;
 
 // Model priority list - tries primary first, then falls back to secondaries
 const GEMINI_MODELS = [
-  'gemini-3-flash-preview',    // Fallback: Latest with extended thinking
   'gemini-flash-latest',       // Fallback: Stable latest
+  'gemini-3-flash-preview',    // Fallback: Latest with extended thinking
   'gemini-2.5-flash',          // Fallback: Previous stable
   'gemini-flash-lite-latest',  // Primary: Lite version for higher rate limits
 ];
 
 // Map of model names to display names
 const MODEL_NAMES: Record<string, string> = {
-  'gemini-3-flash-preview': 'Gemini 3.0 Flash Preview',
   'gemini-flash-latest': 'Gemini Flash Latest',
+  'gemini-3-flash-preview': 'Gemini 3.0 Flash Preview',
   'gemini-2.5-flash': 'Gemini 2.5 Flash',
   'gemini-flash-lite-latest': 'Gemini Flash Lite',
 };
