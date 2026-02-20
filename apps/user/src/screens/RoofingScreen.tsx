@@ -21,22 +21,28 @@ const { width } = Dimensions.get('window');
 
 // --- DYNAMIC MATERIAL EXTRACTION FROM CONSTRUCTION_HIERARCHY ---
 /**
- * Extract all material types for a given roof type
- * Handles both simple arrays and grouped structures
+ * Extract all material types for a given roof type (flat list for logic/perspectives)
  */
 const getMaterialTypesForRoofType = (roofType: string): string[] => {
   // @ts-ignore
   const roofConfig = CONSTRUCTION_HIERARCHY['Roof']?.subCategories?.[roofType];
-  
   if (!roofConfig) return [];
-  
-  if (Array.isArray(roofConfig)) {
-    return roofConfig;
-  } else if (typeof roofConfig === 'object') {
-    // Flatten grouped materials: {"Slab Core": [...], "Protection": [...]} => [...]
-    return Object.values(roofConfig).flat() as string[];
-  }
+  if (Array.isArray(roofConfig)) return roofConfig;
+  if (typeof roofConfig === 'object') return Object.values(roofConfig).flat() as string[];
   return [];
+};
+
+/**
+ * Returns material groups with their names for structured rendering.
+ * e.g. [ { groupName: 'Truss Structure', types: ['Steel Truss', ...] }, ... ]
+ * For flat arrays, returns a single group with an empty groupName.
+ */
+const getMaterialGroupsForRoofType = (roofType: string): { groupName: string; types: string[] }[] => {
+  // @ts-ignore
+  const roofConfig = CONSTRUCTION_HIERARCHY['Roof']?.subCategories?.[roofType];
+  if (!roofConfig) return [];
+  if (Array.isArray(roofConfig)) return [{ groupName: '', types: roofConfig }];
+  return Object.entries(roofConfig as Record<string, string[]>).map(([groupName, types]) => ({ groupName, types }));
 };
 
 /**
@@ -58,6 +64,8 @@ export default function RoofingScreen({ route, navigation }: any) {
   const [aiPerspectives, setAiPerspectives]               = useState<RoofingPerspective[]>([]);
   const [selectedPerspectiveId, setSelectedPerspectiveId] = useState<string | null>(null);
   const [isPerspectiveLoading, setIsPerspectiveLoading]   = useState(false);
+  // Tracks which type-tab is active inside each single-select group, keyed "layerName__groupName"
+  const [selectedGroupType, setSelectedGroupType]         = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
   // --- CONFIG STATE ---
@@ -142,10 +150,56 @@ export default function RoofingScreen({ route, navigation }: any) {
     });
     setSelections(updated);
     setSelectedPerspectiveId(p.id);
+    // Sync group type tabs so the right tab shows for the applied perspective
+    const groupTypeUpdates: Record<string, string> = {};
+    activeLayers.forEach(layerName => {
+      getMaterialGroupsForRoofType(layerName).forEach(({ groupName, types }) => {
+        if (!SINGLE_SELECT_GROUPS.includes(groupName)) return;
+        const matchedType = types.find(t => p.materialSelections?.[t]);
+        if (matchedType) groupTypeUpdates[`${layerName}__${groupName}`] = matchedType;
+      });
+    });
+    if (Object.keys(groupTypeUpdates).length) setSelectedGroupType(prev => ({ ...prev, ...groupTypeUpdates }));
   };
 
   // AI Auto-Select Logic (legacy fallback)
   const handleAiAutoSelect = () => loadAIPerspectives();
+
+  // Groups where only one type can be selected at a time
+  const SINGLE_SELECT_GROUPS = ['Truss Structure', 'Roof Covering', 'Protection'];
+
+  const getActiveGroupType = (layerName: string, groupName: string, types: string[]) =>
+    selectedGroupType[`${layerName}__${groupName}`] ?? types[0];
+
+  const handleGroupTypeTab = (layerName: string, groupName: string, type: string, prevType: string) => {
+    // Switch the visible tab and clear the previous type's material selection
+    setSelectedGroupType(prev => ({ ...prev, [`${layerName}__${groupName}`]: type }));
+    if (prevType !== type) {
+      setSelections(prev => {
+        const updated = { ...prev };
+        delete updated[`${layerName}_${prevType}`];
+        return updated;
+      });
+    }
+  };
+
+  const handleMaterialSelect = (
+    layerName: string,
+    type: string,
+    item: any,
+    groupName: string,
+    groupTypes: string[]
+  ) => {
+    const updated = { ...selections };
+    if (SINGLE_SELECT_GROUPS.includes(groupName)) {
+      // Clear sibling type selections within this group
+      groupTypes.forEach(t => {
+        if (t !== type) delete updated[`${layerName}_${t}`];
+      });
+    }
+    updated[`${layerName}_${type}`] = item;
+    setSelections(updated);
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -319,40 +373,112 @@ export default function RoofingScreen({ route, navigation }: any) {
           {/* MATERIAL SPECIFICATION */}
           <Text style={styles.sectionLabel}>MATERIAL SPECIFICATION ({tier})</Text>
           {activeLayers.map((layerName) => {
-            // Dynamically get material types for this layer from construction hierarchy
-            const materialTypesForLayer = getMaterialTypesForRoofType(layerName);
+            const groups = getMaterialGroupsForRoofType(layerName);
             return (
               <View key={layerName} style={styles.layerContainer}>
-                <View style={styles.layerTitleRow}><View style={styles.layerTitleDot} /><Text style={styles.layerTitle}>{layerName}</Text></View>
-                {materialTypesForLayer.map(type => {
-                  const filteredList = materials.filter(m => m.type === type);
-                  const selectionKey = `${layerName}_${type}`;
-                  const selectedId = selections[selectionKey]?.id;
-                  
-                  return (
-                    <View key={type} style={styles.materialRow}>
-                      <Text style={styles.materialTypeLabel}>{type}</Text>
-                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{paddingRight: 20}}>
-                        {filteredList.map(item => (
-                          <TouchableOpacity 
-                              key={item.id} 
-                              style={[styles.materialCard, selectedId === item.id && styles.materialCardActive]} 
-                              onPress={() => setSelections({...selections, [selectionKey]: item})}
-                          >
-                            {selectedId === item.id && <View style={styles.checkBadge}><Ionicons name="checkmark" size={12} color="#fff" /></View>}
-                            <View style={styles.cardImageWrapper}>
-                              {item.imageUrl ? <Image source={{ uri: item.imageUrl }} style={styles.cardImage} /> : <View style={styles.placeholderImg}><Ionicons name="cube-outline" size={24} color="#94a3b8" /></View>}
+                <View style={styles.layerTitleRow}>
+                  <View style={styles.layerTitleDot} />
+                  <Text style={styles.layerTitle}>{layerName}</Text>
+                </View>
+                {groups.map(({ groupName, types }) => (
+                  <View key={groupName || 'default'}>
+                    {groupName ? (
+                      <View style={styles.groupHeaderRow}>
+                        <Ionicons name="play" size={9} color="#315b76" />
+                        <Text style={styles.groupHeaderText}>{groupName}</Text>
+                      </View>
+                    ) : null}
+
+                    {SINGLE_SELECT_GROUPS.includes(groupName) ? (
+                      // --- TYPE-TAB SELECTOR then cards for active type only ---
+                      <View>
+                        <View style={styles.trussTabRow}>
+                          {types.map(t => {
+                            const active = getActiveGroupType(layerName, groupName, types);
+                            return (
+                              <TouchableOpacity
+                                key={t}
+                                style={[styles.trussTab, active === t && styles.trussTabActive]}
+                                onPress={() => handleGroupTypeTab(layerName, groupName, t, active)}
+                              >
+                                <Text style={[styles.trussTabText, active === t && styles.trussTabTextActive]}>{t}</Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                        {/* Material cards for the active type only */}
+                        {(() => {
+                          const activeType = getActiveGroupType(layerName, groupName, types);
+                          const filteredList = materials.filter(m => m.type === activeType);
+                          const selectionKey = `${layerName}_${activeType}`;
+                          const selectedId = selections[selectionKey]?.id;
+                          return (
+                            <View style={styles.materialRow}>
+                              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{paddingRight: 20}}>
+                                {filteredList.map(item => (
+                                  <TouchableOpacity
+                                    key={item.id}
+                                    style={[styles.materialCard, selectedId === item.id && styles.materialCardActive]}
+                                    onPress={() => handleMaterialSelect(layerName, activeType, item, groupName, types)}
+                                  >
+                                    {selectedId === item.id && <View style={styles.checkBadge}><Ionicons name="checkmark" size={12} color="#fff" /></View>}
+                                    <View style={styles.cardImageWrapper}>
+                                      {item.imageUrl
+                                        ? <Image source={{ uri: item.imageUrl }} style={styles.cardImage} />
+                                        : <View style={styles.placeholderImg}><Ionicons name="cube-outline" size={24} color="#94a3b8" /></View>}
+                                    </View>
+                                    <View style={styles.cardContent}>
+                                      <Text style={styles.cardTitle} numberOfLines={1}>{item.name}</Text>
+                                      <View style={styles.cardMeta}>
+                                        <Text style={styles.cardPrice}>₹{item.pricePerUnit}</Text>
+                                        <Text style={styles.cardUnit}>/{item.unit}</Text>
+                                      </View>
+                                    </View>
+                                  </TouchableOpacity>
+                                ))}
+                              </ScrollView>
                             </View>
-                            <View style={styles.cardContent}>
-                              <Text style={styles.cardTitle} numberOfLines={1}>{item.name}</Text>
-                              <View style={styles.cardMeta}><Text style={styles.cardPrice}>₹{item.pricePerUnit}</Text><Text style={styles.cardUnit}>/{item.unit}</Text></View>
-                            </View>
-                          </TouchableOpacity>
-                        ))}
-                      </ScrollView>
-                    </View>
-                  );
-                })}
+                          );
+                        })()}
+                      </View>
+                    ) : (
+                      // --- Normal multi-type rendering ---
+                      types.map(type => {
+                        const filteredList = materials.filter(m => m.type === type);
+                        const selectionKey = `${layerName}_${type}`;
+                        const selectedId = selections[selectionKey]?.id;
+                        return (
+                          <View key={type} style={styles.materialRow}>
+                            <Text style={styles.materialTypeLabel}>{type}</Text>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{paddingRight: 20}}>
+                              {filteredList.map(item => (
+                                <TouchableOpacity
+                                  key={item.id}
+                                  style={[styles.materialCard, selectedId === item.id && styles.materialCardActive]}
+                                  onPress={() => handleMaterialSelect(layerName, type, item, groupName, types)}
+                                >
+                                  {selectedId === item.id && <View style={styles.checkBadge}><Ionicons name="checkmark" size={12} color="#fff" /></View>}
+                                  <View style={styles.cardImageWrapper}>
+                                    {item.imageUrl
+                                      ? <Image source={{ uri: item.imageUrl }} style={styles.cardImage} />
+                                      : <View style={styles.placeholderImg}><Ionicons name="cube-outline" size={24} color="#94a3b8" /></View>}
+                                  </View>
+                                  <View style={styles.cardContent}>
+                                    <Text style={styles.cardTitle} numberOfLines={1}>{item.name}</Text>
+                                    <View style={styles.cardMeta}>
+                                      <Text style={styles.cardPrice}>₹{item.pricePerUnit}</Text>
+                                      <Text style={styles.cardUnit}>/{item.unit}</Text>
+                                    </View>
+                                  </View>
+                                </TouchableOpacity>
+                              ))}
+                            </ScrollView>
+                          </View>
+                        );
+                      })
+                    )}
+                  </View>
+                ))}
               </View>
             );
           })}
@@ -425,6 +551,13 @@ const styles = StyleSheet.create({
   layerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   layerTitleDot: { width: 4, height: 16, backgroundColor: '#315b76', borderRadius: 2 },
   layerTitle: { fontSize: 14, fontWeight: '800', color: '#315b76' },
+  groupHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 14, marginBottom: 8, paddingLeft: 2 },
+  groupHeaderText: { fontSize: 12, fontWeight: '700', color: '#475569', letterSpacing: 0.3 },
+  trussTabRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  trussTab: { flex: 1, paddingVertical: 9, paddingHorizontal: 12, borderRadius: 10, backgroundColor: '#f1f5f9', borderWidth: 1.5, borderColor: '#e2e8f0', alignItems: 'center' },
+  trussTabActive: { backgroundColor: '#315b76', borderColor: '#315b76' },
+  trussTabText: { fontSize: 12, fontWeight: '700', color: '#64748b' },
+  trussTabTextActive: { color: '#fff' },
   materialRow: { marginBottom: 16 },
   materialTypeLabel: { fontSize: 12, color: '#64748b', fontWeight: '600', marginBottom: 8, marginLeft: 4 },
   materialCard: { width: 140, backgroundColor: '#fff', borderRadius: 16, marginRight: 12, padding: 10, borderWidth: 1, borderColor: '#f1f5f9', elevation: 2 },
