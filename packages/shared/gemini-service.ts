@@ -697,6 +697,172 @@ Return ONLY valid JSON (no markdown, no explanation):
   });
 };
 
+// ─── Foundation Perspectives ─────────────────────────────────────────────────
+
+export interface FoundationPerspective {
+  id: string;          // 'A', 'B', 'C'
+  title: string;
+  subtitle: string;
+  description: string;
+  tags: string[];
+  cementId: string;
+  steelId: string;
+  sandId: string;
+  reasoning: string;
+}
+
+export const getFoundationPerspectives = async (
+  tier: string,
+  area: number,
+  availableMaterials: any[]
+): Promise<FoundationPerspective[]> => {
+  return retryWithBackoff(async () => {
+    try {
+      if (!currentModel) throw new Error('Gemini model not initialized.');
+
+      const cementMaterials = availableMaterials.filter(m => m.type === 'Cement');
+      const steelMaterials  = availableMaterials.filter(m => m.type === 'Steel (TMT Bar)' || m.type === 'Steel' || m.type === 'TMT Bar');
+      const sandMaterials   = availableMaterials.filter(m => m.type === 'Sand');
+
+      const fmt = (arr: any[]) => arr.map(m => `ID:${m.id} | ${m.name} | ₹${m.pricePerUnit}/${m.unit}${m.grade ? ` | Grade:${m.grade}` : ''}`).join('\n');
+
+      const tierGuidance: Record<string, string> = {
+        Economy: `Option A: lowest cost cement (OPC 43) + Fe415 steel + coarse sand. Option B: OPC 43 + Fe415 + river sand. Option C: PPC cement + Fe415 + M-sand.`,
+        Standard: `Option A: OPC 53 + Fe500 + river sand. Option B: PPC + Fe500D + M-sand. Option C: OPC 53 + Fe550 + coarse sand.`,
+        Luxury: `Option A: premium OPC 53 + Fe550D + washed river sand. Option B: PPC premium + Fe550D + M-sand. Option C: OPC 53 ultra + Fe600 + premium sand.`,
+      };
+
+      const prompt = `
+Act as a Senior Structural Engineer. For a ${tier} tier foundation (${area} sq ft), generate 3 distinct material perspectives.
+Each selects a specific cement, steel and sand brand from the lists below.
+
+${tierGuidance[tier] || tierGuidance['Standard']}
+
+=== CEMENT ===
+${fmt(cementMaterials)}
+
+=== STEEL (TMT Bar) ===
+${fmt(steelMaterials)}
+
+=== SAND ===
+${fmt(sandMaterials)}
+
+RULES:
+1. Every ID must be an actual ID from the lists — no placeholders.
+2. title ≤ 4 words. subtitle ≤ 8 words. description = 1 sentence about structural focus.
+3. tags = 2–3 concise labels. reasoning = 1 sentence.
+
+Return ONLY valid JSON:
+{
+  "perspectives": [
+    { "id": "A", "title": "...", "subtitle": "...", "description": "...", "tags": ["..."], "cementId": "real_id", "steelId": "real_id", "sandId": "real_id", "reasoning": "..." },
+    { "id": "B", ... },
+    { "id": "C", ... }
+  ]
+}`;
+
+      const result = await currentModel.generateContent({ contents: [{ role: 'user', parts: [{ text: prompt }] }] });
+      let jsonText = result.response.text().trim().replace(/^```json\n?/, '').replace(/^```\n?/, '').replace(/\n?```$/, '');
+      const match = jsonText.match(/\{[\s\S]*\}/);
+      if (match) jsonText = match[0];
+      const parsed = JSON.parse(jsonText);
+      const perspectives: FoundationPerspective[] = parsed.perspectives || [];
+      const allIds = new Set(availableMaterials.map(m => m.id));
+      const valid = perspectives.filter(p => allIds.has(p.cementId) && allIds.has(p.steelId) && allIds.has(p.sandId));
+      if (valid.length === 0) throw new Error('AI returned no valid foundation perspectives');
+      return valid;
+    } catch (error) {
+      console.error('Error generating foundation perspectives:', error);
+      throw error;
+    }
+  });
+};
+
+// ─── Roofing Perspectives ─────────────────────────────────────────────────────
+
+export interface RoofingPerspective {
+  id: string;
+  title: string;
+  subtitle: string;
+  description: string;
+  tags: string[];
+  materialSelections: Record<string, string>; // materialType -> materialId
+  reasoning: string;
+}
+
+export const getRoofingPerspectives = async (
+  tier: string,
+  area: number,
+  availableMaterials: any[]
+): Promise<RoofingPerspective[]> => {
+  return retryWithBackoff(async () => {
+    try {
+      if (!currentModel) throw new Error('Gemini model not initialized.');
+
+      const roofingMats = availableMaterials.filter(m => ['Roofing', 'Foundation', 'Structural'].includes(m.category));
+      const byType: Record<string, any[]> = {};
+      roofingMats.forEach(m => {
+        if (!byType[m.type]) byType[m.type] = [];
+        byType[m.type].push(m);
+      });
+
+      const matSummary = Object.entries(byType)
+        .map(([type, items]) =>
+          `=== ${type} ===\n` + items.map(m => `ID:${m.id} | ${m.name} | ₹${m.pricePerUnit}/${m.unit}`).join('\n')
+        ).join('\n\n');
+
+      const tierGuidance: Record<string, string> = {
+        Economy: `Option A: basic cement materials, standard grade. Option B: cost-efficient combo. Option C: fastest build option.`,
+        Standard: `Option A: balanced quality. Option B: durability focus. Option C: thermal comfort focus.`,
+        Luxury: `Option A: premium materials across all types. Option B: modern/aesthetic focus. Option C: sustainable/high-performance.`,
+      };
+
+      const types = Object.keys(byType);
+
+      const prompt = `
+Act as a Senior Civil Engineer. For a ${tier} tier RCC roof slab (${area} sq ft), generate 3 distinct material perspectives.
+Each selects ONE material per type from the lists below.
+
+${tierGuidance[tier] || tierGuidance['Standard']}
+
+Available material types: ${types.join(', ')}
+
+${matSummary}
+
+RULES:
+1. Every ID must be an actual ID from the lists.
+2. materialSelections must contain exactly these keys: ${JSON.stringify(types)}
+3. title ≤ 4 words. subtitle ≤ 8 words. description = 1 sentence on structural/aesthetic focus.
+4. tags = 2–3 labels. reasoning = 1 sentence.
+
+Return ONLY valid JSON:
+{
+  "perspectives": [
+    { "id": "A", "title": "...", "subtitle": "...", "description": "...", "tags": ["..."], "materialSelections": ${JSON.stringify(Object.fromEntries(types.map(t => [t, 'real_id'])))}, "reasoning": "..." },
+    { "id": "B", ... },
+    { "id": "C", ... }
+  ]
+}`;
+
+      const result = await currentModel.generateContent({ contents: [{ role: 'user', parts: [{ text: prompt }] }] });
+      let jsonText = result.response.text().trim().replace(/^```json\n?/, '').replace(/^```\n?/, '').replace(/\n?```$/, '');
+      const match2 = jsonText.match(/\{[\s\S]*\}/);
+      if (match2) jsonText = match2[0];
+      const parsed = JSON.parse(jsonText);
+      const perspectives: RoofingPerspective[] = parsed.perspectives || [];
+      const allIds = new Set(availableMaterials.map(m => m.id));
+      const valid = perspectives.filter(p =>
+        p.materialSelections && Object.values(p.materialSelections).every(id => allIds.has(id))
+      );
+      if (valid.length === 0) throw new Error('AI returned no valid roofing perspectives');
+      return valid;
+    } catch (error) {
+      console.error('Error generating roofing perspectives:', error);
+      throw error;
+    }
+  });
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**

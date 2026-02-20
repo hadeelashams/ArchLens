@@ -6,7 +6,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons'; 
 import { StatusBar } from 'expo-status-bar';
-import { db, getComponentRecommendation } from '@archlens/shared';
+import { db, getComponentRecommendation, getFoundationPerspectives } from '@archlens/shared';
+import type { FoundationPerspective } from '@archlens/shared';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 
 const { width } = Dimensions.get('window');
@@ -50,9 +51,10 @@ export default function FoundationSelection({ route, navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [materials, setMaterials] = useState<any[]>([]);
   
-  // AI Recommendation State
-  const [aiAdvice, setAiAdvice] = useState("");
-  const [isAiLoading, setIsAiLoading] = useState(false);
+  // AI Perspective State
+  const [aiPerspectives, setAiPerspectives]         = useState<FoundationPerspective[]>([]);
+  const [selectedPerspectiveId, setSelectedPerspectiveId] = useState<string | null>(null);
+  const [isPerspectiveLoading, setIsPerspectiveLoading]   = useState(false);
   
   const [foundationType, setFoundationType] = useState<FoundationType>('RCC');
   const [hasPCC, setHasPCC] = useState(true);
@@ -160,37 +162,42 @@ export default function FoundationSelection({ route, navigation }: any) {
       setSelections(updatedSelections);
     }
     if (routeAiAdvice) {
-      setAiAdvice(routeAiAdvice);
+      // routeAiAdvice no longer used (replaced by AI perspectives)
     }
   }, [materials.length]);
 
-  const generateAndApplyAiRecommendations = async () => {
-    setIsAiLoading(true);
+  const loadAIPerspectives = async () => {
+    setIsPerspectiveLoading(true);
     try {
       const foundationMaterials = materials.filter(m => m.category === 'Foundation');
-      const result = await getComponentRecommendation('Foundation', tier, area, foundationMaterials);
-      const updatedSelections: Record<string, any> = { ...selections };
-      if (result.recommendations && Array.isArray(result.recommendations)) {
-        result.recommendations.forEach((rec: any) => {
-          if (!rec.id || !rec.type) return;
-          const match = materials.find(m => m.id === rec.id);
-          if (!match) return;
-          Object.keys(ALL_LAYER_MAPS).forEach(layer => {
-            (ALL_LAYER_MAPS as any)[layer].forEach((layerType: string) => {
-              if (layerType === rec.type) {
-                updatedSelections[`${layer}_${layerType}`] = match;
-              }
-            });
-          });
-        });
-      }
-      setSelections(updatedSelections);
-      if (result.advice) setAiAdvice(result.advice);
-    } catch (error) {
-      console.error('AI Foundation recommendation error:', error);
+      const results = await getFoundationPerspectives(tier, area, foundationMaterials);
+      setAiPerspectives(results);
+      if (results.length > 0) applyFoundationPerspective(results[0]);
+    } catch (e) {
+      console.error('Foundation perspectives error:', e);
     } finally {
-      setIsAiLoading(false);
+      setIsPerspectiveLoading(false);
     }
+  };
+
+  const applyFoundationPerspective = (p: FoundationPerspective) => {
+    const cement = materials.find(m => m.id === p.cementId);
+    const steel  = materials.find(m => m.id === p.steelId);
+    const sand   = materials.find(m => m.id === p.sandId);
+    const updated: Record<string, any> = { ...selections };
+    Object.keys(ALL_LAYER_MAPS).forEach(layer => {
+      (ALL_LAYER_MAPS as any)[layer].forEach((type: string) => {
+        if (type === 'Cement' && cement)           updated[`${layer}_${type}`] = cement;
+        if ((type === 'Steel (TMT Bar)' || type === 'Steel' || type === 'TMT Bar') && steel) updated[`${layer}_${type}`] = steel;
+        if (type === 'Sand' && sand)               updated[`${layer}_${type}`] = sand;
+      });
+    });
+    setSelections(updated);
+    setSelectedPerspectiveId(p.id);
+  };
+
+  const generateAndApplyAiRecommendations = async () => {
+    loadAIPerspectives();
   };
 
   const handleNext = () => {
@@ -226,29 +233,80 @@ export default function FoundationSelection({ route, navigation }: any) {
             ))}
           </View>
 
-          {/* AI Recommendation Button */}
-          <TouchableOpacity
-            style={[styles.aiMagicButton, isAiLoading && { opacity: 0.7 }]}
-            onPress={generateAndApplyAiRecommendations}
-            disabled={isAiLoading}
-          >
-            {isAiLoading ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Ionicons name="sparkles" size={18} color="#fff" />
-            )}
-            <Text style={styles.aiMagicText}>
-              {isAiLoading
-                ? 'Analyzing best materials...'
-                : `Get AI Recommendation for ${tier}`}
-            </Text>
-          </TouchableOpacity>
-
-          {aiAdvice ? (
-            <View style={styles.adviceBoxCompact}>
-              <Text style={styles.adviceText}>💡 {aiAdvice}</Text>
+          {/* AI GENERATED OPTIONS */}
+          <View style={styles.perspectivesSection}>
+            <View style={styles.perspectivesHeader}>
+              <Text style={styles.sectionLabel}>AI GENERATED OPTIONS</Text>
+              <TouchableOpacity
+                style={[styles.regenerateBtn, isPerspectiveLoading && { opacity: 0.6 }]}
+                onPress={loadAIPerspectives}
+                disabled={isPerspectiveLoading}
+              >
+                {isPerspectiveLoading
+                  ? <ActivityIndicator size="small" color="#315b76" />
+                  : <><Ionicons name="refresh" size={12} color="#315b76" /><Text style={styles.regenerateBtnText}>Refresh</Text></>
+                }
+              </TouchableOpacity>
             </View>
-          ) : null}
+
+            {isPerspectiveLoading ? (
+              <View style={styles.perspectiveLoadingCard}>
+                <ActivityIndicator size="large" color="#315b76" />
+                <Text style={styles.perspectiveLoadingText}>Generating {tier} foundation options…</Text>
+              </View>
+            ) : aiPerspectives.length > 0 ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingRight: 4 }}>
+                {aiPerspectives.map((p) => {
+                  const isSelected = selectedPerspectiveId === p.id;
+                  const cMat = materials.find(m => m.id === p.cementId);
+                  const sMat = materials.find(m => m.id === p.steelId);
+                  const saMat = materials.find(m => m.id === p.sandId);
+                  return (
+                    <TouchableOpacity
+                      key={p.id}
+                      style={[styles.perspectiveCard, isSelected && styles.perspectiveCardSelected]}
+                      onPress={() => applyFoundationPerspective(p)}
+                      activeOpacity={0.8}
+                    >
+                      <View style={styles.perspectiveCardHeader}>
+                        <View style={[styles.optionBadge, isSelected && styles.optionBadgeSelected]}>
+                          <Text style={[styles.optionBadgeText, isSelected && styles.optionBadgeTextSelected]}>Option {p.id}</Text>
+                        </View>
+                        <View style={{ flex: 1, marginLeft: 10 }}>
+                          <Text style={[styles.perspectiveTitle, isSelected && { color: '#315b76' }]}>{p.title}</Text>
+                          <Text style={styles.perspectiveSubtitle}>{p.subtitle}</Text>
+                        </View>
+                        <Ionicons name={isSelected ? 'checkmark-circle' : 'ellipse-outline'} size={22} color={isSelected ? '#315b76' : '#cbd5e1'} />
+                      </View>
+                      <View style={styles.perspectiveFocusRow}>
+                        <Ionicons name="flash-outline" size={11} color="#94a3b8" />
+                        <Text style={styles.perspectiveFocusText} numberOfLines={2}>
+                          {p.description.replace(/^(this option|this approach|this perspective)[,:]?\s*/i, '').replace(/^[a-z]/, c => c.toUpperCase())}
+                        </Text>
+                      </View>
+                      <View style={styles.perspectiveMaterials}>
+                        {cMat  && <Text style={styles.perspectiveMaterialItem}>Cement: {cMat.name}  ₹{cMat.pricePerUnit}/{cMat.unit}</Text>}
+                        {sMat  && <Text style={styles.perspectiveMaterialItem}>Steel: {sMat.name}  ₹{sMat.pricePerUnit}/{sMat.unit}</Text>}
+                        {saMat && <Text style={styles.perspectiveMaterialItem}>Sand: {saMat.name}  ₹{saMat.pricePerUnit}/{saMat.unit}</Text>}
+                      </View>
+                      <View style={styles.perspectiveTags}>
+                        {p.tags.map(tag => (
+                          <View key={tag} style={styles.perspectiveTagChip}>
+                            <Text style={styles.perspectiveTagText}>{tag}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            ) : (
+              <TouchableOpacity style={styles.loadPerspectivesBtn} onPress={loadAIPerspectives}>
+                <Ionicons name="sparkles" size={16} color="#315b76" />
+                <Text style={styles.loadPerspectivesBtnText}>Generate AI Options</Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
           {foundationType === 'RCC' ? (
             <View style={styles.paramsSection}>
@@ -380,8 +438,30 @@ const styles = StyleSheet.create({
   methodTextActive: { color: '#fff' },
   aiChipButton: { backgroundColor: '#e0f2fe', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 20, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 5, borderWidth: 1, borderColor: '#315b76' },
   aiChipText: { color: '#315b76', fontSize: 10, fontWeight: '700', letterSpacing: 0.3 },
-  aiMagicButton: { backgroundColor: '#315b76', paddingVertical: 14, paddingHorizontal: 16, borderRadius: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, marginBottom: 15, elevation: 3, shadowColor: '#315b76', shadowOpacity: 0.3, shadowRadius: 8 },
-  aiMagicText: { color: '#fff', fontSize: 14, fontWeight: '700', letterSpacing: 0.3 },
+  perspectivesSection:       { marginBottom: 18 },
+  perspectivesHeader:        { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  regenerateBtn:             { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#e0f2fe', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1, borderColor: '#bae6fd' },
+  regenerateBtnText:         { fontSize: 11, color: '#315b76', fontWeight: '700' },
+  perspectiveLoadingCard:    { backgroundColor: '#f8fafc', borderRadius: 14, padding: 24, alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#e2e8f0' },
+  perspectiveLoadingText:    { fontSize: 12, color: '#64748b', fontWeight: '600', textAlign: 'center' },
+  perspectiveCard:           { width: 300, backgroundColor: '#fff', borderRadius: 14, padding: 14, borderWidth: 1.5, borderColor: '#e2e8f0' },
+  perspectiveCardSelected:   { borderColor: '#315b76', backgroundColor: '#f0f9ff', borderWidth: 2 },
+  perspectiveCardHeader:     { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  optionBadge:               { backgroundColor: '#f1f5f9', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0', minWidth: 64, alignItems: 'center' },
+  optionBadgeSelected:       { backgroundColor: '#315b76', borderColor: '#315b76' },
+  optionBadgeText:           { fontSize: 10, fontWeight: '800', color: '#64748b' },
+  optionBadgeTextSelected:   { color: '#fff' },
+  perspectiveTitle:          { fontSize: 13, fontWeight: '700', color: '#1e293b' },
+  perspectiveSubtitle:       { fontSize: 10, color: '#64748b', marginTop: 1 },
+  perspectiveFocusRow:       { flexDirection: 'row', alignItems: 'flex-start', gap: 4, marginBottom: 8 },
+  perspectiveFocusText:      { fontSize: 11, color: '#475569', fontWeight: '500', flex: 1, lineHeight: 15 },
+  perspectiveMaterials:      { backgroundColor: '#f8fafc', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 8, gap: 3 },
+  perspectiveMaterialItem:   { fontSize: 10, color: '#315b76', fontWeight: '600' },
+  perspectiveTags:           { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  perspectiveTagChip:        { backgroundColor: '#f1f5f9', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: '#e2e8f0' },
+  perspectiveTagText:        { fontSize: 9, color: '#64748b', fontWeight: '700' },
+  loadPerspectivesBtn:       { backgroundColor: '#e0f2fe', borderRadius: 12, padding: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1.5, borderColor: '#315b76' },
+  loadPerspectivesBtnText:   { fontSize: 13, color: '#315b76', fontWeight: '700' },
   adviceBox: { marginBottom: 15, backgroundColor: '#e0f2fe', borderLeftWidth: 4, borderLeftColor: '#315b76', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8 },
   adviceBoxCompact: { marginBottom: 15, backgroundColor: '#e0f2fe', borderLeftWidth: 3, borderLeftColor: '#315b76', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 6 },
   adviceText: { fontSize: 12, color: '#064e78', fontWeight: '500', lineHeight: 18 },

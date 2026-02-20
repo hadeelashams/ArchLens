@@ -342,107 +342,95 @@ export default function WallScreen({ route, navigation }: any) {
 
           {/*  Mortar Materials  */}
           <Text style={styles.sectionLabel}>MORTAR MATERIALS</Text>
-          <View style={styles.mortarCardsRow}>
-            {/* Cement */}
+          <View style={styles.mortarContainer}>
+
+            {/* ── Cement row ── */}
             <TouchableOpacity
-              style={[styles.mortarMaterialCard, styles.cementCard, cementDropdownOpen && styles.mortarMaterialCardActive]}
-              onPress={() => setCementDropdownOpen(o => !o)}
-              activeOpacity={0.7}
+              style={[styles.mortarRow, cementDropdownOpen && styles.mortarRowActive]}
+              onPress={() => { setCementDropdownOpen(o => !o); setSandDropdownOpen(false); }}
+              activeOpacity={0.8}
             >
-              <View style={styles.mortarCardHeader}>
-                <View style={[styles.mortarIconBox, styles.cementIconBox]}>
-                  <Ionicons name="cube-outline" size={20} color="#64748b" />
+              <View style={styles.mortarRowLeft}>
+                <View style={styles.mortarRowIcon}>
+                  <Ionicons name="layers-outline" size={16} color="#315b76" />
                 </View>
-                <View style={styles.mortarCardContent}>
-                  <Text style={styles.mortarMaterialLabel}>Cement</Text>
-                  <Text style={styles.mortarSelectedName} numberOfLines={1}>{selections['Cement']?.name || 'Select cement'}</Text>
-                </View>
-                <Ionicons name={cementDropdownOpen ? 'chevron-up' : 'chevron-down'} size={18} color="#64748b" style={styles.mortarHeaderChevron} />
+                <Text style={styles.mortarRowLabel}>Cement</Text>
               </View>
-              <View style={styles.mortarCardFooter}>
-                <View style={styles.mortarPriceQtyRow}>
-                  <View>
-                    <Text style={styles.mortarFooterLabel}>Price</Text>
-                    <Text style={styles.mortarPriceValue}>₹{selections['Cement']?.pricePerUnit || '0'}</Text>
-                  </View>
-                  <View style={styles.mortarDividerVertical} />
-                  <View>
-                    <Text style={styles.mortarFooterLabel}>Quantity</Text>
-                    <Text style={styles.mortarQtyValue}>{calculation.cementQty > 0 ? `${calculation.cementQty} bags` : '--'}</Text>
-                  </View>
-                </View>
+              <View style={styles.mortarRowCenter}>
+                <Text style={styles.mortarRowName} numberOfLines={1}>
+                  {selections['Cement']?.name || 'Choose cement brand'}
+                </Text>
+                {selections['Cement'] && (
+                  <Text style={styles.mortarRowMeta}>₹{selections['Cement'].pricePerUnit}/{selections['Cement'].unit} · {calculation.cementQty > 0 ? `${calculation.cementQty} bags` : '—'}</Text>
+                )}
+              </View>
+              <View style={[styles.mortarChevronPill, cementDropdownOpen && styles.mortarChevronPillActive]}>
+                <Ionicons name={cementDropdownOpen ? 'chevron-up' : 'chevron-down'} size={13} color={cementDropdownOpen ? '#fff' : '#315b76'} />
               </View>
             </TouchableOpacity>
 
-            {/* Sand */}
-            <TouchableOpacity
-              style={[styles.mortarMaterialCard, styles.sandCard, sandDropdownOpen && styles.mortarMaterialCardActive]}
-              onPress={() => setSandDropdownOpen(o => !o)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.mortarCardHeader}>
-                <View style={[styles.mortarIconBox, styles.sandIconBox]}>
-                  <Ionicons name="water-outline" size={20} color="#64748b" />
-                </View>
-                <View style={styles.mortarCardContent}>
-                  <Text style={styles.mortarMaterialLabel}>Sand</Text>
-                  <Text style={styles.mortarSelectedName} numberOfLines={1}>{selections['Sand']?.name || 'Select sand'}</Text>
-                </View>
-                <Ionicons name={sandDropdownOpen ? 'chevron-up' : 'chevron-down'} size={18} color="#64748b" style={styles.mortarHeaderChevron} />
+            {cementDropdownOpen && (
+              <View style={styles.mortarInlineDropdown}>
+                {materials.filter(m => m.type === 'Cement').map((item, idx, arr) => (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={[styles.mortarInlineItem, idx < arr.length - 1 && styles.mortarInlineItemBorder, selections['Cement']?.id === item.id && styles.mortarInlineItemSelected]}
+                    onPress={() => { setSelections(prev => ({ ...prev, Cement: item })); setCementDropdownOpen(false); }}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.mortarInlineItemName, selections['Cement']?.id === item.id && { color: '#315b76', fontWeight: '700' }]}>{item.name}</Text>
+                      <Text style={styles.mortarInlineItemPrice}>₹{item.pricePerUnit}/{item.unit}</Text>
+                    </View>
+                    {selections['Cement']?.id === item.id && <Ionicons name="checkmark-circle" size={18} color="#315b76" />}
+                  </TouchableOpacity>
+                ))}
               </View>
-              <View style={styles.mortarCardFooter}>
-                <View style={styles.mortarPriceQtyRow}>
-                  <View>
-                    <Text style={styles.mortarFooterLabel}>Price</Text>
-                    <Text style={styles.mortarPriceValue}>₹{selections['Sand']?.pricePerUnit || '0'}</Text>
-                  </View>
-                  <View style={styles.mortarDividerVertical} />
-                  <View>
-                    <Text style={styles.mortarFooterLabel}>Quantity</Text>
-                    <Text style={styles.mortarQtyValue}>{calculation.sandQty > 0 ? `${calculation.sandQty} kg` : '--'}</Text>
-                  </View>
+            )}
+
+            {/* ── Sand row ── */}
+            <TouchableOpacity
+              style={[styles.mortarRow, { marginTop: 8 }, sandDropdownOpen && styles.mortarRowActive]}
+              onPress={() => { setSandDropdownOpen(o => !o); setCementDropdownOpen(false); }}
+              activeOpacity={0.8}
+            >
+              <View style={styles.mortarRowLeft}>
+                <View style={styles.mortarRowIcon}>
+                  <Ionicons name="color-filter-outline" size={16} color="#315b76" />
                 </View>
+                <Text style={styles.mortarRowLabel}>Sand</Text>
+              </View>
+              <View style={styles.mortarRowCenter}>
+                <Text style={styles.mortarRowName} numberOfLines={1}>
+                  {selections['Sand']?.name || 'Choose sand type'}
+                </Text>
+                {selections['Sand'] && (
+                  <Text style={styles.mortarRowMeta}>₹{selections['Sand'].pricePerUnit}/{selections['Sand'].unit} · {calculation.sandQty > 0 ? `${calculation.sandQty} kg` : '—'}</Text>
+                )}
+              </View>
+              <View style={[styles.mortarChevronPill, sandDropdownOpen && styles.mortarChevronPillActive]}>
+                <Ionicons name={sandDropdownOpen ? 'chevron-up' : 'chevron-down'} size={13} color={sandDropdownOpen ? '#fff' : '#315b76'} />
               </View>
             </TouchableOpacity>
+
+            {sandDropdownOpen && (
+              <View style={styles.mortarInlineDropdown}>
+                {materials.filter(m => m.type === 'Sand').map((item, idx, arr) => (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={[styles.mortarInlineItem, idx < arr.length - 1 && styles.mortarInlineItemBorder, selections['Sand']?.id === item.id && styles.mortarInlineItemSelected]}
+                    onPress={() => { setSelections(prev => ({ ...prev, Sand: item })); setSandDropdownOpen(false); }}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.mortarInlineItemName, selections['Sand']?.id === item.id && { color: '#315b76', fontWeight: '700' }]}>{item.name}</Text>
+                      <Text style={styles.mortarInlineItemPrice}>₹{item.pricePerUnit}/{item.unit}</Text>
+                    </View>
+                    {selections['Sand']?.id === item.id && <Ionicons name="checkmark-circle" size={18} color="#315b76" />}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
           </View>
-
-          {/* Cement dropdown */}
-          {cementDropdownOpen && (
-            <View style={styles.mortarDropdownList}>
-              {materials.filter(m => m.type === 'Cement').map(item => (
-                <TouchableOpacity
-                  key={item.id}
-                  style={[styles.mortarDropdownItem, selections['Cement']?.id === item.id && styles.mortarDropdownItemSelected]}
-                  onPress={() => { setSelections(prev => ({ ...prev, Cement: item })); setCementDropdownOpen(false); }}
-                >
-                  <View style={styles.mortarDropdownItemContent}>
-                    <Text style={[styles.mortarDropdownItemName, selections['Cement']?.id === item.id && styles.mortarDropdownItemNameSelected]}>{item.name}</Text>
-                    <Text style={styles.mortarDropdownItemPrice}>₹{item.pricePerUnit}/{item.unit}</Text>
-                  </View>
-                  {selections['Cement']?.id === item.id && <Ionicons name="checkmark-circle" size={18} color="#315b76" />}
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-
-          {/* Sand dropdown */}
-          {sandDropdownOpen && (
-            <View style={styles.mortarDropdownList}>
-              {materials.filter(m => m.type === 'Sand').map(item => (
-                <TouchableOpacity
-                  key={item.id}
-                  style={[styles.mortarDropdownItem, selections['Sand']?.id === item.id && styles.mortarDropdownItemSelected]}
-                  onPress={() => { setSelections(prev => ({ ...prev, Sand: item })); setSandDropdownOpen(false); }}
-                >
-                  <View style={styles.mortarDropdownItemContent}>
-                    <Text style={[styles.mortarDropdownItemName, selections['Sand']?.id === item.id && styles.mortarDropdownItemNameSelected]}>{item.name}</Text>
-                    <Text style={styles.mortarDropdownItemPrice}>₹{item.pricePerUnit}/{item.unit}</Text>
-                  </View>
-                  {selections['Sand']?.id === item.id && <Ionicons name="checkmark-circle" size={18} color="#315b76" />}
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
 
         </ScrollView>
 
@@ -540,32 +528,23 @@ const styles = StyleSheet.create({
   systemCostValue:      { fontSize: 18, fontWeight: '800', color: '#15803d', marginVertical: 4 },
   systemCostBreakdown:  { fontSize: 10, color: '#4b5563', lineHeight: 15 },
 
-  mortarCardsRow:        { flexDirection: 'row', gap: 12, marginBottom: 12 },
-  mortarMaterialCard:    { flex: 1, backgroundColor: '#fff', borderRadius: 14, borderWidth: 1.5, borderColor: '#e2e8f0', overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 },
-  cementCard:            { borderColor: '#e2e8f0' },
-  sandCard:              { borderColor: '#e2e8f0' },
-  mortarMaterialCardActive: { borderColor: '#315b76', borderWidth: 2.5, backgroundColor: '#f0f9ff' },
-  mortarCardHeader:      { flexDirection: 'row', alignItems: 'center', padding: 12, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', gap: 12 },
-  mortarIconBox:         { width: 42, height: 42, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
-  cementIconBox:         { backgroundColor: '#f1f5f9' },
-  sandIconBox:           { backgroundColor: '#f1f5f9' },
-  mortarCardContent:     { flex: 1 },
-  mortarMaterialLabel:   { fontSize: 9, fontWeight: '800', color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.7, marginBottom: 3 },
-  mortarSelectedName:    { fontSize: 11, fontWeight: '700', color: '#1e293b' },
-  mortarHeaderChevron:   { marginLeft: 4 },
-  mortarCardFooter:      { padding: 12 },
-  mortarPriceQtyRow:     { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center' },
-  mortarDividerVertical: { width: 1, height: 28, backgroundColor: '#e2e8f0', marginHorizontal: 8 },
-  mortarFooterLabel:     { fontSize: 8, fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
-  mortarPriceValue:      { fontSize: 12, fontWeight: '700', color: '#10b981' },
-  mortarQtyValue:        { fontSize: 12, fontWeight: '700', color: '#315b76' },
-  mortarDropdownList:    { backgroundColor: '#f8fafc', borderRadius: 10, borderWidth: 1, borderColor: '#e2e8f0', marginVertical: 8, overflow: 'hidden', marginBottom: 12, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6, elevation: 1 },
-  mortarDropdownItem:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
-  mortarDropdownItemSelected: { backgroundColor: '#eff6ff' },
-  mortarDropdownItemContent:  { flex: 1 },
-  mortarDropdownItemName:     { fontSize: 12, fontWeight: '600', color: '#1e293b' },
-  mortarDropdownItemNameSelected: { color: '#315b76', fontWeight: '700' },
-  mortarDropdownItemPrice:    { fontSize: 10, color: '#10b981', fontWeight: '600', marginTop: 2 },
+  mortarContainer:          { backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#e2e8f0', marginBottom: 12, overflow: 'hidden' },
+  mortarRow:                 { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, gap: 12, backgroundColor: '#fff' },
+  mortarRowActive:           { backgroundColor: '#f0f9ff' },
+  mortarRowLeft:             { flexDirection: 'row', alignItems: 'center', gap: 8, width: 80 },
+  mortarRowIcon:             { width: 30, height: 30, borderRadius: 8, backgroundColor: '#e0f2fe', justifyContent: 'center', alignItems: 'center' },
+  mortarRowLabel:            { fontSize: 12, fontWeight: '700', color: '#1e293b' },
+  mortarRowCenter:           { flex: 1 },
+  mortarRowName:             { fontSize: 12, fontWeight: '600', color: '#475569' },
+  mortarRowMeta:             { fontSize: 10, color: '#315b76', fontWeight: '600', marginTop: 2 },
+  mortarChevronPill:         { backgroundColor: '#e0f2fe', borderRadius: 20, width: 26, height: 26, justifyContent: 'center', alignItems: 'center' },
+  mortarChevronPillActive:   { backgroundColor: '#315b76' },
+  mortarInlineDropdown:      { borderTopWidth: 1, borderTopColor: '#e2e8f0', backgroundColor: '#f8fafc' },
+  mortarInlineItem:          { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12 },
+  mortarInlineItemBorder:    { borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  mortarInlineItemSelected:  { backgroundColor: '#eff6ff' },
+  mortarInlineItemName:      { fontSize: 12, fontWeight: '600', color: '#1e293b' },
+  mortarInlineItemPrice:     { fontSize: 10, color: '#64748b', marginTop: 2 },
 
   mainBtn:          { backgroundColor: '#315b76', margin: 20, padding: 18, borderRadius: 15, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 10, position: 'absolute', bottom: 0, left: 0, right: 0 },
   mainBtnDisabled:  { opacity: 0.6 },
