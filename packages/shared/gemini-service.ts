@@ -542,6 +542,163 @@ Return ONLY valid JSON (no markdown, no explanatory text). CRITICAL: The "id" fi
   });
 };
 
+// ─── Wall Perspectives ───────────────────────────────────────────────────────
+
+/**
+ * Represents one AI-generated material perspective for the Wall component.
+ * Each perspective is a fully self-consistent "approach" within a given tier.
+ */
+export interface WallPerspective {
+  id: string;               // 'A', 'B', 'C'
+  title: string;            // e.g. "Lowest Cost"
+  subtitle: string;         // e.g. "Functional & budget-friendly"
+  description: string;      // 2 sentences about the approach
+  tags: string[];           // e.g. ["Budget-Friendly", "Fast Build"]
+  finishType: 'Plastered' | 'Exposed';
+  loadBearingBrickId: string;
+  partitionBrickId: string;
+  cementId: string;
+  sandId: string;
+  reasoning: string;        // engineering reasoning
+}
+
+/**
+ * Generate 2–3 distinct Wall material perspectives for a given tier.
+ * The AI automatically decides the "intent" differences (cost-focused,
+ * aesthetics-focused, balanced, etc.) — the user never has to name them.
+ */
+export const getWallPerspectives = async (
+  tier: string,
+  area: number,
+  availableMaterials: any[]
+): Promise<WallPerspective[]> => {
+  return retryWithBackoff(async () => {
+    try {
+      if (!currentModel) {
+        throw new Error('Gemini model not initialized. Check Firebase configuration.');
+      }
+
+      const wallMaterials = availableMaterials.filter(m => m.category === 'Wall');
+      const cementMaterials = availableMaterials.filter(m => m.type === 'Cement');
+      const sandMaterials = availableMaterials.filter(m => m.type === 'Sand');
+
+      const wallSummary = wallMaterials
+        .map(m => `ID:${m.id} | ${m.name} | ₹${m.pricePerUnit}/${m.unit} | SubCat:${m.subCategory || 'N/A'} | Dim:${m.dimensions || 'N/A'}`)
+        .join('\n');
+
+      const cementSummary = cementMaterials
+        .map(m => `ID:${m.id} | ${m.name} | ₹${m.pricePerUnit}/${m.unit}`)
+        .join('\n');
+
+      const sandSummary = sandMaterials
+        .map(m => `ID:${m.id} | ${m.name} | ₹${m.pricePerUnit}/${m.unit}`)
+        .join('\n');
+
+      const tierGuidance: Record<string, string> = {
+        Economy: `
+Generate 3 perspectives that are genuinely different within the Economy budget:
+- Option A "Lowest Cost Functional": prioritise minimum ₹ per sqft. Use traditional clay bricks or CHB. Plastered finish.
+- Option B "Economy Aesthetic": use AAC blocks for partition (fewer joints = less mortar = better surface). Exposed or Plastered finish that looks better.
+- Option C "Fast Build Economy": fly ash bricks (load-bearing) + thin-set AAC (partition). Faster labour, still economical.`,
+        Standard: `
+Generate 3 perspectives within Standard budget:
+- Option A "Balanced Value": fly ash bricks + AAC partition, plaster finish.
+- Option B "Structural Focus": high-strength bricks for load-bearing, AAC partition, plaster.
+- Option C "Modern Aesthetic": AAC throughout, clean finish, exposed feature option.`,
+        Luxury: `
+Generate 3 perspectives within Luxury budget:
+- Option A "Premium Traditional": top-grade clay or facing bricks, premium plaster.
+- Option B "Modern Luxury": AAC blocks + stone accent panels, exposed finish.
+- Option C "Sustainable Luxury": eco-friendly blocks, minimal mortar joints, exposed finish.`,
+      };
+
+      const prompt = `
+Act as a Senior Civil Engineer with 20+ years of residential construction experience.
+For a ${tier} tier project (${area} sq ft), generate 3 distinct Wall construction perspectives.
+Each perspective is a DIFFERENT approach within the same tier budget.
+
+${tierGuidance[tier] || tierGuidance['Standard']}
+
+AVAILABLE WALL MATERIALS (use only these IDs):
+=== WALL (load-bearing subCat "Load Bearing", partition subCat "Partition Wall"/"Partition"/"Non-Load Bearing") ===
+${wallSummary}
+
+=== CEMENT (use only these IDs for cementId) ===
+${cementSummary}
+
+=== SAND (use only these IDs for sandId) ===
+${sandSummary}
+
+RULES:
+1. Every ID MUST be an actual ID from the lists above — never a placeholder or made-up string.
+2. loadBearingBrickId MUST have subCategory "Load Bearing".
+3. partitionBrickId MUST have subCategory "Partition Wall", "Partition", or "Non-Load Bearing".
+4. cementId MUST come from the CEMENT list. sandId MUST come from the SAND list.
+5. title ≤ 4 words. subtitle ≤ 8 words. description = 1–2 sentences.
+6. tags = 2–3 concise labels.
+7. finishType must be exactly "Plastered" or "Exposed".
+8. reasoning = 1 sentence of engineering justification.
+
+Return ONLY valid JSON (no markdown, no explanation):
+{
+  "perspectives": [
+    {
+      "id": "A",
+      "title": "...",
+      "subtitle": "...",
+      "description": "...",
+      "tags": ["...", "..."],
+      "finishType": "Plastered",
+      "loadBearingBrickId": "real_id_here",
+      "partitionBrickId": "real_id_here",
+      "cementId": "real_id_here",
+      "sandId": "real_id_here",
+      "reasoning": "..."
+    },
+    { "id": "B", ... },
+    { "id": "C", ... }
+  ]
+}
+      `;
+
+      const result = await currentModel.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      });
+
+      const responseText = result.response.text();
+      let jsonText = responseText.trim();
+      if (jsonText.startsWith('```')) {
+        jsonText = jsonText.replace(/^```json\n?/, '').replace(/^```\n?/, '').replace(/\n?```$/, '');
+      }
+      const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) jsonText = jsonMatch[0];
+
+      const parsed = JSON.parse(jsonText);
+      const perspectives: WallPerspective[] = parsed.perspectives || [];
+
+      // Validate each perspective has real material IDs
+      const allIds = new Set(availableMaterials.map(m => m.id));
+      const valid = perspectives.filter(p =>
+        allIds.has(p.loadBearingBrickId) &&
+        allIds.has(p.partitionBrickId) &&
+        allIds.has(p.cementId) &&
+        allIds.has(p.sandId)
+      );
+
+      if (valid.length === 0) {
+        throw new Error('AI returned no valid perspectives with real material IDs');
+      }
+
+      return valid;
+    } catch (error) {
+      console.error('Error generating wall perspectives:', error);
+      throw error;
+    }
+  });
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
  * Detect Wall Composition from Floor Plan Data
  * Analyzes room dimensions and layout to determine wall type proportions
