@@ -7,7 +7,7 @@ import {
   db, createDocument, updateDocument, deleteDocument, 
   CONSTRUCTION_HIERARCHY, MATERIAL_UNITS, WALL_MATERIALS_SEED_DATA, ROOFING_MATERIALS_SEED_DATA
 } from '@archlens/shared';
-import { collection, onSnapshot, query, orderBy, serverTimestamp, doc, writeBatch } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, where, getDocs, serverTimestamp, doc, writeBatch } from 'firebase/firestore';
 import { Feather } from '@expo/vector-icons';
 import { Sidebar } from './Sidebar';
 
@@ -191,9 +191,29 @@ export default function DashboardScreen({ navigation }: any) {
   const seedMaterials = async () => {
     try {
       const seedData = seedType === 'wall' ? WALL_MATERIALS_SEED_DATA : ROOFING_MATERIALS_SEED_DATA;
-      const seedName = seedType === 'wall' ? 'Wall' : 'Roofing';
+      const seedName = seedType === 'wall' ? 'Wall' : 'Roof';
+      // Also delete old materials that may have had the wrong category name (e.g. "Roofing" instead of "Roof")
+      const categoriesToDelete = seedType === 'wall' ? ['Wall'] : ['Roof', 'Roofing'];
       const seedCount = seedData.length;
       
+      // Step 1: Delete existing materials for this category
+      console.log(`🗑️ Deleting old ${seedName} materials...`);
+      const deleteBatch = writeBatch(db);
+      let deleteCount = 0;
+      for (const cat of categoriesToDelete) {
+        const oldQuery = query(collection(db, 'materials'), where('category', '==', cat));
+        const oldSnap = await getDocs(oldQuery);
+        oldSnap.docs.forEach(d => {
+          deleteBatch.delete(d.ref);
+          deleteCount++;
+        });
+      }
+      if (deleteCount > 0) {
+        await deleteBatch.commit();
+        console.log(`🗑️ Deleted ${deleteCount} old ${seedName} materials`);
+      }
+
+      // Step 2: Seed fresh materials
       console.log('📝 Creating batch write...');
       console.log(`Materials to seed (${seedName}):`, seedCount);
       
@@ -220,7 +240,7 @@ export default function DashboardScreen({ navigation }: any) {
       
       Alert.alert(
         "✨ Success!",
-        `All ${seedCount} ${seedName.toLowerCase()} materials have been added!\n\nThey will appear in the list below.`
+        `${deleteCount > 0 ? `Removed ${deleteCount} old materials. ` : ''}All ${seedCount} ${seedName.toLowerCase()} materials have been seeded!\n\nThey will appear in the list below.`
       );
     } catch (error: any) {
       console.error('❌ Batch Error:', {

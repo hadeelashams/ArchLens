@@ -27,6 +27,7 @@ import FoundationCost from './screens/FoundationCost';
 import WallScreen from './screens/WallScreen'; 
 import WallCostSummaryScreen from './screens/WallCostSummaryScreen';
 import RoofingScreen from './screens/RoofingScreen';
+import RoofingCostScreen from './screens/RoofingCostScreen';
 import FlooringScreen from './screens/FlooringScreen';
 import PaintingScreen from './screens/PaintingScreen';
 import ProfileScreen from './screens/ProfileScreen';
@@ -85,6 +86,13 @@ export type RootStackParamList = {
     aiInsights?: any;
   };
   RoofingScreen: { totalArea: number; projectId: string; tier: string };
+  RoofingCostScreen: {
+    projectId: string; tier: string; roofType: string;
+    roofArea: string; slabThickness: string; openingDeduction: string;
+    hasWaterproofing: boolean; hasParapet: boolean;
+    parapetHeight: string; parapetThickness: string;
+    selections: any;
+  };
   FlooringScreen: { totalArea: number; projectId: string; tier: string };
   PaintingScreen: { totalArea: number; projectId: string; tier: string };
   EstimateResult: { 
@@ -186,6 +194,7 @@ function AppContent() {
             <Stack.Screen name="WallDetails" component={WallScreen} />
             <Stack.Screen name="WallCostSummary" component={WallCostSummaryScreen} />
             <Stack.Screen name="RoofingScreen" component={RoofingScreen} />
+            <Stack.Screen name="RoofingCostScreen" component={RoofingCostScreen} />
             <Stack.Screen name="FlooringScreen" component={FlooringScreen} />
             <Stack.Screen name="PaintingScreen" component={PaintingScreen} />
             <Stack.Screen name="EstimateResult" component={EstimateResultScreen} />

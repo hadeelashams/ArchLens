@@ -69,7 +69,7 @@ export default function RoofingScreen({ route, navigation }: any) {
   const [saving, setSaving] = useState(false);
 
   // --- CONFIG STATE ---
-  const [roofType, setRoofType] = useState<string>('RCC Slab');
+  const [roofType, setRoofType] = useState<string>('Sloped Roof - Tile');
   const [hasWaterproofing, setHasWaterproofing] = useState(true);
   const [hasParapet, setHasParapet] = useState(false);
 
@@ -92,19 +92,19 @@ export default function RoofingScreen({ route, navigation }: any) {
       console.log('📦 Available Material Types:', Array.from(availableTypes));
       
       // DEBUG: Log expected types for current roof type
-      const expectedTypes = getMaterialTypesForRoofType('RCC Slab');
-      console.log('🏢 Expected Types for RCC Slab:', expectedTypes);
+      const expectedTypes = getMaterialTypesForRoofType('Sloped Roof - Tile');
+      console.log('🏠 Expected Types for Sloped Roof - Tile:', expectedTypes);
       
       // Default Selections based on Roof Type and Tier
       const initialSelections: Record<string, any> = {};
-      const materialTypesForRoof = getMaterialTypesForRoofType('RCC Slab');
+      const materialTypesForRoof = getMaterialTypesForRoofType('Sloped Roof - Tile');
       
       materialTypesForRoof.forEach(type => {
         let typeItems = data.filter(m => m.type === type);
         console.log(`  - ${type}: ${typeItems.length} items found`);
         typeItems.sort((a, b) => (parseFloat(a.pricePerUnit) || 0) - (parseFloat(b.pricePerUnit) || 0));
         if (typeItems.length > 0) {
-          const selKey = `${'RCC Slab'}_${type}`;
+          const selKey = `${'Sloped Roof - Tile'}_${type}`;
           if (tier === 'Economy') initialSelections[selKey] = typeItems[0];
           else if (tier === 'Luxury') initialSelections[selKey] = typeItems[typeItems.length - 1];
           else initialSelections[selKey] = typeItems[Math.floor(typeItems.length / 2)];
@@ -201,13 +201,20 @@ export default function RoofingScreen({ route, navigation }: any) {
     setSelections(updated);
   };
 
-  const handleSave = async () => {
-    setSaving(true);
-    // Logic for saving estimate to Firestore...
-    setTimeout(() => {
-      setSaving(false);
-      navigation.navigate('ProjectSummary', { projectId });
-    }, 1500);
+  const handleSave = () => {
+    navigation.navigate('RoofingCostScreen', {
+      projectId,
+      tier,
+      roofType,
+      roofArea,
+      slabThickness,
+      openingDeduction,
+      hasWaterproofing,
+      hasParapet,
+      parapetHeight,
+      parapetThickness,
+      selections,
+    });
   };
 
   if (loading) return <View style={styles.centered}><ActivityIndicator size="large" color="#315b76" /></View>;
@@ -240,7 +247,7 @@ export default function RoofingScreen({ route, navigation }: any) {
                 onPress={() => setRoofType(type)}
               >
                 <Text style={[styles.methodText, roofType === type && styles.methodTextActive]}>
-                  {type.split(' ')[0]}
+                  {type === 'RCC Slab' ? 'RCC Slab' : type.replace('Sloped Roof - ', '')}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -349,25 +356,29 @@ export default function RoofingScreen({ route, navigation }: any) {
             </View>
           </View>
 
-          {/* TOGGLES */}
-          <View style={styles.toggleRow}>
-            <View><Text style={styles.toggleTitle}>Waterproofing System</Text><Text style={styles.toggleSub}>Protective liquid or membrane layer</Text></View>
-            <Switch value={hasWaterproofing} onValueChange={setHasWaterproofing} trackColor={{ false: '#e2e8f0', true: '#315b76' }} thumbColor={'#fff'} />
-          </View>
+          {/* TOGGLES - Only show for RCC Slab */}
+          {roofType === 'RCC Slab' && (
+            <>
+              <View style={styles.toggleRow}>
+                <View><Text style={styles.toggleTitle}>Waterproofing System</Text><Text style={styles.toggleSub}>Protective liquid or membrane layer</Text></View>
+                <Switch value={hasWaterproofing} onValueChange={setHasWaterproofing} trackColor={{ false: '#e2e8f0', true: '#315b76' }} thumbColor={'#fff'} />
+              </View>
 
-          <View style={styles.toggleRow}>
-            <View><Text style={styles.toggleTitle}>Parapet Wall</Text><Text style={styles.toggleSub}>Safety wall around the roof edge</Text></View>
-            <Switch value={hasParapet} onValueChange={setHasParapet} trackColor={{ false: '#e2e8f0', true: '#315b76' }} thumbColor={'#fff'} />
-          </View>
+              <View style={styles.toggleRow}>
+                <View><Text style={styles.toggleTitle}>Parapet Wall</Text><Text style={styles.toggleSub}>Safety wall around the roof edge</Text></View>
+                <Switch value={hasParapet} onValueChange={setHasParapet} trackColor={{ false: '#e2e8f0', true: '#315b76' }} thumbColor={'#fff'} />
+              </View>
 
-          {hasParapet && (
-             <View style={[styles.paramsSection, { marginTop: 10 }]}>
-                <Text style={styles.sectionLabel}>PARAPET DIMENSIONS</Text>
-                <View style={styles.inputRow}>
-                    <View style={styles.inputContainer}><Text style={styles.inputLabel}>Height (ft)</Text><View style={styles.textInputWrapper}><TextInput style={styles.textInput} value={parapetHeight} onChangeText={setParapetHeight} keyboardType="numeric" /></View></View>
-                    <View style={styles.inputContainer}><Text style={styles.inputLabel}>Thickness (ft)</Text><View style={styles.textInputWrapper}><TextInput style={styles.textInput} value={parapetThickness} onChangeText={setParapetThickness} keyboardType="numeric" /></View></View>
-                </View>
-             </View>
+              {hasParapet && (
+                 <View style={[styles.paramsSection, { marginTop: 10 }]}>
+                    <Text style={styles.sectionLabel}>PARAPET DIMENSIONS</Text>
+                    <View style={styles.inputRow}>
+                        <View style={styles.inputContainer}><Text style={styles.inputLabel}>Height (ft)</Text><View style={styles.textInputWrapper}><TextInput style={styles.textInput} value={parapetHeight} onChangeText={setParapetHeight} keyboardType="numeric" /></View></View>
+                        <View style={styles.inputContainer}><Text style={styles.inputLabel}>Thickness (ft)</Text><View style={styles.textInputWrapper}><TextInput style={styles.textInput} value={parapetThickness} onChangeText={setParapetThickness} keyboardType="numeric" /></View></View>
+                    </View>
+                 </View>
+              )}
+            </>
           )}
 
           {/* MATERIAL SPECIFICATION */}
