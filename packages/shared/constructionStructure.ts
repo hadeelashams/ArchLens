@@ -79,8 +79,8 @@ export const CONSTRUCTION_HIERARCHY = {
 'Roof': {
     label: "Roofing",
     subCategories: {
-      "RCC Slab": {
-        "Slab Core": ["Cement", "Steel (TMT Bar)", "Sand", "Aggregate"],
+      "Slab": {
+        "Slab Core": ["RCC Solid Slab", "Filler Slab", "Precast Slab "],
         "Protection": ["Waterproofing Chemical"]
       },
       "Sloped Roof - Tile": {
