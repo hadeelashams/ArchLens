@@ -31,7 +31,7 @@ const switchToNextModel = async () => {
   if (currentModelIndex < GEMINI_MODELS.length - 1) {
     currentModelIndex++;
     const nextModel = GEMINI_MODELS[currentModelIndex];
-    
+
     try {
       currentModel = createGeminiModel(ai, nextModel);
       console.log(`ℹ️ Switched to ${MODEL_NAMES[nextModel]} due to rate limit`);
@@ -87,9 +87,9 @@ const retryWithBackoff = async <T>(
     } catch (error) {
       lastError = error as Error;
       const errorMessage = error instanceof Error ? error.message : String(error);
-      const is429Error = errorMessage.includes('429') || 
-                         errorMessage.includes('quota') || 
-                         errorMessage.includes('GEMINI_DEVELOPER_OVERLOADED');
+      const is429Error = errorMessage.includes('429') ||
+        errorMessage.includes('quota') ||
+        errorMessage.includes('GEMINI_DEVELOPER_OVERLOADED');
 
       // If rate-limited or quota exceeded and there are fallback models available, try switching
       if (is429Error && currentModelIndex < GEMINI_MODELS.length - 1) {
@@ -241,8 +241,8 @@ export const analyzeFloorPlan = async (
       const prompt = analysisPrompt || defaultPrompt;
 
       // Convert image URI to base64 if needed
-      const imageBase64 = imageData.startsWith('data:') 
-        ? imageData.split(',')[1] 
+      const imageBase64 = imageData.startsWith('data:')
+        ? imageData.split(',')[1]
         : imageData;
 
       const result = await currentModel.generateContent({
@@ -379,23 +379,23 @@ IMPORTANT: Return ONLY valid JSON with no markdown code blocks, no formatting, a
 
       const response = result.response;
       let jsonText = response.text();
-      
+
       // Robust JSON extraction: Clean the response with regex to handle various text-wrapped formats
       // (e.g., "Here is your JSON: {...}" or markdown code fences)
       jsonText = jsonText.trim();
-      
+
       // Step 1: Remove markdown code blocks if present (e.g., ```json ... ```)
       if (jsonText.startsWith('```')) {
         jsonText = jsonText.replace(/^```json\n?/, '').replace(/^```\n?/, '').replace(/\n?```$/, '');
       }
-      
+
       // Step 2: Extract JSON using regex - catches JSON between first { and last }
       // This handles cases where AI returns explanatory text like "Here is your JSON: {...}"
       const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         jsonText = jsonMatch[0];
       }
-      
+
       return jsonText;
     } catch (error) {
       console.error('Error extracting structured data from Gemini:', error);
@@ -430,7 +430,7 @@ export const getComponentRecommendation = async (
       // Simplify material list for AI to reduce token cost
       // Only include materials from the specified category
       const relevantMaterials = availableMaterials.filter(m => m.category === category);
-      
+
       // Create STRICT separate lists by type so AI cannot confuse cement with sand
       const cementMaterials = relevantMaterials.filter(m => m.type === 'Cement');
       const sandMaterials = relevantMaterials.filter(m => m.type === 'Sand');
@@ -439,7 +439,7 @@ export const getComponentRecommendation = async (
         .map(m => `ID: ${m.id}, Name: ${m.name}, Price: ₹${m.pricePerUnit}, Type: ${m.type}, SubCategory: ${m.subCategory || 'N/A'}, Dimensions: ${m.dimensions || 'N/A'}`)
         .join("\n");
 
-      const cementSummary = cementMaterials.length > 0 
+      const cementSummary = cementMaterials.length > 0
         ? `\n\n=== CEMENT ONLY (type:Cement) - Use ONLY these IDs for the Cement recommendation ===\n${cementMaterials.map(m => `ID: ${m.id}, Name: ${m.name}, Price: ₹${m.pricePerUnit} per ${m.unit}`).join('\n')}\n=== END CEMENT LIST ===`
         : '';
 
@@ -522,7 +522,7 @@ Return ONLY valid JSON (no markdown, no explanatory text). CRITICAL: The "id" fi
 
       const response = result.response;
       const responseText = response.text();
-      
+
       // Robust JSON extraction
       let jsonText = responseText.trim();
       if (jsonText.startsWith('```')) {
@@ -721,8 +721,8 @@ export const getFoundationPerspectives = async (
       if (!currentModel) throw new Error('Gemini model not initialized.');
 
       const cementMaterials = availableMaterials.filter(m => m.type === 'Cement');
-      const steelMaterials  = availableMaterials.filter(m => m.type === 'Steel (TMT Bar)' || m.type === 'Steel' || m.type === 'TMT Bar');
-      const sandMaterials   = availableMaterials.filter(m => m.type === 'Sand');
+      const steelMaterials = availableMaterials.filter(m => m.type === 'Steel (TMT Bar)' || m.type === 'Steel' || m.type === 'TMT Bar');
+      const sandMaterials = availableMaterials.filter(m => m.type === 'Sand');
 
       const fmt = (arr: any[]) => arr.map(m => `ID:${m.id} | ${m.name} | ₹${m.pricePerUnit}/${m.unit}${m.grade ? ` | Grade:${m.grade}` : ''}`).join('\n');
 
@@ -780,15 +780,62 @@ Return ONLY valid JSON:
 
 // ─── Roofing Perspectives ─────────────────────────────────────────────────────
 
+/**
+ * Represents one AI-generated roofing recommendation.
+ *
+ * The recommendation is structured across three levels:
+ *   1. Structural Type   – flat slab vs sloped roof
+ *   2. Covering Method   – which sub-type within that structural type
+ *   3. Construction Method – the specific technique / truss / material system
+ *
+ * Three fixed perspectives are generated, each with a distinct priority lens:
+ *   • "Aesthetic"         – visual appeal, architectural character
+ *   • "Basic Performance" – cost-effectiveness, ease of maintenance
+ *   • "Strength"          – structural durability, load capacity, longevity
+ */
 export interface RoofingPerspective {
   id: string;
+  /** One of: "Aesthetic" | "Basic Performance" | "Strength" */
+  perspectiveType: string;
   title: string;
   subtitle: string;
   description: string;
   tags: string[];
+  /** Level-0 recommendation: "gable" | "flat" | "hip" | "shed" */
+  recommendedRoofShape: string;
+  /** Level-1 recommendation: e.g. "Slab" | "Sloped Roof - Tile" | "Sloped Roof - Sheet" */
+  recommendedRoofType: string;
+  /** Level-2 recommendation: e.g. "RCC Solid Slab" | "Filler Slab" | "Clay Roof Tile" */
+  recommendedCoveringMethod: string;
+  /** Level-3 recommendation: e.g. "Steel Truss + Waterproof Membrane" */
+  recommendedConstructionMethod: string;
   materialSelections: Record<string, string>; // materialType -> materialId
   reasoning: string;
 }
+
+// Roofing hierarchy exposed to AI so it knows every valid option
+const ROOF_HIERARCHY_SUMMARY = `
+ROOF SHAPES (Level 0 - Choose one):
+- "gable" (Pitched/Gable): Best for economy, easiest to build, great drainage.
+- "flat" (Flat Roof): Modern look, easy to build but requires good slab waterproofing.
+- "hip" (Hip Roof): Stronger in high winds, more complex truss.
+- "shed" (Shed Roof): Simple modern slope, very economical.
+
+STRUCTURAL HIERARCHY (Level 1-3):
+[Slab] - (Only valid if shape is "flat")
+  └─ RCC Solid Slab  (construction: conventional RCC)
+  └─ Filler Slab     (construction: RCC with clay-pot/hollow-blocks - VERY ECONOMICAL, reduces dead load)
+  └─ Precast Slab    (construction: Precast panels - Fast but needs cranes)
+
+[Sloped Roof - Tile] - (Only valid if shape is NOT "flat")
+  └─ Clay Roof Tile    (truss: Steel Truss OR Timber)
+  └─ Concrete Roof Tile(truss: Steel Truss)
+
+[Sloped Roof - Sheet] - (Only valid if shape is NOT "flat")
+  └─ Galvanized Iron Sheet  (truss: Steel Truss - MOST ECONOMICAL for sloped)
+  └─ Aluminium Sheet        (truss: Steel Truss)
+  └─ Polycarbonate Sheet    (truss: Steel Truss)
+`;
 
 export const getRoofingPerspectives = async (
   tier: string,
@@ -799,7 +846,9 @@ export const getRoofingPerspectives = async (
     try {
       if (!currentModel) throw new Error('Gemini model not initialized.');
 
-      const roofingMats = availableMaterials.filter(m => ['Roofing', 'Foundation', 'Structural'].includes(m.category));
+      const roofingMats = availableMaterials.filter(m =>
+        ['Roof', 'Roofing', 'Foundation', 'Structural'].includes(m.category)
+      );
       const byType: Record<string, any[]> = {};
       roofingMats.forEach(m => {
         if (!byType[m.type]) byType[m.type] = [];
@@ -811,36 +860,68 @@ export const getRoofingPerspectives = async (
           `=== ${type} ===\n` + items.map(m => `ID:${m.id} | ${m.name} | ₹${m.pricePerUnit}/${m.unit}`).join('\n')
         ).join('\n\n');
 
-      const tierGuidance: Record<string, string> = {
-        Economy: `Option A: basic cement materials, standard grade. Option B: cost-efficient combo. Option C: fastest build option.`,
-        Standard: `Option A: balanced quality. Option B: durability focus. Option C: thermal comfort focus.`,
-        Luxury: `Option A: premium materials across all types. Option B: modern/aesthetic focus. Option C: sustainable/high-performance.`,
-      };
-
       const types = Object.keys(byType);
 
+      const tierNote: Record<string, string> = {
+        Economy: 'Budget-conscious: prefer cost-efficient methods, minimal wastage.',
+        Standard: 'Balanced: blend quality, durability, and reasonable cost.',
+        Luxury: 'Premium: prioritise aesthetics, performance materials, and longevity.',
+      };
+
       const prompt = `
-Act as a Senior Civil Engineer. For a ${tier} tier RCC roof slab (${area} sq ft), generate 3 distinct material perspectives.
-Each selects ONE material per type from the lists below.
+You are a Senior Civil Engineer specialising in residential construction in India.
+Project: ${tier} tier roof for a ${area} sq ft building.
+Budget guidance: ${tierNote[tier] || tierNote['Standard']}
 
-${tierGuidance[tier] || tierGuidance['Standard']}
+${ROOF_HIERARCHY_SUMMARY}
 
-Available material types: ${types.join(', ')}
+Generate exactly 3 roofing recommendations, one per perspective lens:
 
+PERSPECTIVE A – "Aesthetic"
+  Focus: architectural beauty. 
+  Reasoning: Choose between Pitched, Flat, Hip, or Shed based on what looks best for the tier.
+  Hierarchy: Choose Shape → Type → Covering → Construction.
+
+PERSPECTIVE B – "Basic Performance"
+  Focus: cost-effectiveness, ease of repair.
+  Reasoning: For Economy, Pitched (gable) or Shed roofs with GI sheets are often best. Flat roofs with Filler Slabs are also great economy options.
+
+PERSPECTIVE C – "Strength"
+  Focus: maximum structural integrity and longevity.
+  Reasoning: Flat RCC slabs or Hip roofs are typically strongest.
+
+AVAILABLE MATERIALS CATALOGUE:
 ${matSummary}
 
-RULES:
-1. Every ID must be an actual ID from the lists.
-2. materialSelections must contain exactly these keys: ${JSON.stringify(types)}
-3. title ≤ 4 words. subtitle ≤ 8 words. description = 1 sentence on structural/aesthetic focus.
-4. tags = 2–3 labels. reasoning = 1 sentence.
+STRICT RULES:
+1. Every materialSelections ID must be an actual ID from the catalogue above.
+2. materialSelections keys must be chosen from: ${JSON.stringify(types)}
+3. Only include keys whose IDs actually exist for the chosen roofType path.
+4. recommendedRoofShape must be exactly one of: "gable", "flat", "hip", "shed"
+5. recommendedRoofType must be exactly one of: "Slab", "Sloped Roof - Tile", "Sloped Roof - Sheet"
+6. title ≤ 4 words. subtitle ≤ 8 words. description = 1 sentence.
+7. tags = 2–3 short labels. reasoning = 1 sentence justifying the shape and material choice.
+8. perspectiveType must be exactly one of: "Aesthetic", "Basic Performance", "Strength"
 
-Return ONLY valid JSON:
+Return ONLY valid JSON (no markdown fences):
 {
   "perspectives": [
-    { "id": "A", "title": "...", "subtitle": "...", "description": "...", "tags": ["..."], "materialSelections": ${JSON.stringify(Object.fromEntries(types.map(t => [t, 'real_id'])))}, "reasoning": "..." },
-    { "id": "B", ... },
-    { "id": "C", ... }
+    {
+      "id": "A",
+      "perspectiveType": "Aesthetic",
+      "title": "...",
+      "subtitle": "...",
+      "description": "...",
+      "tags": ["..."],
+      "recommendedRoofShape": "gable",
+      "recommendedRoofType": "Sloped Roof - Tile",
+      "recommendedCoveringMethod": "Clay Roof Tile",
+      "recommendedConstructionMethod": "Timber/Wood Truss + Roofing Underlayment",
+      "materialSelections": {},
+      "reasoning": "..."
+    },
+    { "id": "B", "perspectiveType": "Basic Performance", ... },
+    { "id": "C", "perspectiveType": "Strength", ... }
   ]
 }`;
 
@@ -851,8 +932,11 @@ Return ONLY valid JSON:
       const parsed = JSON.parse(jsonText);
       const perspectives: RoofingPerspective[] = parsed.perspectives || [];
       const allIds = new Set(availableMaterials.map(m => m.id));
+      // Accept perspective even if only some material IDs are valid (AI may omit irrelevant types)
       const valid = perspectives.filter(p =>
-        p.materialSelections && Object.values(p.materialSelections).every(id => allIds.has(id))
+        p.materialSelections &&
+        Object.values(p.materialSelections).length > 0 &&
+        Object.values(p.materialSelections).every(id => allIds.has(id as string))
       );
       if (valid.length === 0) throw new Error('AI returned no valid roofing perspectives');
       return valid;
@@ -880,10 +964,10 @@ export const detectWallComposition = async (
         throw new Error('Gemini model not initialized. Check Firebase configuration.');
       }
 
-      console.log('🔍 Detecting wall composition for:', { 
-        roomCount: rooms.length, 
+      console.log('🔍 Detecting wall composition for:', {
+        roomCount: rooms.length,
         totalArea,
-        sampleRoom: rooms[0] 
+        sampleRoom: rooms[0]
       });
 
       // Prepare room data summary for analysis
@@ -896,7 +980,7 @@ export const detectWallComposition = async (
           const width = parseFloat(r.width || 0);
           const openings = r.openingPercentage ? `${r.openingPercentage}%` : 'unknown';
           const wallMeta = r.wallMetadata ? `(LB: ${(r.wallMetadata.mainWallRatio * 100).toFixed(0)}%, P: ${(r.wallMetadata.partitionWallRatio * 100).toFixed(0)}%)` : '';
-          
+
           return `${roomName} [${roomType}]: ${area.toFixed(1)} sqft (${length.toFixed(1)}' × ${width.toFixed(1)}'), Openings: ${openings} ${wallMeta}`;
         })
         .join('\n');
@@ -954,9 +1038,9 @@ Return ONLY valid JSON (no markdown, no code blocks, no explanation):
 
       const result = response.response;
       const responseText = result.text();
-      
+
       console.log('🤖 AI Response for wall composition:', responseText.substring(0, 200));
-      
+
       // Robust JSON extraction
       let jsonText = responseText.trim();
       if (jsonText.startsWith('```')) {

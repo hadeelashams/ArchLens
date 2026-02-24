@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  ScrollView, 
-  TouchableOpacity, 
-  Dimensions, 
-  Platform, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Dimensions,
+  Platform,
   StatusBar,
   ActivityIndicator,
   Alert,
@@ -17,7 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { auth, db } from '@archlens/shared';
-import { collection, query, where, onSnapshot, deleteDoc, doc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, deleteDoc, doc, getDocs, orderBy } from 'firebase/firestore';
 
 const { width } = Dimensions.get('window');
 
@@ -35,10 +35,13 @@ export default function EstimateResultScreen({ route, navigation }: any) {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(projectId || null);
+  const [activeProject, setActiveProject] = useState<any>(null);
   const [estimates, setEstimates] = useState<any[]>([]);
   const [grandTotal, setGrandTotal] = useState(0);
   const [categoryBreakdown, setCategoryBreakdown] = useState<any>({});
-  const [viewMode, setViewMode] = useState<'project' | 'all'>('project'); // Track view mode
+  const [viewMode, setViewMode] = useState<'list' | 'breakdown'>('list'); // 'list' or 'breakdown'
 
   // Category icons mapping
   const categoryIcons: any = {
@@ -51,67 +54,80 @@ export default function EstimateResultScreen({ route, navigation }: any) {
   };
 
   useEffect(() => {
-    // If no user is logged in, show error
     if (!auth.currentUser) {
       setError('Please log in to view estimates.');
       setLoading(false);
       return;
     }
 
-    try {
-      let q;
-      
-      if (projectId) {
-        // Mode 1: Show estimates for specific project
-        setViewMode('project');
-        q = query(collection(db, 'estimates'), where('projectId', '==', projectId));
-      } else {
-        // Mode 2: Show all estimates for current user
-        setViewMode('all');
-        q = query(collection(db, 'estimates'), where('userId', '==', auth.currentUser.uid));
+    let unsubscribeProjects: (() => void) | undefined;
+    let unsubscribeEstimates: (() => void) | undefined;
+
+    // 1. Fetch Projects List
+    const qProjects = query(
+      collection(db, 'projects'),
+      where('userId', '==', auth.currentUser.uid),
+      orderBy('createdAt', 'desc')
+    );
+
+    unsubscribeProjects = onSnapshot(qProjects, (snap) => {
+      const projData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setProjects(projData);
+
+      // If we have an activeProjectId, find and set the activeProject object
+      if (activeProjectId) {
+        const found = projData.find(p => p.id === activeProjectId);
+        if (found) setActiveProject(found);
       }
 
-      const unsubscribe = onSnapshot(
-        q, 
-        (snapshot) => {
-          const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-          setEstimates(data);
-          setError(null); // Clear any previous errors
-          
-          // Calculate Total and Category Breakdown
-          let total = 0;
-          const breakdown: any = {};
-          
-          data.forEach((item: any) => {
-            const cost = item.totalCost || 0;
-            total += cost;
-            const category = item.category || 'Other';
-            
-            if (!breakdown[category]) {
-              breakdown[category] = { total: 0, items: 0, color: getCategoryColor(category) };
-            }
-            breakdown[category].total += cost;
-            breakdown[category].items += 1;
-          });
-          
-          setGrandTotal(total);
-          setCategoryBreakdown(breakdown);
-          setLoading(false);
-        },
-        (error) => {
-          console.error('Error fetching estimates:', error);
-          setError('Failed to load estimates. Please try again.');
-          setLoading(false);
-        }
+      if (!activeProjectId) {
+        setViewMode('list');
+        setLoading(false);
+      }
+    });
+
+    // 2. Fetch Estimates if activeProjectId exists
+    if (activeProjectId) {
+      setViewMode('breakdown');
+      setLoading(true);
+      const qEst = query(
+        collection(db, 'estimates'),
+        where('projectId', '==', activeProjectId)
       );
 
-      return () => unsubscribe();
-    } catch (err: any) {
-      console.error('Error setting up listener:', err);
-      setError('Error loading data: ' + err.message);
-      setLoading(false);
+      unsubscribeEstimates = onSnapshot(qEst, (snap) => {
+        const estData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setEstimates(estData);
+
+        let total = 0;
+        const breakdown: any = {};
+
+        estData.forEach((item: any) => {
+          const cost = item.totalCost || 0;
+          total += cost;
+          const category = item.category || 'Other';
+          if (!breakdown[category]) {
+            breakdown[category] = { total: 0, items: 0, color: getCategoryColor(category) };
+          }
+          breakdown[category].total += cost;
+          breakdown[category].items += 1;
+        });
+
+        setGrandTotal(total);
+        setCategoryBreakdown(breakdown);
+        setLoading(false);
+      }, (err) => {
+        console.error("Est fetch error:", err);
+        setError("Failed to load estimates.");
+        setLoading(false);
+      });
     }
-  }, [projectId]);
+
+    return () => {
+      if (unsubscribeProjects) unsubscribeProjects();
+      if (unsubscribeEstimates) unsubscribeEstimates();
+    };
+  }, [activeProjectId]);
 
   const getCategoryColor = (category: string) => {
     const colors: any = {
@@ -132,6 +148,35 @@ export default function EstimateResultScreen({ route, navigation }: any) {
     ]);
   };
 
+  const handleDeleteProject = async (id: string, name: string) => {
+    Alert.alert(
+      "Delete Project",
+      `Are you sure you want to delete "${name}"? This will permanently remove the project and its estimates.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              // 1. Fetch and delete associated estimates
+              const q = query(collection(db, 'estimates'), where('projectId', '==', id));
+              const snap = await getDocs(q);
+              const deletes = snap.docs.map(d => deleteDoc(d.ref));
+              await Promise.all(deletes);
+
+              // 2. Delete project doc
+              await deleteDoc(doc(db, 'projects', id));
+            } catch (err) {
+              console.error("Delete project error:", err);
+              Alert.alert("Error", "Failed to delete project.");
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const formatCurrency = (amount: number) => {
     return amount.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   };
@@ -148,8 +193,8 @@ export default function EstimateResultScreen({ route, navigation }: any) {
     const categoryEstimates = estimates.filter(e => e.category === category);
 
     return (
-      <TouchableOpacity 
-        style={styles.card} 
+      <TouchableOpacity
+        style={styles.card}
         activeOpacity={0.9}
         onPress={toggleExpand}
       >
@@ -168,10 +213,10 @@ export default function EstimateResultScreen({ route, navigation }: any) {
             <Text style={styles.amountText}>₹{formatCurrency(Math.round(data.total))}</Text>
             <View style={styles.currencyRow}>
               <Text style={styles.currencyLabel}>{grandTotal > 0 ? ((data.total / grandTotal) * 100).toFixed(1) : '0'}%</Text>
-              <Ionicons 
-                name={expanded ? "chevron-up" : "chevron-down"} 
-                size={16} 
-                color="#94a3b8" 
+              <Ionicons
+                name={expanded ? "chevron-up" : "chevron-down"}
+                size={16}
+                color="#94a3b8"
                 style={{ marginLeft: 4 }}
               />
             </View>
@@ -186,11 +231,11 @@ export default function EstimateResultScreen({ route, navigation }: any) {
               <View key={idx}>
                 {/* Estimate Item Header */}
                 <View style={styles.estimateItemHeader}>
-                  <View style={{flex: 1}}>
+                  <View style={{ flex: 1 }}>
                     <Text style={styles.itemName}>{item.itemName}</Text>
                     {item.notes && <Text style={styles.itemNotes}>{item.notes}</Text>}
                   </View>
-                  <TouchableOpacity onPress={() => handleDelete(item.id)} style={{padding: 8}}>
+                  <TouchableOpacity onPress={() => handleDelete(item.id)} style={{ padding: 8 }}>
                     <Ionicons name="trash-outline" size={16} color="#ef4444" />
                   </TouchableOpacity>
                 </View>
@@ -213,20 +258,20 @@ export default function EstimateResultScreen({ route, navigation }: any) {
                 {item.lineItems && item.lineItems.length > 0 && (
                   <View style={styles.lineItemsContainer}>
                     <View style={styles.tableHeader}>
-                      <Text style={[styles.tableHeading, {flex: 1.5}]}>Material</Text>
-                      <Text style={[styles.tableHeading, {flex: 1}]}>Qty</Text>
-                      <Text style={[styles.tableHeading, {flex: 1, textAlign: 'right'}]}>Cost</Text>
+                      <Text style={[styles.tableHeading, { flex: 1.5 }]}>Material</Text>
+                      <Text style={[styles.tableHeading, { flex: 1 }]}>Qty</Text>
+                      <Text style={[styles.tableHeading, { flex: 1, textAlign: 'right' }]}>Cost</Text>
                     </View>
                     {item.lineItems.map((line: any, lineIdx: number) => (
                       <View key={lineIdx} style={styles.tableRow}>
-                        <View style={{flex: 1.5}}>
+                        <View style={{ flex: 1.5 }}>
                           <Text style={styles.lineItemName}>{line.name || line.label}</Text>
                           {line.desc && <Text style={styles.lineItemDesc}>{line.desc}</Text>}
                         </View>
-                        <View style={{flex: 1}}>
+                        <View style={{ flex: 1 }}>
                           <Text style={styles.lineItemQty}>{line.qty} {line.unit}</Text>
                         </View>
-                        <View style={{flex: 1, alignItems: 'flex-end'}}>
+                        <View style={{ flex: 1, alignItems: 'flex-end' }}>
                           <Text style={styles.lineItemPrice}>₹{formatCurrency(Math.round(line.total || 0))}</Text>
                         </View>
                       </View>
@@ -281,21 +326,21 @@ export default function EstimateResultScreen({ route, navigation }: any) {
         <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
         <SafeAreaView style={styles.safeArea}>
           <View style={styles.header}>
-            <TouchableOpacity 
-              onPress={() => navigation.goBack()} 
+            <TouchableOpacity
+              onPress={() => navigation.goBack()}
               style={styles.iconButton}
             >
               <Ionicons name="arrow-back" size={20} color="#315b76" />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Project Summary</Text>
-            <View style={{ width: 40 }} /> 
+            <View style={{ width: 40 }} />
           </View>
-          
+
           <View style={styles.errorContainer}>
             <MaterialCommunityIcons name="alert-circle" size={60} color="#ef4444" />
             <Text style={styles.errorTitle}>Error Loading Summary</Text>
             <Text style={styles.errorText}>{error}</Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.retryButton}
               onPress={() => {
                 setError(null);
@@ -314,34 +359,99 @@ export default function EstimateResultScreen({ route, navigation }: any) {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
       <SafeAreaView style={styles.safeArea}>
-        
+
         {/* HEADER */}
         <View style={styles.header}>
-          <TouchableOpacity 
-            onPress={() => viewMode === 'all' ? navigation.navigate('Home') : navigation.goBack()} 
+          <TouchableOpacity
+            onPress={() => {
+              if (viewMode === 'breakdown') {
+                setActiveProjectId(null);
+                setActiveProject(null);
+                setViewMode('list');
+              } else {
+                navigation.navigate('Home');
+              }
+            }}
             style={styles.iconButton}
           >
-             <Ionicons name="arrow-back" size={20} color="#315b76" />
+            <Ionicons name="arrow-back" size={20} color="#315b76" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{viewMode === 'all' ? 'My All Estimates' : 'Project Summary'}</Text>
-          <View style={{ width: 40 }} /> 
+          <Text style={styles.headerTitle}>{viewMode === 'list' ? 'Select Project' : (activeProject?.name || 'Project Summary')}</Text>
+          <View style={{ width: 40 }} />
         </View>
 
-        {estimates.length === 0 ? (
+        {viewMode === 'list' ? (
+          <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionLabel}>YOUR ARCHIVE PROJECTS</Text>
+            </View>
+
+            {projects.length === 0 ? (
+              <View style={styles.emptyStateContainer}>
+                <MaterialCommunityIcons name="folder-outline" size={60} color="#cbd5e1" />
+                <Text style={styles.emptyStateText}>No Projects Found</Text>
+                <Text style={styles.emptyStateSubtext}>Upload a floor plan to start a new project estimation.</Text>
+                <TouchableOpacity
+                  style={styles.addMoreButton}
+                  onPress={() => navigation.navigate("UploadPlan")}
+                >
+                  <Ionicons name="add" size={20} color="#fff" />
+                  <Text style={styles.addMoreButtonText}>New Project</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.cardsContainer}>
+                {projects.map((proj) => (
+                  <View
+                    key={proj.id}
+                    style={styles.projectCard}
+                  >
+                    <TouchableOpacity
+                      style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}
+                      onPress={() => setActiveProjectId(proj.id)}
+                    >
+                      <View style={styles.projectIconBox}>
+                        <MaterialCommunityIcons name="office-building" size={24} color="#315b76" />
+                      </View>
+                      <View style={styles.projectInfo}>
+                        <Text style={styles.projectName}>{proj.name || 'Untitled Project'}</Text>
+                        <Text style={styles.projectMeta}>
+                          {proj.createdAt?.toDate ? proj.createdAt.toDate().toLocaleDateString() : 'Recent'} • {proj.status || 'Active'}
+                        </Text>
+                        {proj.totalArea && <Text style={styles.projectArea}>{proj.totalArea} sq.ft</Text>}
+                      </View>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={{ padding: 8, marginRight: 4 }}
+                      onPress={() => handleDeleteProject(proj.id, proj.name)}
+                    >
+                      <Ionicons name="trash-outline" size={20} color="#ef4444" />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity onPress={() => setActiveProjectId(proj.id)}>
+                      <Ionicons name="chevron-forward" size={20} color="#cbd5e1" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
+          </ScrollView>
+        ) : estimates.length === 0 ? (
           <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
             <View style={styles.emptyStateContainer}>
               <MaterialCommunityIcons name="file-document-outline" size={60} color="#cbd5e1" />
-              <Text style={styles.emptyStateText}>
-                {viewMode === 'all' ? 'No Estimates Found' : 'No Estimates Yet'}
-              </Text>
-              <Text style={styles.emptyStateSubtext}>
-                {viewMode === 'all' 
-                  ? 'Start a new project to create estimates' 
-                  : 'Add estimates from construction components to see the summary'}
-              </Text>
-              <TouchableOpacity 
+              <Text style={styles.emptyStateText}>No Estimates Yet</Text>
+              <Text style={styles.emptyStateSubtext}>Add estimates from construction components to see the summary for this project.</Text>
+              <TouchableOpacity
                 style={styles.addMoreButton}
-                onPress={() => navigation.navigate("ConstructionLevel")}
+                onPress={() => navigation.navigate("ConstructionLevel", {
+                  projectId: activeProjectId,
+                  totalArea: activeProject?.totalArea || 0,
+                  rooms: activeProject?.rooms || [],
+                  wallComposition: activeProject?.wallComposition || null,
+                  allTierRecommendations: activeProject?.allTierRecommendations || null
+                })}
               >
                 <Ionicons name="add" size={20} color="#fff" />
                 <Text style={styles.addMoreButtonText}>Add Estimate</Text>
@@ -349,52 +459,52 @@ export default function EstimateResultScreen({ route, navigation }: any) {
             </View>
           </ScrollView>
         ) : (
-          <ScrollView 
+          <ScrollView
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
           >
-            
+
             {/* HERO SECTION */}
             <View style={styles.heroWrapper}>
               <LinearGradient
-                  colors={['#315b76', '#2a4179']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.heroContainer}
+                colors={['#315b76', '#2a4179']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.heroContainer}
               >
-                  <View style={styles.heroHeader}>
-                      <Text style={styles.heroLabel}>{viewMode === 'all' ? 'TOTAL ESTIMATES' : 'PROJECT TOTAL ESTIMATE'}</Text>
-                      <View style={styles.levelBadge}>
-                          <Text style={styles.levelText}>{Object.keys(categoryBreakdown).length} CATEGORIES</Text>
-                      </View>
+                <View style={styles.heroHeader}>
+                  <Text style={styles.heroLabel}>PROJECT TOTAL ESTIMATE</Text>
+                  <View style={styles.levelBadge}>
+                    <Text style={styles.levelText}>{Object.keys(categoryBreakdown).length} CATEGORIES</Text>
                   </View>
+                </View>
 
-                  <Text style={styles.heroAmount}>
-                      ₹ {formatCurrency(grandTotal)}
-                  </Text>
-                  
-                  <Text style={styles.heroSubtitle}>
-                      {estimates.length} estimates across {Object.keys(categoryBreakdown).length} categories
-                  </Text>
+                <Text style={styles.heroAmount}>
+                  ₹ {formatCurrency(grandTotal)}
+                </Text>
 
-                  <View style={styles.divider} />
+                <Text style={styles.heroSubtitle}>
+                  {estimates.length} estimates across {Object.keys(categoryBreakdown).length} categories
+                </Text>
 
-                  <View style={styles.statRow}>
-                      <View style={styles.statItem}>
-                          <Text style={styles.statLabel}>Total Items</Text>
-                          <Text style={styles.statValue}>{estimates.length}</Text>
-                      </View>
-                      <View style={styles.statItem}>
-                          <Text style={styles.statLabel}>Categories</Text>
-                          <Text style={styles.statValue}>{Object.keys(categoryBreakdown).length}</Text>
-                      </View>
+                <View style={styles.divider} />
+
+                <View style={styles.statRow}>
+                  <View style={styles.statItem}>
+                    <Text style={styles.statLabel}>Total Items</Text>
+                    <Text style={styles.statValue}>{estimates.length}</Text>
                   </View>
+                  <View style={styles.statItem}>
+                    <Text style={styles.statLabel}>Categories</Text>
+                    <Text style={styles.statValue}>{Object.keys(categoryBreakdown).length}</Text>
+                  </View>
+                </View>
               </LinearGradient>
             </View>
 
             {/* CATEGORY BREAKDOWN */}
             <View style={styles.sectionHeader}>
-               <Text style={styles.sectionLabel}>CATEGORY BREAKDOWN</Text>
+              <Text style={styles.sectionLabel}>CATEGORY BREAKDOWN</Text>
             </View>
 
             <View style={styles.cardsContainer}>
@@ -405,9 +515,15 @@ export default function EstimateResultScreen({ route, navigation }: any) {
 
             {/* FOOTER ACTIONS */}
             <View style={styles.footerActions}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.addMoreButton}
-                onPress={() => navigation.navigate("ConstructionLevel")}
+                onPress={() => navigation.navigate("ConstructionLevel", {
+                  projectId: activeProjectId,
+                  totalArea: activeProject?.totalArea || 0,
+                  rooms: activeProject?.rooms || [],
+                  wallComposition: activeProject?.wallComposition || null,
+                  allTierRecommendations: activeProject?.allTierRecommendations || null
+                })}
               >
                 <Ionicons name="add-circle-outline" size={20} color="#fff" />
                 <Text style={styles.addMoreButtonText}>Add More</Text>
@@ -418,7 +534,6 @@ export default function EstimateResultScreen({ route, navigation }: any) {
                 <Text style={styles.exportButtonText}>Export</Text>
               </TouchableOpacity>
             </View>
-
           </ScrollView>
         )}
       </SafeAreaView>
@@ -432,7 +547,7 @@ export default function EstimateResultScreen({ route, navigation }: any) {
           </TouchableOpacity>
           <TouchableOpacity style={styles.navItem} onPress={() => { /* Already on Estimates */ }}>
             <Ionicons name="document-text" size={24} color="#315b76" />
-            <Text style={[styles.navText, {color: '#315b76'}]}>ESTIMATES</Text>
+            <Text style={[styles.navText, { color: '#315b76' }]}>ESTIMATES</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Profile')}>
             <Ionicons name="person-outline" size={24} color="#64748b" />
@@ -440,7 +555,7 @@ export default function EstimateResultScreen({ route, navigation }: any) {
           </TouchableOpacity>
         </View>
       </View>
-    </View>
+    </View >
   );
 }
 
@@ -485,8 +600,8 @@ const styles = StyleSheet.create({
   sectionLabel: { fontSize: 12, fontWeight: '700', color: '#94a3b8', letterSpacing: 1 },
 
   cardsContainer: { gap: 16 },
-  card: { 
-    backgroundColor: '#ffffff', borderRadius: 20, padding: 16, 
+  card: {
+    backgroundColor: '#ffffff', borderRadius: 20, padding: 16,
     shadowColor: '#94a3b8', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.1, shadowRadius: 15, elevation: 2,
     borderWidth: 1, borderColor: '#f8fafc',
     overflow: 'hidden'
@@ -510,7 +625,7 @@ const styles = StyleSheet.create({
 
   // Enhanced Estimate Details
   estimateItemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 10, marginBottom: 10 },
-  
+
   badgeRow: { flexDirection: 'row', gap: 8, marginBottom: 12, flexWrap: 'wrap' },
   badge: { backgroundColor: '#f0f4f8', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0' },
   badgeText: { fontSize: 11, fontWeight: '600', color: '#475569' },
@@ -534,23 +649,23 @@ const styles = StyleSheet.create({
 
   itemDivider: { height: 1, backgroundColor: '#e2e8f0', marginVertical: 12 },
 
-  emptyStateContainer: { 
-    flex: 1, justifyContent: 'center', alignItems: 'center', 
-    paddingVertical: 60, paddingHorizontal: 24 
+  emptyStateContainer: {
+    flex: 1, justifyContent: 'center', alignItems: 'center',
+    paddingVertical: 60, paddingHorizontal: 24
   },
   emptyStateText: { fontSize: 18, fontWeight: '700', color: '#1e293b', marginTop: 16 },
   emptyStateSubtext: { fontSize: 13, color: '#64748b', marginTop: 8, textAlign: 'center', lineHeight: 19 },
 
-  footerActions: { 
+  footerActions: {
     flexDirection: 'row', gap: 12, marginTop: 25
   },
   addMoreButton: {
     flex: 1, backgroundColor: '#315b76', borderRadius: 16, height: 56,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9,
-    shadowColor: '#315b76', shadowOffset: { width: 0 , height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 5,
+    shadowColor: '#315b76', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 5,
   },
   addMoreButtonText: { fontSize: 15, fontWeight: '700', color: '#fff' },
-  
+
   exportButton: {
     flex: 1, backgroundColor: '#fff', borderRadius: 16, height: 56,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
@@ -560,9 +675,9 @@ const styles = StyleSheet.create({
   exportButtonText: { fontSize: 15, fontWeight: '700', color: '#315b76' },
 
   // Error State Styles
-  errorContainer: { 
-    flex: 1, justifyContent: 'center', alignItems: 'center', 
-    paddingVertical: 60, paddingHorizontal: 24 
+  errorContainer: {
+    flex: 1, justifyContent: 'center', alignItems: 'center',
+    paddingVertical: 60, paddingHorizontal: 24
   },
   errorTitle: { fontSize: 18, fontWeight: '700', color: '#ef4444', marginTop: 16, marginBottom: 8 },
   errorText: { fontSize: 14, color: '#64748b', textAlign: 'center', lineHeight: 20, marginBottom: 24 },
@@ -576,4 +691,50 @@ const styles = StyleSheet.create({
   bottomNav: { width: width * 0.9, height: 70, backgroundColor: '#FFFFFF', borderRadius: 35, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', elevation: 20, shadowColor: '#315b76', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.15, shadowRadius: 20 },
   navItem: { alignItems: 'center', height: '100%', justifyContent: 'center', flex: 1 },
   navText: { fontSize: 10, fontWeight: 'bold', marginTop: 4, color: '#64748b' },
+
+  // Project Card Styles
+  projectCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+    shadowColor: '#94a3b8',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  projectIconBox: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#f1f5f9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 15,
+  },
+  projectInfo: {
+    flex: 1,
+  },
+  projectName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1e293b',
+    marginBottom: 4,
+  },
+  projectMeta: {
+    fontSize: 12,
+    color: '#94a3b8',
+    fontWeight: '500',
+  },
+  projectArea: {
+    fontSize: 11,
+    color: '#315b76',
+    marginTop: 4,
+    fontWeight: '600',
+  },
 });

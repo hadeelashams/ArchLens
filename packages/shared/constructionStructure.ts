@@ -64,8 +64,8 @@ export const CONSTRUCTION_HIERARCHY = {
     label: "Foundation",
     // Standardized Key: subCategories (Represents Construction Method)
     subCategories: {
-      'RCC': ["Cement", "Steel (TMT Bar)", "Sand","Aggregate"],
-      'PCC': ["Cement","Sand","Aggregate"],
+      'RCC': ["Cement", "Steel (TMT Bar)", "Sand", "Aggregate"],
+      'PCC': ["Cement", "Sand", "Aggregate"],
       'Stone Masonry': ["Stone", "Cement", "Sand"],
     },
   },
@@ -73,14 +73,15 @@ export const CONSTRUCTION_HIERARCHY = {
     label: "Wall",
     subCategories: {
       'Load Bearing': ["Brick Wall", "Block Wall", "Stone Wall"],
-      'Partition': ["Brick Partition", "Block Partition", "Dry Wall", "Glass","Wood Wall"],
+      'Partition': ["Brick Partition", "Block Partition", "Dry Wall", "Glass", "Wood Wall"],
     },
   },
-'Roof': {
+  'Roof': {
     label: "Roofing",
     subCategories: {
       "Slab": {
-        "Slab Core": ["RCC Solid Slab", "Filler Slab", "Precast Slab "],
+        "Structural Support": ["RCC Beams", "Structural Steel Frame"],
+        "Slab Core": ["RCC Solid Slab", "Filler Slab", "Precast Concrete Slab", "Post-Tension Slab", "Hollow Core Slab"],
         "Protection": ["Waterproofing Chemical"]
       },
       "Sloped Roof - Tile": {

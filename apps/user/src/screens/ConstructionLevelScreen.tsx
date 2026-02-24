@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  TextInput, 
-  TouchableOpacity, 
-  StyleSheet, 
-  ScrollView, 
-  Dimensions, 
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  Dimensions,
   Platform,
   StatusBar,
-  Alert 
+  Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons, MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
@@ -23,15 +23,15 @@ const COMPONENT_DATA = [
     id: '1',
     title: 'Foundation',
     description: 'Excavation, RCC footing, and plinth beam',
-    icon: 'home', 
+    icon: 'home',
     iconLib: 'MaterialIcons',
-    gradientColors: ['#4F46E5', '#818cf8'], 
+    gradientColors: ['#4F46E5', '#818cf8'],
   },
   {
     id: '2',
     title: 'Wall and Masonry',
     description: 'Brickwork, blocks, and internal walls',
-    icon: 'view-grid-plus', 
+    icon: 'view-grid-plus',
     iconLib: 'MaterialCommunityIcons',
     gradientColors: ['#3b82f6', '#60a5fa'],
   },
@@ -39,7 +39,7 @@ const COMPONENT_DATA = [
     id: '3',
     title: 'Roofing',
     description: 'RC slab, chemical waterproofing',
-    icon: 'home-roof', 
+    icon: 'home-roof',
     iconLib: 'MaterialCommunityIcons',
     gradientColors: ['#0ea5e9', '#38bdf8'],
   },
@@ -47,7 +47,7 @@ const COMPONENT_DATA = [
     id: '4',
     title: 'Plastering',
     description: 'Internal gypsum, external sand finish',
-    icon: 'texture', 
+    icon: 'texture',
     iconLib: 'MaterialIcons',
     gradientColors: ['#64748B', '#94a3b8'],
   },
@@ -55,7 +55,7 @@ const COMPONENT_DATA = [
     id: '5',
     title: 'Flooring',
     description: 'Premium vitrified tiles 600x600...',
-    icon: 'view-module', 
+    icon: 'view-module',
     iconLib: 'MaterialIcons',
     gradientColors: ['#14b8a6', '#2dd4bf'],
   },
@@ -63,7 +63,7 @@ const COMPONENT_DATA = [
     id: '6',
     title: 'Painting',
     description: 'Premium emulsion, acrylic exterior...',
-    icon: 'format-paint', 
+    icon: 'format-paint',
     iconLib: 'MaterialIcons',
     gradientColors: ['#10b981', '#34d399'],
   },
@@ -77,13 +77,13 @@ const BUDGET_TIERS = [
 
 export default function ConstructionLevelScreen({ route, navigation }: any) {
   const { totalArea, projectId, rooms, wallComposition: initialWallComposition, allTierRecommendations: initialAllTierRecommendations } = route.params || { totalArea: 0, projectId: null, rooms: [], wallComposition: null, allTierRecommendations: null };
-  
+
   // Store wall composition in state so it persists across navigations
   const [wallComposition, setWallComposition] = useState(initialWallComposition);
-  
+
   // Store AI recommendations for all tiers (computed at floor plan upload time)
   const [allTierRecommendations, setAllTierRecommendations] = useState(initialAllTierRecommendations);
-  
+
   // CHANGED: Initial state is NULL to force selection
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const [searchText, setSearchText] = useState('');
@@ -121,23 +121,23 @@ export default function ConstructionLevelScreen({ route, navigation }: any) {
 
     if (item.title === 'Foundation') {
       const tierFoundation = allTierRecommendations?.[activeTab]?.foundation || null;
-      navigation.navigate('FoundationSelection', { 
-        totalArea, 
-        projectId, 
+      navigation.navigate('FoundationSelection', {
+        totalArea,
+        projectId,
         tier: activeTab,
         aiRecommendations: tierFoundation?.data || null,
         aiAdvice: tierFoundation?.advice || null,
-      }); 
-    } 
+      });
+    }
     else if (item.title === 'Wall and Masonry') {
       // Get the recommendations for the selected tier
       const tierRecommendations = allTierRecommendations?.[activeTab] || null;
-      navigation.navigate('WallDetails', { 
-        totalArea, 
-        projectId, 
-        rooms, 
-        tier: activeTab, 
-        wallComposition, 
+      navigation.navigate('WallDetails', {
+        totalArea,
+        projectId,
+        rooms,
+        tier: activeTab,
+        wallComposition,
         aiRecommendations: tierRecommendations?.data,  // Pass the selected tier's material recommendations
         aiAdvice: tierRecommendations?.advice,  // Pass the AI advice/explanation text
         aiInsights: tierRecommendations?.insights ? {
@@ -147,7 +147,7 @@ export default function ConstructionLevelScreen({ route, navigation }: any) {
           tier: activeTab
         } : null  // Pass cost savings and insights
       });
-    } 
+    }
     else if (item.title === 'Roofing') {
       navigation.navigate('RoofingScreen', { totalArea, projectId, tier: activeTab });
     }
@@ -162,49 +162,79 @@ export default function ConstructionLevelScreen({ route, navigation }: any) {
     }
   };
 
+  const getAIRecommendationLabel = (itemTitle: string) => {
+    if (!activeTab || !allTierRecommendations?.[activeTab]) return null;
+    const tierRec = allTierRecommendations[activeTab];
+
+    if (itemTitle === 'Foundation') {
+      const found = tierRec.foundation;
+      if (found?.success && found.data) {
+        return `Steel & Cement`;
+      }
+    }
+    else if (itemTitle === 'Wall and Masonry') {
+      if (tierRec.success) {
+        let label = '';
+        if (wallComposition) {
+          label = `${(wallComposition.loadBearingPercentage || 0).toFixed(0)}% LB Wall`;
+        } else {
+          label = `Optimized Materials`;
+        }
+        return label;
+      }
+    }
+    else if (itemTitle === 'Roofing') {
+      const roof = tierRec.roofing;
+      if (roof?.success) {
+        return `${roof.shape === 'gable' ? 'Pitched' : roof.shape} Roof`;
+      }
+    }
+    return null;
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
       <SafeAreaView style={styles.safeArea}>
-      
+
         {/* --- HEADER WITH HOME BUTTON --- */}
         <View style={styles.header}>
-          <TouchableOpacity 
-            onPress={() => navigation.goBack()} 
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
             style={styles.iconButton}
           >
-             <Ionicons name="arrow-back" size={20} color="#315b76" />
+            <Ionicons name="arrow-back" size={20} color="#315b76" />
           </TouchableOpacity>
-          
+
           <Text style={styles.headerTitle}>Construction Level</Text>
-          
-          <TouchableOpacity 
-            onPress={goHome} 
+
+          <TouchableOpacity
+            onPress={goHome}
             style={styles.iconButton}
           >
-             <Ionicons name="home-outline" size={20} color="#315b76" />
+            <Ionicons name="home-outline" size={20} color="#315b76" />
           </TouchableOpacity>
         </View>
 
-        <ScrollView 
+        <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          
+
           {/* --- COMPACT AREA CARD --- */}
           {totalArea > 0 && (
             <View style={styles.miniSummaryCard}>
-               <View style={styles.miniSummaryLeft}>
-                  <MaterialCommunityIcons name="ruler-square" size={18} color="#315b76" />
-                  <Text style={styles.miniSummaryLabel}>Total Built-up Area</Text>
-               </View>
-               <Text style={styles.miniSummaryValue}>{totalArea} <Text style={{fontSize:12, fontWeight:'normal'}}>sq.ft</Text></Text>
+              <View style={styles.miniSummaryLeft}>
+                <MaterialCommunityIcons name="ruler-square" size={18} color="#315b76" />
+                <Text style={styles.miniSummaryLabel}>Total Built-up Area</Text>
+              </View>
+              <Text style={styles.miniSummaryValue}>{totalArea} <Text style={{ fontSize: 12, fontWeight: 'normal' }}>sq.ft</Text></Text>
             </View>
           )}
 
           {/* STEP 1: BUDGET TIERS */}
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>1. Select Quality Level <Text style={{color:'red'}}>*</Text></Text>
+            <Text style={styles.sectionTitle}>1. Select Quality Level <Text style={{ color: 'red' }}>*</Text></Text>
           </View>
 
           <View style={styles.tierContainer}>
@@ -214,7 +244,7 @@ export default function ConstructionLevelScreen({ route, navigation }: any) {
                 <TouchableOpacity
                   key={tier.id}
                   style={[
-                    styles.tierCard, 
+                    styles.tierCard,
                     isActive && { borderColor: tier.color, backgroundColor: '#fff', elevation: 2 }
                   ]}
                   onPress={() => setActiveTab(tier.id)}
@@ -247,55 +277,63 @@ export default function ConstructionLevelScreen({ route, navigation }: any) {
             <Text style={styles.sectionTitle}>2. Select Component</Text>
           </View>
 
-          <View style={[styles.cardsContainer, !activeTab && { opacity: 0.6 }]}> 
+          <View style={[styles.cardsContainer, !activeTab && { opacity: 0.6 }]}>
             {/* Added opacity style if no tab is selected */}
-            
-            {COMPONENT_DATA.filter(item => 
+
+            {COMPONENT_DATA.filter(item =>
               item.title.toLowerCase().includes(searchText.toLowerCase())
             ).map((item) => (
-              <TouchableOpacity 
-                key={item.id} 
-                style={styles.card} 
+              <TouchableOpacity
+                key={item.id}
+                style={styles.card}
                 activeOpacity={0.7}
-                onPress={() => handleCardPress(item)} 
+                onPress={() => handleCardPress(item)}
               >
                 {/* Gradient Icon Box */}
-                <LinearGradient 
-                  colors={item.gradientColors as any} 
+                <LinearGradient
+                  colors={item.gradientColors as any}
                   style={styles.cardIconContainer}
                 >
                   {renderIcon(item.iconLib, item.icon)}
                 </LinearGradient>
 
                 <View style={styles.cardContent}>
-                  <Text style={styles.cardTitle}>{item.title}</Text>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text style={styles.cardTitle}>{item.title}</Text>
+                    {getAIRecommendationLabel(item.title) && (
+                      <View style={styles.aiBadge}>
+                        <Ionicons name="sparkles" size={8} color="#315b76" />
+                        <Text style={styles.aiBadgeText}>{getAIRecommendationLabel(item.title)}</Text>
+                      </View>
+                    )}
+                  </View>
                   <Text style={styles.cardDesc} numberOfLines={1}>
                     {item.description}
                   </Text>
                 </View>
-                
+
                 {!activeTab ? (
-                   <Ionicons name="lock-closed-outline" size={18} color="#cbd5e1" />
+                  <Ionicons name="lock-closed-outline" size={18} color="#cbd5e1" />
                 ) : (
-                   <Ionicons name="chevron-forward" size={20} color="#cbd5e1" />
+                  <Ionicons name="chevron-forward" size={20} color="#cbd5e1" />
                 )}
               </TouchableOpacity>
             ))}
           </View>
-          
-          <View style={{ height: 100 }} /> 
+
+          <View style={{ height: 100 }} />
         </ScrollView>
       </SafeAreaView>
 
       {/* FLOATING ACTION BUTTON (CART) - MOVED TO RIGHT */}
-      <TouchableOpacity 
-        style={styles.fab} 
+      <TouchableOpacity
+        style={styles.fab}
         onPress={() => navigation.navigate('ProjectSummary', { projectId })}
         activeOpacity={0.8}
       >
         <LinearGradient colors={['#315b76', '#2a4179']} style={styles.fabGradient}>
-            <Ionicons name="receipt-outline" size={24} color="#fff" />
-            <Text style={styles.fabText}>Estimate</Text>
+          <Ionicons name="receipt-outline" size={24} color="#fff" />
+          <Text style={styles.fabText}>Estimate</Text>
         </LinearGradient>
       </TouchableOpacity>
 
@@ -307,14 +345,14 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
   safeArea: { flex: 1 },
   scrollContent: { paddingHorizontal: 20 },
-  
+
   // Header
-  header: { 
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', 
-    paddingHorizontal: 20, paddingVertical: 15 
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingVertical: 15
   },
-  iconButton: { 
-    width: 40, height: 40, borderRadius: 12, backgroundColor: '#fff', 
+  iconButton: {
+    width: 40, height: 40, borderRadius: 12, backgroundColor: '#fff',
     justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#f1f5f9',
     shadowColor: '#64748b', shadowOpacity: 0.05, shadowRadius: 5, elevation: 1
   },
@@ -333,10 +371,10 @@ const styles = StyleSheet.create({
   // Budget Tiers
   sectionHeader: { marginBottom: 10, marginTop: 5 },
   sectionTitle: { fontSize: 14, fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 },
-  
+
   tierContainer: { flexDirection: 'row', gap: 10, marginBottom: 20 },
-  tierCard: { 
-    flex: 1, backgroundColor: '#f1f5f9', padding: 12, borderRadius: 12, 
+  tierCard: {
+    flex: 1, backgroundColor: '#f1f5f9', padding: 12, borderRadius: 12,
     borderWidth: 1.5, borderColor: 'transparent', alignItems: 'center'
   },
   tierTitle: { fontSize: 13, fontWeight: '700', color: '#475569', marginBottom: 2 },
@@ -344,26 +382,26 @@ const styles = StyleSheet.create({
   activeDot: { width: 6, height: 6, borderRadius: 3, marginTop: 6 },
 
   // Search
-  searchContainer: { 
-    flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', 
-    borderRadius: 14, paddingHorizontal: 15, height: 48, marginBottom: 15, 
-    borderWidth: 1, borderColor: '#f1f5f9', shadowColor: '#64748b', shadowOpacity: 0.05, shadowRadius: 5 
+  searchContainer: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF',
+    borderRadius: 14, paddingHorizontal: 15, height: 48, marginBottom: 15,
+    borderWidth: 1, borderColor: '#f1f5f9', shadowColor: '#64748b', shadowOpacity: 0.05, shadowRadius: 5
   },
   searchIcon: { marginRight: 10 },
   searchInput: { flex: 1, fontSize: 15, color: '#1e293b' },
 
   // Cards
   cardsContainer: { gap: 12 },
-  card: { 
-    backgroundColor: '#ffffff', borderRadius: 18, padding: 14, 
-    flexDirection: 'row', alignItems: 'center', 
-    shadowColor: '#94a3b8', shadowOffset: { width: 0, height: 4 }, 
-    shadowOpacity: 0.1, shadowRadius: 10, elevation: 2, 
-    borderWidth: 1, borderColor: '#f8fafc' 
+  card: {
+    backgroundColor: '#ffffff', borderRadius: 18, padding: 14,
+    flexDirection: 'row', alignItems: 'center',
+    shadowColor: '#94a3b8', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1, shadowRadius: 10, elevation: 2,
+    borderWidth: 1, borderColor: '#f8fafc'
   },
-  cardIconContainer: { 
-    width: 48, height: 48, borderRadius: 12, 
-    justifyContent: 'center', alignItems: 'center', marginRight: 14 
+  cardIconContainer: {
+    width: 48, height: 48, borderRadius: 12,
+    justifyContent: 'center', alignItems: 'center', marginRight: 14
   },
   cardContent: { flex: 1, marginRight: 10 },
   cardTitle: { fontSize: 16, fontWeight: '700', color: '#1e293b', marginBottom: 2 },
@@ -371,19 +409,27 @@ const styles = StyleSheet.create({
 
   // FAB - UPDATED POSITION
   fab: {
-    position: 'absolute', 
-    bottom: 30, 
+    position: 'absolute',
+    bottom: 30,
     right: 20, // Moved to right corner
-    borderRadius: 30, 
+    borderRadius: 30,
     elevation: 10,
-    shadowColor: '#315b76', 
-    shadowOffset: { width: 0, height: 8 }, 
-    shadowOpacity: 0.3, 
+    shadowColor: '#315b76',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
     shadowRadius: 10,
   },
   fabGradient: {
-    flexDirection: 'row', paddingHorizontal: 20, paddingVertical: 14, 
+    flexDirection: 'row', paddingHorizontal: 20, paddingVertical: 14,
     borderRadius: 30, alignItems: 'center', gap: 8
   },
+  // AI Badge
+  aiBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: '#315b7610', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6,
+    borderWidth: 0.5, borderColor: '#315b7630'
+  },
+  aiBadgeText: { fontSize: 9, fontWeight: '700', color: '#315b76', textTransform: 'uppercase' },
+
   fabText: { color: '#fff', fontWeight: 'bold', fontSize: 16 }
 });

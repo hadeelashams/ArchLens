@@ -17,7 +17,7 @@ export default function WallScreen({ route, navigation }: any) {
   const {
     loading, materials, selections, setSelections,
     loadBearingBrick, setLoadBearingBrickManual,
-    partitionBrick,   setPartitionBrickManual,
+    partitionBrick, setPartitionBrickManual,
     height, setHeight,
     wallThickness, setWallThickness,
     jointThickness, setJointThickness,
@@ -33,11 +33,11 @@ export default function WallScreen({ route, navigation }: any) {
   } = useWallCalculations({ totalArea, rooms, tier, wallComposition });
 
   //  Pure UI state (never drives calculations) 
-  const [wallThicknessError,      setWallThicknessError]      = useState<string | null>(null);
-  const [cementDropdownOpen,      setCementDropdownOpen]      = useState(false);
-  const [sandDropdownOpen,        setSandDropdownOpen]        = useState(false);
+  const [wallThicknessError, setWallThicknessError] = useState<string | null>(null);
+  const [cementDropdownOpen, setCementDropdownOpen] = useState(false);
+  const [sandDropdownOpen, setSandDropdownOpen] = useState(false);
   const [loadBearingMaterialType, setLoadBearingMaterialType] = useState('All');
-  const [partitionMaterialType,   setPartitionMaterialType]   = useState('All');
+  const [partitionMaterialType, setPartitionMaterialType] = useState('All');
 
 
   if (loading) {
@@ -76,8 +76,8 @@ export default function WallScreen({ route, navigation }: any) {
             <View style={styles.metadataInfoRow}>
               {[
                 { label: 'Load-Bearing', value: `${(avgMainWallRatio * 100).toFixed(0)}%`, color: '#ef4444' },
-                { label: 'Partition',    value: `${(avgPartitionWallRatio * 100).toFixed(0)}%`, color: '#3b82f6' },
-                { label: 'Openings',     value: `${avgOpeningPercentage}%`, color: '#f59e0b' },
+                { label: 'Partition', value: `${(avgPartitionWallRatio * 100).toFixed(0)}%`, color: '#3b82f6' },
+                { label: 'Openings', value: `${avgOpeningPercentage}%`, color: '#f59e0b' },
               ].map(({ label, value, color }) => (
                 <View key={label} style={styles.metadataInfoItem}>
                   <Text style={styles.metadataInfoLabel}>{label}</Text>
@@ -156,10 +156,10 @@ export default function WallScreen({ route, navigation }: any) {
                         ))}
                         <View style={[styles.perspectiveTagChip, {
                           backgroundColor: p.finishType === 'Exposed' ? '#f0fdf4' : '#eff6ff',
-                          borderColor:     p.finishType === 'Exposed' ? '#86efac' : '#bfdbfe',
+                          borderColor: p.finishType === 'Exposed' ? '#86efac' : '#bfdbfe',
                         }]}>
                           <Text style={[styles.perspectiveTagText,
-                            { color: p.finishType === 'Exposed' ? '#15803d' : '#2563eb' }]}>
+                          { color: p.finishType === 'Exposed' ? '#15803d' : '#2563eb' }]}>
                             {p.finishType} Finish
                           </Text>
                         </View>
@@ -295,7 +295,7 @@ export default function WallScreen({ route, navigation }: any) {
 
             {/* Filter chips */}
             <View style={styles.materialTypeContainer}>
-              {['All', 'Brick Partition', 'Block Partition', 'Dry Wall', 'Glass', 'Wood Wall'].map(type => (
+              {['All', 'Brick Partition', 'Block Partition'].map(type => (
                 <TouchableOpacity
                   key={type}
                   style={[styles.typeChip, partitionMaterialType === type && styles.typeChipActive]}
@@ -450,7 +450,7 @@ export default function WallScreen({ route, navigation }: any) {
               avgMainWallRatio, avgPartitionWallRatio, avgOpeningPercentage,
               loadBearingBrick, partitionBrick,
               cement: selections['Cement'],
-              sand:   selections['Sand'],
+              sand: selections['Sand'],
               finishPreference, materialSelectionMode,
               systemCosts, budgetViolations,
             });
@@ -466,135 +466,135 @@ export default function WallScreen({ route, navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container:  { flex: 1, backgroundColor: '#F8FAFC' },
-  safeArea:   { flex: 1 },
-  centered:   { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header:     { flexDirection: 'row', alignItems: 'center', padding: 15, justifyContent: 'space-between' },
-  headerTitle:{ fontSize: 18, fontWeight: '700', color: '#1e293b' },
-  backBtn:    { width: 40, height: 40, borderRadius: 12, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#f1f5f9', shadowColor: '#64748b', shadowOpacity: 0.05, shadowRadius: 5, elevation: 1 },
-  tierBadge:  { backgroundColor: '#315b76', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
-  tierText:   { color: '#fff', fontSize: 11, fontWeight: '800' },
-  scroll:     { paddingHorizontal: 20, paddingBottom: 100 },
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  safeArea: { flex: 1 },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  header: { flexDirection: 'row', alignItems: 'center', padding: 15, justifyContent: 'space-between' },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: '#1e293b' },
+  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#f1f5f9', shadowColor: '#64748b', shadowOpacity: 0.05, shadowRadius: 5, elevation: 1 },
+  tierBadge: { backgroundColor: '#315b76', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+  tierText: { color: '#fff', fontSize: 11, fontWeight: '800' },
+  scroll: { paddingHorizontal: 20, paddingBottom: 100 },
 
-  sectionLabel:   { fontSize: 10, fontWeight: '800', color: '#94a3b8', marginVertical: 12, textTransform: 'uppercase', letterSpacing: 1 },
-  row:            { flexDirection: 'row', gap: 10 },
-  inputBox:       { flex: 1 },
-  label:          { fontSize: 10, color: '#64748b', marginBottom: 5, fontWeight: '700' },
-  input:          { backgroundColor: '#f1f5f9', padding: 12, borderRadius: 10, fontSize: 15, fontWeight: '700', color: '#1e293b', borderWidth: 1, borderColor: '#e2e8f0' },
-  inputCard:      { backgroundColor: '#fff', padding: 15, borderRadius: 15, borderWidth: 1, borderColor: '#e2e8f0', elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5 },
+  sectionLabel: { fontSize: 10, fontWeight: '800', color: '#94a3b8', marginVertical: 12, textTransform: 'uppercase', letterSpacing: 1 },
+  row: { flexDirection: 'row', gap: 10 },
+  inputBox: { flex: 1 },
+  label: { fontSize: 10, color: '#64748b', marginBottom: 5, fontWeight: '700' },
+  input: { backgroundColor: '#f1f5f9', padding: 12, borderRadius: 10, fontSize: 15, fontWeight: '700', color: '#1e293b', borderWidth: 1, borderColor: '#e2e8f0' },
+  inputCard: { backgroundColor: '#fff', padding: 15, borderRadius: 15, borderWidth: 1, borderColor: '#e2e8f0', elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5 },
   inputErrorText: { color: '#ef4444', fontSize: 10, marginTop: 5, marginLeft: 2, fontWeight: '600' },
 
-  metadataInfoCard:  { backgroundColor: '#f0f9ff', borderWidth: 1, borderColor: '#bae6fd', borderRadius: 12, padding: 12, marginBottom: 15 },
+  metadataInfoCard: { backgroundColor: '#f0f9ff', borderWidth: 1, borderColor: '#bae6fd', borderRadius: 12, padding: 12, marginBottom: 15 },
   metadataInfoTitle: { fontSize: 12, fontWeight: '700', color: '#315b76' },
-  metadataInfoRow:   { flexDirection: 'row', gap: 10, justifyContent: 'space-around' },
-  metadataInfoItem:  { flex: 1, alignItems: 'center' },
+  metadataInfoRow: { flexDirection: 'row', gap: 10, justifyContent: 'space-around' },
+  metadataInfoItem: { flex: 1, alignItems: 'center' },
   metadataInfoLabel: { fontSize: 10, color: '#64748b', fontWeight: '600', marginBottom: 4 },
   metadataInfoValue: { fontSize: 16, fontWeight: '800', color: '#1e293b' },
 
-  adviceBoxCompact:  { marginBottom: 12, marginTop: 10, backgroundColor: '#e0f2fe', borderLeftWidth: 3, borderLeftColor: '#315b76', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 6 },
+  adviceBoxCompact: { marginBottom: 12, marginTop: 10, backgroundColor: '#e0f2fe', borderLeftWidth: 3, borderLeftColor: '#315b76', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 6 },
   adviceTextCompact: { fontSize: 11, color: '#064e78', fontWeight: '500', lineHeight: 16 },
 
   materialTypeContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  typeChip:        { paddingHorizontal: 15, paddingVertical: 8, backgroundColor: '#fff', borderRadius: 20, borderWidth: 1, borderColor: '#e2e8f0' },
-  typeChipActive:  { backgroundColor: '#10b981', borderColor: '#10b981' },
-  typeChipText:    { fontSize: 11, fontWeight: '600', color: '#64748b' },
+  typeChip: { paddingHorizontal: 15, paddingVertical: 8, backgroundColor: '#fff', borderRadius: 20, borderWidth: 1, borderColor: '#e2e8f0' },
+  typeChipActive: { backgroundColor: '#10b981', borderColor: '#10b981' },
+  typeChipText: { fontSize: 11, fontWeight: '600', color: '#64748b' },
   typeChipTextActive: { color: '#fff' },
 
-  brandScroll:    { marginBottom: 10 },
-  brandCard:      { width: 130, backgroundColor: '#fff', padding: 10, borderRadius: 15, marginRight: 12, borderWidth: 1, borderColor: '#e2e8f0' },
-  activeBrand:    { borderColor: '#315b76', backgroundColor: '#eff6ff', borderWidth: 2 },
+  brandScroll: { marginBottom: 10 },
+  brandCard: { width: 130, backgroundColor: '#fff', padding: 10, borderRadius: 15, marginRight: 12, borderWidth: 1, borderColor: '#e2e8f0' },
+  activeBrand: { borderColor: '#315b76', backgroundColor: '#eff6ff', borderWidth: 2 },
   imagePlaceholder: { height: 70, backgroundColor: '#f8fafc', borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
-  brandImg:       { width: '100%', height: '100%', borderRadius: 10 },
-  brandName:      { fontSize: 11, fontWeight: '700', color: '#1e293b' },
-  brandPrice:     { fontSize: 10, color: '#10b981', fontWeight: 'bold', marginTop: 2 },
-  brandDim:       { fontSize: 9, color: '#94a3b8', marginTop: 1 },
-  emptyText:      { color: '#94a3b8', fontSize: 12, fontStyle: 'italic', marginLeft: 5 },
+  brandImg: { width: '100%', height: '100%', borderRadius: 10 },
+  brandName: { fontSize: 11, fontWeight: '700', color: '#1e293b' },
+  brandPrice: { fontSize: 10, color: '#10b981', fontWeight: 'bold', marginTop: 2 },
+  brandDim: { fontSize: 9, color: '#94a3b8', marginTop: 1 },
+  emptyText: { color: '#94a3b8', fontSize: 12, fontStyle: 'italic', marginLeft: 5 },
   materialBrandCard: { width: 100, marginRight: 10 },
 
-  materialCard:        { flex: 1, backgroundColor: '#fff', padding: 15, borderRadius: 15, borderWidth: 1, borderColor: '#e2e8f0', marginBottom: 0 },
-  materialCardHeader:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  materialLabel:       { fontSize: 10, fontWeight: '700', color: '#64748b', marginBottom: 8 },
-  materialSubLabel:    { fontSize: 9, color: '#94a3b8', fontWeight: '500', marginTop: 2 },
-  materialSelectionRow:{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
-  selectedMaterialText:{ fontSize: 11, fontWeight: '600', color: '#10b981', marginBottom: 10 },
-  materialQty:         { fontSize: 11, fontWeight: '600', color: '#315b76', marginTop: 10 },
-  aiBadge:             { backgroundColor: '#315b76', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 4 },
-  aiBadgeText:         { color: '#fff', fontSize: 10, fontWeight: '700' },
+  materialCard: { flex: 1, backgroundColor: '#fff', padding: 15, borderRadius: 15, borderWidth: 1, borderColor: '#e2e8f0', marginBottom: 0 },
+  materialCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  materialLabel: { fontSize: 10, fontWeight: '700', color: '#64748b', marginBottom: 8 },
+  materialSubLabel: { fontSize: 9, color: '#94a3b8', fontWeight: '500', marginTop: 2 },
+  materialSelectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  selectedMaterialText: { fontSize: 11, fontWeight: '600', color: '#10b981', marginBottom: 10 },
+  materialQty: { fontSize: 11, fontWeight: '600', color: '#315b76', marginTop: 10 },
+  aiBadge: { backgroundColor: '#315b76', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 4 },
+  aiBadgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
 
-  systemCostCard:       { backgroundColor: '#f0fdf4', borderWidth: 1.5, borderColor: '#bbf7d0', borderRadius: 12, padding: 12, marginVertical: 10 },
-  systemCostCardWarning:{ backgroundColor: '#fffbeb', borderColor: '#fcd34d' },
-  systemCostIcon:       { width: 32, height: 32, borderRadius: 8, backgroundColor: '#dcfce7', justifyContent: 'center', alignItems: 'center' },
-  systemCostLabel:      { fontSize: 9, fontWeight: '800', color: '#22c55e', textTransform: 'uppercase', letterSpacing: 0.5 },
-  systemCostValue:      { fontSize: 18, fontWeight: '800', color: '#15803d', marginVertical: 4 },
-  systemCostBreakdown:  { fontSize: 10, color: '#4b5563', lineHeight: 15 },
+  systemCostCard: { backgroundColor: '#f0fdf4', borderWidth: 1.5, borderColor: '#bbf7d0', borderRadius: 12, padding: 12, marginVertical: 10 },
+  systemCostCardWarning: { backgroundColor: '#fffbeb', borderColor: '#fcd34d' },
+  systemCostIcon: { width: 32, height: 32, borderRadius: 8, backgroundColor: '#dcfce7', justifyContent: 'center', alignItems: 'center' },
+  systemCostLabel: { fontSize: 9, fontWeight: '800', color: '#22c55e', textTransform: 'uppercase', letterSpacing: 0.5 },
+  systemCostValue: { fontSize: 18, fontWeight: '800', color: '#15803d', marginVertical: 4 },
+  systemCostBreakdown: { fontSize: 10, color: '#4b5563', lineHeight: 15 },
 
-  mortarContainer:          { backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#e2e8f0', marginBottom: 12, overflow: 'hidden' },
-  mortarRow:                 { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, gap: 12, backgroundColor: '#fff' },
-  mortarRowActive:           { backgroundColor: '#f0f9ff' },
-  mortarRowLeft:             { flexDirection: 'row', alignItems: 'center', gap: 8, width: 80 },
-  mortarRowIcon:             { width: 30, height: 30, borderRadius: 8, backgroundColor: '#e0f2fe', justifyContent: 'center', alignItems: 'center' },
-  mortarRowLabel:            { fontSize: 12, fontWeight: '700', color: '#1e293b' },
-  mortarRowCenter:           { flex: 1 },
-  mortarRowName:             { fontSize: 12, fontWeight: '600', color: '#475569' },
-  mortarRowMeta:             { fontSize: 10, color: '#315b76', fontWeight: '600', marginTop: 2 },
-  mortarChevronPill:         { backgroundColor: '#e0f2fe', borderRadius: 20, width: 26, height: 26, justifyContent: 'center', alignItems: 'center' },
-  mortarChevronPillActive:   { backgroundColor: '#315b76' },
-  mortarInlineDropdown:      { borderTopWidth: 1, borderTopColor: '#e2e8f0', backgroundColor: '#f8fafc' },
-  mortarInlineItem:          { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12 },
-  mortarInlineItemBorder:    { borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-  mortarInlineItemSelected:  { backgroundColor: '#eff6ff' },
-  mortarInlineItemName:      { fontSize: 12, fontWeight: '600', color: '#1e293b' },
-  mortarInlineItemPrice:     { fontSize: 10, color: '#64748b', marginTop: 2 },
+  mortarContainer: { backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#e2e8f0', marginBottom: 12, overflow: 'hidden' },
+  mortarRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, gap: 12, backgroundColor: '#fff' },
+  mortarRowActive: { backgroundColor: '#f0f9ff' },
+  mortarRowLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, width: 80 },
+  mortarRowIcon: { width: 30, height: 30, borderRadius: 8, backgroundColor: '#e0f2fe', justifyContent: 'center', alignItems: 'center' },
+  mortarRowLabel: { fontSize: 12, fontWeight: '700', color: '#1e293b' },
+  mortarRowCenter: { flex: 1 },
+  mortarRowName: { fontSize: 12, fontWeight: '600', color: '#475569' },
+  mortarRowMeta: { fontSize: 10, color: '#315b76', fontWeight: '600', marginTop: 2 },
+  mortarChevronPill: { backgroundColor: '#e0f2fe', borderRadius: 20, width: 26, height: 26, justifyContent: 'center', alignItems: 'center' },
+  mortarChevronPillActive: { backgroundColor: '#315b76' },
+  mortarInlineDropdown: { borderTopWidth: 1, borderTopColor: '#e2e8f0', backgroundColor: '#f8fafc' },
+  mortarInlineItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12 },
+  mortarInlineItemBorder: { borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  mortarInlineItemSelected: { backgroundColor: '#eff6ff' },
+  mortarInlineItemName: { fontSize: 12, fontWeight: '600', color: '#1e293b' },
+  mortarInlineItemPrice: { fontSize: 10, color: '#64748b', marginTop: 2 },
 
-  mainBtn:          { backgroundColor: '#315b76', margin: 20, padding: 18, borderRadius: 15, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 10, position: 'absolute', bottom: 0, left: 0, right: 0 },
-  mainBtnDisabled:  { opacity: 0.6 },
-  mainBtnText:      { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+  mainBtn: { backgroundColor: '#315b76', margin: 20, padding: 18, borderRadius: 15, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 10, position: 'absolute', bottom: 0, left: 0, right: 0 },
+  mainBtnDisabled: { opacity: 0.6 },
+  mainBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
 
-  modalOverlay:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  modalContent:   { backgroundColor: '#fff', borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 25, maxHeight: SCREEN_HEIGHT * 0.7 },
-  modalHeader:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  modalTitle:     { fontSize: 20, fontWeight: '800', color: '#1e293b' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 25, maxHeight: SCREEN_HEIGHT * 0.7 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  modalTitle: { fontSize: 20, fontWeight: '800', color: '#1e293b' },
 
   finishPreferenceSelector: { backgroundColor: '#f8fafc', borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 12, padding: 14, flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
-  finishPreferenceLabel:    { fontSize: 9, fontWeight: '800', color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
-  finishPreferenceValue:    { fontSize: 12, fontWeight: '700', color: '#315b76' },
-  finishOptionCard:         { backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 14, padding: 16, marginBottom: 8 },
+  finishPreferenceLabel: { fontSize: 9, fontWeight: '800', color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
+  finishPreferenceValue: { fontSize: 12, fontWeight: '700', color: '#315b76' },
+  finishOptionCard: { backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 14, padding: 16, marginBottom: 8 },
   finishOptionCardSelected: { borderColor: '#315b76', backgroundColor: '#f0f9ff', borderWidth: 2.5 },
-  finishOptionHeader:       { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 },
-  finishOptionTitle:        { fontSize: 13, fontWeight: '700', color: '#1e293b', marginBottom: 4 },
-  finishOptionDescription:  { fontSize: 11, color: '#64748b', lineHeight: 16 },
-  finishOptionCheckmark:    { width: 24, height: 24, borderRadius: 12, backgroundColor: '#315b76', justifyContent: 'center', alignItems: 'center', marginLeft: 8 },
-  finishOptionCost:         { fontSize: 10, color: '#10b981', fontWeight: '700', marginTop: 6 },
+  finishOptionHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 },
+  finishOptionTitle: { fontSize: 13, fontWeight: '700', color: '#1e293b', marginBottom: 4 },
+  finishOptionDescription: { fontSize: 11, color: '#64748b', lineHeight: 16 },
+  finishOptionCheckmark: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#315b76', justifyContent: 'center', alignItems: 'center', marginLeft: 8 },
+  finishOptionCost: { fontSize: 10, color: '#10b981', fontWeight: '700', marginTop: 6 },
 
-  perspectivesSection:      { marginBottom: 18 },
-  perspectivesHeader:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  regenerateBtn:            { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#e0f2fe', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1, borderColor: '#bae6fd' },
-  regenerateBtnText:        { fontSize: 11, color: '#315b76', fontWeight: '700' },
-  perspectiveLoadingCard:   { backgroundColor: '#f8fafc', borderRadius: 14, padding: 24, alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#e2e8f0' },
-  perspectiveLoadingText:   { fontSize: 12, color: '#64748b', fontWeight: '600', textAlign: 'center' },
-  perspectiveCard:          { backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1.5, borderColor: '#e2e8f0', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, elevation: 1 },
+  perspectivesSection: { marginBottom: 18 },
+  perspectivesHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  regenerateBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#e0f2fe', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1, borderColor: '#bae6fd' },
+  regenerateBtnText: { fontSize: 11, color: '#315b76', fontWeight: '700' },
+  perspectiveLoadingCard: { backgroundColor: '#f8fafc', borderRadius: 14, padding: 24, alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#e2e8f0' },
+  perspectiveLoadingText: { fontSize: 12, color: '#64748b', fontWeight: '600', textAlign: 'center' },
+  perspectiveCard: { backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1.5, borderColor: '#e2e8f0', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, elevation: 1 },
   perspectiveCardHorizontal: { width: 320, marginBottom: 0 },
-  perspectiveCardSelected:  { borderColor: '#315b76', backgroundColor: '#f0f9ff', borderWidth: 2, elevation: 3 },
-  perspectiveCardHeader:    { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  optionBadge:              { backgroundColor: '#f1f5f9', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0', minWidth: 64, alignItems: 'center' },
-  optionBadgeSelected:      { backgroundColor: '#315b76', borderColor: '#315b76' },
-  optionBadgeText:          { fontSize: 10, fontWeight: '800', color: '#64748b', letterSpacing: 0.3 },
-  optionBadgeTextSelected:  { color: '#fff' },
-  perspectiveTitle:         { fontSize: 13, fontWeight: '700', color: '#1e293b' },
-  perspectiveSubtitle:      { fontSize: 10, color: '#64748b', marginTop: 1 },
-  perspectiveFocusRow:      { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 8 },
-  perspectiveFocusText:     { fontSize: 11, color: '#475569', fontWeight: '500', flex: 1, lineHeight: 15 },
-  perspectiveMaterials:     { backgroundColor: '#f8fafc', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 8, gap: 4 },
-  perspectiveMaterialItem:  { fontSize: 10, color: '#315b76', fontWeight: '600' },
-  perspectiveTags:          { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 6 },
-  perspectiveTagChip:       { backgroundColor: '#f1f5f9', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: '#e2e8f0' },
-  perspectiveTagText:       { fontSize: 9, color: '#64748b', fontWeight: '700' },
+  perspectiveCardSelected: { borderColor: '#315b76', backgroundColor: '#f0f9ff', borderWidth: 2, elevation: 3 },
+  perspectiveCardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  optionBadge: { backgroundColor: '#f1f5f9', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0', minWidth: 64, alignItems: 'center' },
+  optionBadgeSelected: { backgroundColor: '#315b76', borderColor: '#315b76' },
+  optionBadgeText: { fontSize: 10, fontWeight: '800', color: '#64748b', letterSpacing: 0.3 },
+  optionBadgeTextSelected: { color: '#fff' },
+  perspectiveTitle: { fontSize: 13, fontWeight: '700', color: '#1e293b' },
+  perspectiveSubtitle: { fontSize: 10, color: '#64748b', marginTop: 1 },
+  perspectiveFocusRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 8 },
+  perspectiveFocusText: { fontSize: 11, color: '#475569', fontWeight: '500', flex: 1, lineHeight: 15 },
+  perspectiveMaterials: { backgroundColor: '#f8fafc', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 8, gap: 4 },
+  perspectiveMaterialItem: { fontSize: 10, color: '#315b76', fontWeight: '600' },
+  perspectiveTags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 6 },
+  perspectiveTagChip: { backgroundColor: '#f1f5f9', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: '#e2e8f0' },
+  perspectiveTagText: { fontSize: 9, color: '#64748b', fontWeight: '700' },
 
-  loadPerspectivesBtn:      { backgroundColor: '#e0f2fe', borderRadius: 12, padding: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1.5, borderColor: '#315b76' },
-  loadPerspectivesBtnText:  { fontSize: 13, color: '#315b76', fontWeight: '700' },
+  loadPerspectivesBtn: { backgroundColor: '#e0f2fe', borderRadius: 12, padding: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1.5, borderColor: '#315b76' },
+  loadPerspectivesBtnText: { fontSize: 13, color: '#315b76', fontWeight: '700' },
 
-  aiAppliedBadge:     { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#e0f2fe', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1, borderColor: '#315b76' },
+  aiAppliedBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#e0f2fe', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1, borderColor: '#315b76' },
   aiAppliedBadgeText: { fontSize: 11, color: '#315b76', fontWeight: '700' },
-  customBadge:        { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#f8fafc', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1, borderColor: '#e2e8f0' },
-  customBadgeText:    { fontSize: 11, color: '#64748b', fontWeight: '600' },
+  customBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#f8fafc', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1, borderColor: '#e2e8f0' },
+  customBadgeText: { fontSize: 11, color: '#64748b', fontWeight: '600' },
 });

@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  View, Text, StyleSheet, Image, ScrollView, 
+import {
+  View, Text, StyleSheet, Image, ScrollView,
   TouchableOpacity, TextInput, ActivityIndicator, Alert, Platform,
-  Modal, Dimensions 
+  Modal, Dimensions
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { analyzeFloorPlan, extractStructuredData, auth, getComponentRecommendation, db } from '@archlens/shared'; 
+import { analyzeFloorPlan, extractStructuredData, auth, getComponentRecommendation, db, getRoofingPerspectives } from '@archlens/shared';
 import { collection, query, getDocs } from 'firebase/firestore';
 import { useAIAnalysis } from '../context/AIAnalysisContext';
 import { createProject } from '../services/projectService';
@@ -38,7 +38,7 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
   const [wallComposition, setWallComposition] = useState<any>(null); // Store AI-analyzed wall composition
   const [selectedTier, setSelectedTier] = useState<string>('Standard'); // Default tier
   const [aiRecommendations, setAiRecommendations] = useState<any>(null); // Store AI recommendations
-  
+
   // --- NEW STATE FOR ZOOM MODAL ---
   const [isZoomVisible, setZoomVisible] = useState(false);
 
@@ -50,8 +50,8 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
 
   useEffect(() => {
     const calculatedTotal = rooms.reduce((acc, r) => {
-        const a = parseFloat(r.area);
-        return acc + (isNaN(a) ? 0 : a);
+      const a = parseFloat(r.area);
+      return acc + (isNaN(a) ? 0 : a);
     }, 0);
     // Multiply by 1.15 to convert Carpet Area to Built-up Area (includes wall thickness)
     setTotalArea(Number((calculatedTotal * 1.15).toFixed(2)));
@@ -67,10 +67,10 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
         const response = await fetch(planImage);
         const blob = await response.blob();
         base64String = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
         });
       }
 
@@ -78,7 +78,7 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
       const cachedAnalysis = getCachedFloorPlanAnalysis(base64String);
       if (cachedAnalysis) {
         console.log('Using cached floor plan analysis (AI-only)');
-        console.log('📊 Cached wall composition:', cachedAnalysis.data?.wallComposition);
+        console.log('📊 Cached wall composition:', (cachedAnalysis.data as any)?.wallComposition);
         const roomsWithIds = (cachedAnalysis.data.rooms || []).map((room: any, index: number) => ({
           id: room.id || `room-${index}-${Date.now()}`,
           name: room.name || `Room ${index + 1}`,
@@ -91,14 +91,14 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
           features: room.features || []
         }));
         setRooms(roomsWithIds);
-        setWallComposition(cachedAnalysis.data.wallComposition); // Store wall composition
+        setWallComposition((cachedAnalysis.data as any).wallComposition); // Store wall composition
         setIsCached(true);
         setLoading(false);
         return;
       }
 
       const analysis = await analyzeFloorPlan(base64String);
-      
+
       const schema = `{
         "rooms": [
           {
@@ -127,7 +127,7 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
       }`;
 
       const structuredData = await extractStructuredData(analysis, schema);
-      
+
       let cleanedData = structuredData.trim();
       cleanedData = cleanedData.replace(/```json/g, '').replace(/```/g, '');
       const jsonStart = cleanedData.indexOf('{');
@@ -153,7 +153,7 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
           features: room.features || []
         }));
         setRooms(roomsWithIds);
-        
+
         // Extract wall composition with safe defaults
         const wallComp = parsedData.wallComposition || null;
         setWallComposition(wallComp);
@@ -171,18 +171,18 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
       } else {
         throw new Error("Invalid structure");
       }
-      
+
       setLoading(false);
     } catch (err: any) {
       console.error("Analysis Error:", err);
-      
+
       // Handle quota errors with user-friendly message
       if (err.message === 'AI_QUOTA_EXCEEDED' || err.message?.includes('quota') || err.message?.includes('429')) {
         setAnalysisError('AI quota limit reached. Please skip and enter dimensions manually.');
       } else {
         setAnalysisError(err.message || 'Could not interpret plan details. You can skip and enter manually.');
       }
-      
+
       setRooms([{ id: '1', name: 'Main Room', length: '0', width: '0', area: '0' }]);
       setLoading(false);
     }
@@ -193,7 +193,7 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
       'Skip AI Analysis',
       'You can manually enter room dimensions. Continue?',
       [
-        { text: 'Cancel', onPress: () => {} },
+        { text: 'Cancel', onPress: () => { } },
         {
           text: 'Continue',
           onPress: () => {
@@ -217,15 +217,15 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
   const updateRoom = (id: string, field: keyof RoomData, value: string) => {
     setRooms(prev => prev.map(r => {
       if (r.id !== id) return r;
-      
+
       const updatedRoom = { ...r, [field]: value };
-      
+
       if (field === 'length' || field === 'width') {
         const l = parseFloat(field === 'length' ? value : r.length) || 0;
         const w = parseFloat(field === 'width' ? value : r.width) || 0;
         updatedRoom.area = (l * w).toFixed(2);
       }
-      
+
       return updatedRoom;
     }));
   };
@@ -238,11 +238,11 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
   const generateAiRecommendationsForTier = async (tier: string, area: number, materials: any[]) => {
     try {
       console.log(`🔄 Generating AI recommendations for ${tier} tier...`);
-      
+
       // Call AI recommendation API
       const result = await getComponentRecommendation('Wall', tier, area, materials);
       console.log(`✓ ${tier} recommendations generated`);
-      
+
       // Extract recommendation IDs
       const recommendedIds: Record<string, string> = {
         loadBearingBrick: null,
@@ -265,7 +265,7 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
           }
         });
       }
-      
+
       return { success: true, data: recommendedIds, advice: result.advice, insights: result.costSavingsRecommendation };
     } catch (error: any) {
       console.warn(`⚠️ AI Wall recommendations failed for ${tier} tier:`, error.message);
@@ -298,22 +298,45 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
     }
   };
 
+  // Generate Roofing AI recommendations for a specific tier
+  const generateRoofingRecommendationsForTier = async (tier: string, area: number, materials: any[]) => {
+    try {
+      const results = await getRoofingPerspectives(tier, area, materials);
+      if (results && results.length > 0) {
+        // Just store the primary recommendation info for the summary
+        const p = results[0];
+        return {
+          success: true,
+          shape: p.recommendedRoofShape,
+          type: p.recommendedRoofType,
+          method: p.recommendedCoveringMethod,
+          advice: p.reasoning
+        };
+      }
+      return { success: false, data: null };
+    } catch (error: any) {
+      console.warn(`⚠️ AI Roofing recommendations failed for ${tier} tier:`, error.message);
+      return { success: false, data: null };
+    }
+  };
+
   // Helper function to generate AI recommendations for all three tiers
   const generateAllTierRecommendations = async (area: number) => {
     try {
       console.log('📚 Generating AI recommendations for all tiers...');
-      
+
       // Fetch all materials once (reuse for all tiers)
       const q = query(collection(db, 'materials'));
       const snapshot = await getDocs(q);
       const materials = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as any));
-      
+
       console.log('📦 Fetched materials for AI recommendations:', materials.length);
-      
-      // Generate Wall + Foundation recommendations for all tiers in parallel (6 calls)
+
+      // Generate Wall + Foundation + Roofing recommendations for all tiers in parallel
       const [
         econWallResult, stdWallResult, luxWallResult,
-        econFoundResult, stdFoundResult, luxFoundResult
+        econFoundResult, stdFoundResult, luxFoundResult,
+        econRoofResult, stdRoofResult, luxRoofResult
       ] = await Promise.allSettled([
         generateAiRecommendationsForTier('Economy', area, materials),
         generateAiRecommendationsForTier('Standard', area, materials),
@@ -321,20 +344,26 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
         generateFoundationRecommendationsForTier('Economy', area, materials),
         generateFoundationRecommendationsForTier('Standard', area, materials),
         generateFoundationRecommendationsForTier('Luxury', area, materials),
+        generateRoofingRecommendationsForTier('Economy', area, materials),
+        generateRoofingRecommendationsForTier('Standard', area, materials),
+        generateRoofingRecommendationsForTier('Luxury', area, materials),
       ]);
 
       const allTierRecommendations: Record<string, any> = {
         Economy: {
           ...(econWallResult.status === 'fulfilled' ? econWallResult.value : { success: false, data: null }),
           foundation: econFoundResult.status === 'fulfilled' ? econFoundResult.value : { success: false, data: null },
+          roofing: econRoofResult.status === 'fulfilled' ? econRoofResult.value : { success: false, data: null },
         },
         Standard: {
           ...(stdWallResult.status === 'fulfilled' ? stdWallResult.value : { success: false, data: null }),
           foundation: stdFoundResult.status === 'fulfilled' ? stdFoundResult.value : { success: false, data: null },
+          roofing: stdRoofResult.status === 'fulfilled' ? stdRoofResult.value : { success: false, data: null },
         },
         Luxury: {
           ...(luxWallResult.status === 'fulfilled' ? luxWallResult.value : { success: false, data: null }),
           foundation: luxFoundResult.status === 'fulfilled' ? luxFoundResult.value : { success: false, data: null },
+          roofing: luxRoofResult.status === 'fulfilled' ? luxRoofResult.value : { success: false, data: null },
         },
       };
 
@@ -359,12 +388,17 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
 
     setSaving(true);
     try {
+      // Generate AI recommendations for ALL tiers at floor plan upload time (once, for all tiers)
+      console.log('🚀 Generating AI recommendations for all tiers...');
+      const allTierRecommendations = await generateAllTierRecommendations(totalArea);
+
       const projectData: any = {
         userId: auth.currentUser.uid,
         name: `Floor Plan ${new Date().toLocaleDateString()}`,
         status: 'active',
         totalArea: totalArea,
-        rooms: rooms
+        rooms: rooms,
+        allTierRecommendations: allTierRecommendations || null
       };
 
       // Only include wallComposition if it was successfully analyzed
@@ -374,16 +408,8 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
 
       const newProjectId = await createProject(projectData);
 
-      // Generate AI recommendations for ALL tiers at floor plan upload time (once, for all tiers)
-      console.log('🚀 Generating AI recommendations for all tiers...');
-      const allTierRecommendations = await generateAllTierRecommendations(totalArea);
-      if (allTierRecommendations) {
-        console.log('✓ All tier recommendations ready to pass');
-        setAiRecommendations(allTierRecommendations);
-      }
-
       setSaving(false);
-      navigation.navigate('ConstructionLevel', { 
+      navigation.navigate('ConstructionLevel', {
         totalArea: totalArea,
         projectId: newProjectId,
         rooms: rooms,
@@ -407,13 +433,13 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
 
   if (analysisError) {
     const isQuotaError = analysisError.includes('quota') || analysisError.includes('limit reached');
-    
+
     return (
       <View style={styles.errorContainer}>
-        <Ionicons 
-          name={isQuotaError ? "flash-off" : "alert-circle"} 
-          size={64} 
-          color={isQuotaError ? "#f59e0b" : "#ef4444"} 
+        <Ionicons
+          name={isQuotaError ? "flash-off" : "alert-circle"}
+          size={64}
+          color={isQuotaError ? "#f59e0b" : "#ef4444"}
         />
         <Text style={styles.errorTitle}>
           {isQuotaError ? 'AI Quota Limit Reached' : 'Analysis Failed'}
@@ -434,8 +460,8 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
               <Text style={styles.retryButtonText}>Retry</Text>
             </TouchableOpacity>
           )}
-          <TouchableOpacity 
-            style={[styles.skipErrorButton, isQuotaError && styles.skipErrorButtonPrimary]} 
+          <TouchableOpacity
+            style={[styles.skipErrorButton, isQuotaError && styles.skipErrorButtonPrimary]}
             onPress={handleSkipAI}
           >
             <Ionicons name="create" size={18} color={isQuotaError ? "#fff" : "#315b76"} />
@@ -453,8 +479,8 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
       <StatusBar style="dark" />
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>
-          <TouchableOpacity 
-            onPress={() => navigation.goBack()} 
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
             style={styles.iconButton}
           >
             <Ionicons name="arrow-back" size={20} color="#315b76" />
@@ -469,10 +495,10 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
         </View>
 
         <ScrollView contentContainerStyle={styles.scrollContent}>
-          
+
           {/* --- UPDATED IMAGE SECTION --- */}
-          <TouchableOpacity 
-            activeOpacity={0.9} 
+          <TouchableOpacity
+            activeOpacity={0.9}
             onPress={() => setZoomVisible(true)}
             style={styles.imageContainer}
           >
@@ -497,52 +523,52 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
                   onChangeText={(t) => updateRoom(room.id, 'name', t)}
                 />
                 <TouchableOpacity onPress={() => removeRoom(room.id)}>
-                   <Ionicons name="trash-outline" size={20} color="#ef4444" />
+                  <Ionicons name="trash-outline" size={20} color="#ef4444" />
                 </TouchableOpacity>
               </View>
-              
+
               <View style={styles.dimensionsRow}>
                 <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Length (ft)</Text>
-                    <TextInput 
-                        style={styles.numInput} 
-                        value={room.length} 
-                        keyboardType="numeric" 
-                        onChangeText={(t) => updateRoom(room.id, 'length', t)} 
-                        selectTextOnFocus
-                    />
+                  <Text style={styles.label}>Length (ft)</Text>
+                  <TextInput
+                    style={styles.numInput}
+                    value={room.length}
+                    keyboardType="numeric"
+                    onChangeText={(t) => updateRoom(room.id, 'length', t)}
+                    selectTextOnFocus
+                  />
                 </View>
                 <Text style={styles.xIcon}>×</Text>
                 <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Width (ft)</Text>
-                    <TextInput 
-                        style={styles.numInput} 
-                        value={room.width} 
-                        keyboardType="numeric" 
-                        onChangeText={(t) => updateRoom(room.id, 'width', t)} 
-                        selectTextOnFocus
-                    />
+                  <Text style={styles.label}>Width (ft)</Text>
+                  <TextInput
+                    style={styles.numInput}
+                    value={room.width}
+                    keyboardType="numeric"
+                    onChangeText={(t) => updateRoom(room.id, 'width', t)}
+                    selectTextOnFocus
+                  />
                 </View>
-                
+
                 <View style={styles.areaBadge}>
-                   <TextInput
-                      style={styles.areaInput}
-                      value={room.area}
-                      keyboardType="numeric"
-                      onChangeText={(t) => updateRoom(room.id, 'area', t)}
-                   />
-                   <Text style={styles.areaUnit}>sq.ft</Text>
+                  <TextInput
+                    style={styles.areaInput}
+                    value={room.area}
+                    keyboardType="numeric"
+                    onChangeText={(t) => updateRoom(room.id, 'area', t)}
+                  />
+                  <Text style={styles.areaUnit}>sq.ft</Text>
                 </View>
               </View>
 
               {/* --- AI EXTRACTED METADATA --- */}
               <View style={styles.metadataSection}>
                 <Text style={styles.metadataTitle}>AI Analysis - Metadata</Text>
-                
+
                 {/* Room Type */}
                 <View style={styles.metadataRow}>
                   <Text style={styles.metadataLabel}>Room Type:</Text>
-                  <Text style={[styles.metadataValue, { 
+                  <Text style={[styles.metadataValue, {
                     backgroundColor: room.roomType === 'balcony' ? '#fef3c7' : room.roomType === 'wash_area' ? '#dbeafe' : '#f0fdf4',
                     paddingHorizontal: 10,
                     paddingVertical: 4,
@@ -609,8 +635,8 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
             <Text style={styles.totalLabel}>Estimated Total Area</Text>
             <Text style={styles.totalValue}>{totalArea.toFixed(2)} sq.ft</Text>
           </View>
-          <TouchableOpacity 
-            style={styles.confirmButton} 
+          <TouchableOpacity
+            style={styles.confirmButton}
             onPress={handleVerifyAndSave}
             disabled={saving}
           >
@@ -623,9 +649,9 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
         </View>
 
         {/* --- ZOOM MODAL --- */}
-        <Modal 
-          visible={isZoomVisible} 
-          transparent={true} 
+        <Modal
+          visible={isZoomVisible}
+          transparent={true}
           animationType="fade"
           onRequestClose={() => setZoomVisible(false)}
         >
@@ -633,7 +659,7 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
             <TouchableOpacity style={styles.closeButton} onPress={() => setZoomVisible(false)}>
               <Ionicons name="close-circle" size={40} color="#fff" />
             </TouchableOpacity>
-            
+
             <ScrollView
               contentContainerStyle={styles.zoomScrollContent}
               maximumZoomScale={4.0}
@@ -642,10 +668,10 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
               showsVerticalScrollIndicator={false}
               centerContent={true}
             >
-              <Image 
-                source={{ uri: planImage }} 
-                style={styles.fullScreenImage} 
-                resizeMode="contain" 
+              <Image
+                source={{ uri: planImage }}
+                style={styles.fullScreenImage}
+                resizeMode="contain"
               />
             </ScrollView>
           </View>
@@ -663,35 +689,35 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff', paddingHorizontal: 20 },
   loadingText: { marginTop: 15, fontSize: 18, color: '#1e293b', fontWeight: 'bold' },
   subLoadingText: { marginTop: 5, fontSize: 14, color: '#64748b', marginBottom: 30 },
-  skipButton: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    backgroundColor: '#ef4444', 
-    paddingVertical: 12, 
-    paddingHorizontal: 20, 
-    borderRadius: 10, 
+  skipButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ef4444',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 10,
     gap: 8,
-    marginTop: 20 
+    marginTop: 20
   },
   skipButtonText: { color: '#fff', fontSize: 14, fontWeight: '600' },
 
   errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff', paddingHorizontal: 30 },
   errorTitle: { fontSize: 20, fontWeight: '700', color: '#1e293b', marginTop: 20, marginBottom: 8 },
   errorMessage: { fontSize: 15, color: '#64748b', marginTop: 8, textAlign: 'center', marginBottom: 20, lineHeight: 22 },
-  quotaInfoBox: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    backgroundColor: '#e0f2fe', 
-    padding: 15, 
-    borderRadius: 12, 
-    marginBottom: 25, 
+  quotaInfoBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#e0f2fe',
+    padding: 15,
+    borderRadius: 12,
+    marginBottom: 25,
     gap: 10,
     borderWidth: 1,
     borderColor: '#bae6fd'
   },
   quotaInfoText: { flex: 1, fontSize: 14, color: '#0369a1', lineHeight: 20, fontWeight: '500' },
   errorButtonRow: { flexDirection: 'row', gap: 12, width: '100%' },
-  retryButton: { 
+  retryButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
@@ -702,7 +728,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   retryButtonText: { color: '#fff', fontSize: 15, fontWeight: '600' },
-  skipErrorButton: { 
+  skipErrorButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
@@ -718,12 +744,12 @@ const styles = StyleSheet.create({
   skipErrorButtonText: { color: '#315b76', fontSize: 15, fontWeight: '600' },
   skipErrorButtonTextPrimary: { color: '#fff' },
 
-  header: { 
+  header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 20, paddingVertical: 12
   },
-  iconButton: { 
-    width: 40, height: 40, borderRadius: 12, backgroundColor: '#fff', 
+  iconButton: {
+    width: 40, height: 40, borderRadius: 12, backgroundColor: '#fff',
     justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#f1f5f9',
     shadowColor: '#64748b', shadowOpacity: 0.05, shadowRadius: 5, elevation: 1
   },
@@ -731,14 +757,14 @@ const styles = StyleSheet.create({
   cachedBadge: { backgroundColor: '#d1fae5', color: '#059669', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, fontSize: 11, fontWeight: '600' },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#0f172a', flex: 1, textAlign: 'center' },
   scrollContent: { padding: 20, paddingBottom: 100 },
-  
+
   // Updated Image Styles
   imageContainer: { position: 'relative', marginBottom: 20, borderRadius: 12, overflow: 'hidden' },
   previewImage: { width: '100%', height: 290, backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 12 },
-  zoomIconOverlay: { 
-    position: 'absolute', bottom: 10, right: 10, 
-    backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 20, 
-    flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6 
+  zoomIconOverlay: {
+    position: 'absolute', bottom: 10, right: 10,
+    backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 20,
+    flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6
   },
   zoomText: { color: '#fff', fontSize: 12, fontWeight: '600', marginLeft: 4 },
 

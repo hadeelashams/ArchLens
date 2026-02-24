@@ -12,10 +12,10 @@ import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 const { width } = Dimensions.get('window');
 
 // ─── ENGINEERING CONSTANTS ─────────────────────────────────────────────────
-const FT2_TO_M2    = 0.0929;         // 1 sq ft → m²
-const FT_TO_M      = 0.3048;         // 1 ft → m
-const FT3_TO_M3    = 0.028317;       // 1 cu ft → m³
-const CFT_PER_M3   = 35.3147;        // m³ → cu ft
+const FT2_TO_M2 = 0.0929;         // 1 sq ft → m²
+const FT_TO_M = 0.3048;         // 1 ft → m
+const FT3_TO_M3 = 0.028317;       // 1 cu ft → m³
+const CFT_PER_M3 = 35.3147;        // m³ → cu ft
 const CEMENT_BAGS_PER_M3 = 28.8;     // bags of 50 kg per m³ cement
 const DRY_VOL_CONC = 1.54;           // dry volume multiplier for concrete
 const DRY_VOL_MORT = 1.33;           // dry volume multiplier for mortar
@@ -24,28 +24,28 @@ const DEFAULT_SLOPE_FACTOR = 1.15;   // fallback for ~20° pitched roof (about 4
 
 // Market fallback rates (₹) – used if no seeded material is selected
 const FALLBACK = {
-  CEMENT:      420,
-  SAND:        40,    // per cft
-  AGGREGATE:   42,    // per cft
-  STEEL:       72,    // per kg
-  TILE_CLAY:   22,    // per Nos
-  TILE_CONCRETE:28,
-  TILE_SLATE:  85,
+  CEMENT: 420,
+  SAND: 40,    // per cft
+  AGGREGATE: 42,    // per cft
+  STEEL: 72,    // per kg
+  TILE_CLAY: 22,    // per Nos
+  TILE_CONCRETE: 28,
+  TILE_SLATE: 85,
   TRUSS_STEEL: 75,    // per kg
-  TRUSS_TIMBER:380,   // per kg
-  GI_SHEET:    65,    // per kg
-  ALUM_SHEET:  185,   // per kg
-  POLY_SHEET:  320,   // per Nos
-  MEMBRANE:    1800,  // per roll
-  UNDERLAYMENT:1200,  // per roll
-  FELT:        950,   // per roll
-  WATERPROOF:  850,   // per litre/kg
-  BRICKS:      8,     // per Nos (parapet)
+  TRUSS_TIMBER: 380,   // per kg
+  GI_SHEET: 65,    // per kg
+  ALUM_SHEET: 185,   // per kg
+  POLY_SHEET: 320,   // per Nos
+  MEMBRANE: 1800,  // per roll
+  UNDERLAYMENT: 1200,  // per roll
+  FELT: 950,   // per roll
+  WATERPROOF: 850,   // per litre/kg
+  BRICKS: 8,     // per Nos (parapet)
   // ── Slab system materials (always FALLBACK – no user material selection for slab types)
-  FILLER_BLOCK:   18,  // per Nos (clay/terracotta filler block ~200×200mm)
-  PRECAST_UNIT:  850,  // per m² (precast panel supply + install)
-  HOLLOW_CORE:   950,  // per m² (hollow core unit supply + install)
-  PT_STRAND:     120,  // per kg (ASTM A416 grade 270, 15.2mm dia)
+  FILLER_BLOCK: 18,  // per Nos (clay/terracotta filler block ~200×200mm)
+  PRECAST_UNIT: 850,  // per m² (precast panel supply + install)
+  HOLLOW_CORE: 950,  // per m² (hollow core unit supply + install)
+  PT_STRAND: 120,  // per kg (ASTM A416 grade 270, 15.2mm dia)
   NON_SHRINK_GROUT: 28, // per kg
 };
 
@@ -79,10 +79,10 @@ const toSoldUnit = (
   densityKgM3: number
 ): { qty: number; unit: string } => {
   const u = dbUnit.toLowerCase();
-  if (u.includes('cft') || u.includes('cubic'))  return { qty: volM3 * CFT_PER_M3,          unit: 'cft' };
-  if (u.includes('brass'))                        return { qty: (volM3 * CFT_PER_M3) / 100,  unit: 'Brass' };
-  if (u.includes('ton'))                          return { qty: (volM3 * densityKgM3) / 1000,unit: 'Ton' };
-  if (u.includes('kg'))                           return { qty: volM3 * densityKgM3,          unit: 'kg' };
+  if (u.includes('cft') || u.includes('cubic')) return { qty: volM3 * CFT_PER_M3, unit: 'cft' };
+  if (u.includes('brass')) return { qty: (volM3 * CFT_PER_M3) / 100, unit: 'Brass' };
+  if (u.includes('ton')) return { qty: (volM3 * densityKgM3) / 1000, unit: 'Ton' };
+  if (u.includes('kg')) return { qty: volM3 * densityKgM3, unit: 'kg' };
   return { qty: volM3 * CFT_PER_M3, unit: 'cft' };
 };
 
@@ -90,32 +90,51 @@ const toSoldUnit = (
 export default function RoofingCostScreen({ route, navigation }: any) {
   const {
     projectId,
-    tier         = 'Standard',
-    roofType     = 'Sloped Roof - Tile',
-    roofArea     = '1000',
-    slabThickness= '0.5',        // ft (RCC only)
-    openingDeduction = '5',      // %
-    hasWaterproofing = true,     // bool (RCC only)
-    hasParapet       = false,    // bool (RCC only)
-    parapetHeight    = '3',      // ft
-    parapetThickness = '0.75',   // ft
+    tier = 'Standard',
+    roofType = 'Sloped Roof - Tile',
+    roofShape = 'gable',         // gable | flat | hip | shed
+    roofArea = '1000',
+    slabThickness = '0.5',       // ft (RCC only)
+    openingDeduction = '5',     // %
+    hasWaterproofing = true,    // bool (RCC only)
+    hasParapet = false,         // bool (RCC only)
+    parapetHeight = '3',        // ft
+    parapetThickness = '0.75',  // ft
     /**
      * Rise-over-run pitch ratio, e.g. 0.5 = 6:12 pitch → slopeFactor = sqrt(1 + 0.5²) ≈ 1.118
      * If 0 / missing, DEFAULT_SLOPE_FACTOR (1.15) is used.
      */
-    pitchRatio   = '0',
-    selections   = {},           // Record<layerKey_type, materialObject>
+    pitchRatio = '0',
+    selections = {},            // Record<layerKey_type, materialObject>
   } = route.params || {};
 
   const [saving, setSaving] = useState(false);
 
   // ── Derive slope factor from pitch ratio ──────────────────────────────
-  const pitchNum    = parseFloat(pitchRatio) || 0;
-  const slopeFactor = pitchNum > 0 ? Math.sqrt(1 + Math.pow(pitchNum, 2)) : DEFAULT_SLOPE_FACTOR;
+  const SLAB_SYSTEMS_SET = new Set(['RCC Solid Slab', 'Filler Slab', 'Precast Concrete Slab', 'Precast Slab', 'Post-Tension Slab', 'Hollow Core Slab', 'Hollow Precast Slab', 'Slab']);
+  const isSlabRoof = SLAB_SYSTEMS_SET.has(roofType);
+
+  const pitchNum = parseFloat(pitchRatio) || 0;
+  // Slabs are generally flat (factor 1.0). Sloped roofs use pitch or default factor.
+  const slopeFactor = isSlabRoof ? 1.0 : (pitchNum > 0 ? Math.sqrt(1 + Math.pow(pitchNum, 2)) : DEFAULT_SLOPE_FACTOR);
+
   // Label shown in the disclaimer
-  const pitchLabel  = pitchNum > 0
-    ? `${Math.round(pitchNum * 12)}:12 pitch (factor ${slopeFactor.toFixed(3)})`
-    : '~20° assumed (factor 1.15)';
+  let pitchLabel = '';
+  if (isSlabRoof) {
+    pitchLabel = 'Flat roof (1:50 drainage slope assumed)';
+  } else {
+    pitchLabel = pitchNum > 0
+      ? `${Math.round(pitchNum * 12)}:12 pitch (factor ${slopeFactor.toFixed(3)})`
+      : '~20° assumed (factor 1.15)';
+  }
+
+  // ── Slab sub-type resolution ─────────────────────────────────────────────
+  // selectedCovering is one of: 'RCC Solid Slab', 'Filler Slab', 'Precast Slab'
+  const rawSlabSub: string = roofType === 'Slab'
+    ? (((route.params as any)?.selectedCovering ?? '').trim() || 'RCC Solid Slab')
+    : roofType;
+  // Normalise any legacy "Precast Slab " (trailing-space) values from old documents
+  const slabSubType = rawSlabSub.trim().replace(/^Precast Slab$/i, 'Precast Concrete Slab');
 
   // ── Helper: get selected material for a given type ──────────────────────
   /**
@@ -138,8 +157,8 @@ export default function RoofingCostScreen({ route, navigation }: any) {
     return {
       item,
       price: item?.pricePerUnit ? parseFloat(item.pricePerUnit) : 0,
-      unit:  item?.unit ?? '',
-      name:  item?.name ?? 'Not Selected',
+      unit: item?.unit ?? '',
+      name: item?.name ?? 'Not Selected',
       exists: !!item,
     };
   };
@@ -150,38 +169,62 @@ export default function RoofingCostScreen({ route, navigation }: any) {
   const calculation = useMemo(() => {
     const items: CalcItem[] = [];
 
-    const grossAreaFt2  = parseFloat(roofArea) || 0;
-    const dedFrac       = (parseFloat(openingDeduction) || 0) / 100;
-    const netAreaFt2    = grossAreaFt2 * (1 - dedFrac);
-    const netAreaM2     = netAreaFt2 * FT2_TO_M2;
-
-    // Detect slab system types (all use auto-calculated materials)
-    const SLAB_SYSTEMS = ['RCC Solid Slab', 'Filler Slab', 'Precast Concrete Slab', 'Post-Tension Slab', 'Hollow Core Slab'];
+    const grossAreaFt2 = parseFloat(roofArea) || 0;
+    const dedFrac = (parseFloat(openingDeduction) || 0) / 100;
+    const netAreaFt2 = grossAreaFt2 * (1 - dedFrac);
+    const netAreaM2 = netAreaFt2 * FT2_TO_M2;
 
     // ────────────────────────────────────────────
     //  A.  SLAB SYSTEMS (all 5 types)
     // ────────────────────────────────────────────
-    if (SLAB_SYSTEMS.includes(roofType)) {
-      const thickFt   = parseFloat(slabThickness) || 0.5;
+    if (isSlabRoof) {
+      const thickFt = parseFloat(slabThickness) || 0.5;
+
+      // ── A0. Structural Support (Beams/Joists) ──────────────────────
+      const matRCCBeams = getMat('RCC Beams');
+      const matSteelFrame = getMat('Structural Steel Frame');
+
+      if (matRCCBeams.exists) {
+        // Engineering rule: Beams add ~20% additional concrete volume to a standard slab
+        const beamVolM3 = (netAreaM2 * (thickFt * FT_TO_M)) * 0.20;
+        const dryVol = beamVolM3 * DRY_VOL_CONC;
+        const cementBags = Math.ceil((dryVol * (1 / 5.5)) * CEMENT_BAGS_PER_M3);
+        items.push(row('Structural Support', 'Cement (Beams)', 'Integrated RCC beams (@20% slab vol)', cementBags, 'Bags (50kg)', FALLBACK.CEMENT, true));
+        // Beams are steel-heavy: ~120kg/m³
+        const steelKg = beamVolM3 * 120;
+        items.push(row('Structural Support', 'Steel TMT (Beams)', '@120 kg/m³ beam reinforcement', steelKg, 'Kg', FALLBACK.STEEL, true));
+      } else if (matSteelFrame.exists) {
+        // Steel Joists/Beams support: ~15 kg/m²
+        const steelKg = netAreaM2 * 15;
+        items.push(row('Structural Support', `Steel Frame (${matSteelFrame.name})`, 'Primary/Secondary I-beams @15kg/m²', steelKg, 'Kg', matSteelFrame.price));
+      } else {
+        // Fallback: assume integrated RCC beams if none selected
+        const beamVolM3 = (netAreaM2 * (thickFt * FT_TO_M)) * 0.15;
+        const dryVol = beamVolM3 * DRY_VOL_CONC;
+        const cementBags = Math.ceil((dryVol * (1 / 5.5)) * CEMENT_BAGS_PER_M3);
+        items.push(row('Structural Support', 'Cement (Beams)', 'Assumed minimal beam support (@15% vol)', cementBags, 'Bags (50kg)', FALLBACK.CEMENT, true));
+        const steelKg = beamVolM3 * 100; // standard 100kg/m3 for integrated beams
+        items.push(row('Structural Support', 'Steel TMT (Beams)', 'Assumed integrated beam steel (@100kg/m³)', steelKg, 'Kg', FALLBACK.STEEL, true));
+      }
 
       // ── A1. RCC Solid Slab ───────────────────────────────────────────
-      if (roofType === 'RCC Solid Slab') {
+      if (slabSubType.includes('RCC') || slabSubType.includes('Solid')) {
         const slabVolM3 = netAreaM2 * (thickFt * FT_TO_M);
-        const dryVol    = slabVolM3 * DRY_VOL_CONC;
+        const dryVol = slabVolM3 * DRY_VOL_CONC;
         // M20 mix 1:1.5:3  (parts total = 5.5)
         const cementBags = Math.ceil((dryVol * (1 / 5.5)) * CEMENT_BAGS_PER_M3);
         items.push(row('RCC Solid Slab – Core', 'Cement (M20)', 'Mix 1:1.5:3', cementBags, 'Bags (50kg)', FALLBACK.CEMENT, true));
         const steelKg = slabVolM3 * 80;
         items.push(row('RCC Solid Slab – Core', 'Steel TMT Bars', '@80 kg/m³ reinforcement', steelKg, 'Kg', FALLBACK.STEEL, true));
-        const sandCft  = (dryVol * (1.5 / 5.5)) * CFT_PER_M3;
+        const sandCft = (dryVol * (1.5 / 5.5)) * CFT_PER_M3;
         items.push(row('RCC Solid Slab – Core', 'Sand (Fine Agg.)', 'Washed river sand', sandCft, 'cft', FALLBACK.SAND, true));
-        const aggCft   = (dryVol * (3 / 5.5)) * CFT_PER_M3;
+        const aggCft = (dryVol * (3 / 5.5)) * CFT_PER_M3;
         items.push(row('RCC Solid Slab – Core', 'Aggregate 20mm', 'Coarse aggregate', aggCft, 'cft', FALLBACK.AGGREGATE, true));
       }
 
       // ── A2. Filler Slab ──────────────────────────────────────────────
-      else if (roofType === 'Filler Slab') {
-        const grossVolM3   = netAreaM2 * (thickFt * FT_TO_M);
+      else if (slabSubType.includes('Filler')) {
+        const grossVolM3 = netAreaM2 * (thickFt * FT_TO_M);
         const concreteVolM3 = grossVolM3 * 0.70;  // fillers displace ~30% concrete
         const dryVol = concreteVolM3 * DRY_VOL_CONC;
         const cementBags = Math.ceil((dryVol * (1 / 5.5)) * CEMENT_BAGS_PER_M3);
@@ -190,18 +233,18 @@ export default function RoofingCostScreen({ route, navigation }: any) {
         items.push(row('Filler Slab – Core', 'Steel TMT Bars', '@50 kg/m³ (reduced reinforcement)', steelKg, 'Kg', FALLBACK.STEEL, true));
         const sandCft = (dryVol * (1.5 / 5.5)) * CFT_PER_M3;
         items.push(row('Filler Slab – Core', 'Sand', 'Fine aggregate', sandCft, 'cft', FALLBACK.SAND, true));
-        const aggCft  = (dryVol * (3 / 5.5)) * CFT_PER_M3;
+        const aggCft = (dryVol * (3 / 5.5)) * CFT_PER_M3;
         items.push(row('Filler Slab – Core', 'Aggregate 20mm', 'Coarse aggregate', aggCft, 'cft', FALLBACK.AGGREGATE, true));
         const fillerNos = Math.ceil(netAreaM2 * 10);  // ~10 filler blocks per m²
         items.push(row('Filler Slab – Fillers', 'Filler Blocks (Clay/Terracotta)', '~10 nos/m² – reduces dead load ~25%', fillerNos, 'Nos', FALLBACK.FILLER_BLOCK, true));
       }
 
       // ── A3. Precast Concrete Slab ─────────────────────────────────────
-      else if (roofType === 'Precast Concrete Slab') {
+      else if (slabSubType.includes('Precast')) {
         items.push(row('Precast Slab – Units', 'Precast Concrete Panels', 'Supply + install, M30, pre-tensioned', netAreaM2, 'm²', FALLBACK.PRECAST_UNIT, true));
         // 50mm structural topping in M25
-        const toppingVolM3   = netAreaM2 * 0.05;
-        const toppingDry     = toppingVolM3 * DRY_VOL_CONC;
+        const toppingVolM3 = netAreaM2 * 0.05;
+        const toppingDry = toppingVolM3 * DRY_VOL_CONC;
         const toppingCementBags = Math.ceil((toppingDry * (1 / 5.5)) * CEMENT_BAGS_PER_M3);
         items.push(row('Precast Slab – Topping', 'Cement M25 (Topping)', '50mm in-situ structural topping', toppingCementBags, 'Bags (50kg)', FALLBACK.CEMENT, true));
         const groutKg = Math.ceil(netAreaM2 * 0.5);
@@ -209,29 +252,29 @@ export default function RoofingCostScreen({ route, navigation }: any) {
       }
 
       // ── A4. Post-Tension Slab ───────────────────────────────────────
-      else if (roofType === 'Post-Tension Slab') {
+      else if (slabSubType.includes('Post') || slabSubType.includes('PT')) {
         const effThickFt = thickFt * 0.75;  // PT allows ~25% thickness reduction
-        const slabVolM3  = netAreaM2 * (effThickFt * FT_TO_M);
-        const dryVol     = slabVolM3 * DRY_VOL_CONC;
+        const slabVolM3 = netAreaM2 * (effThickFt * FT_TO_M);
+        const dryVol = slabVolM3 * DRY_VOL_CONC;
         // M30 mix (1:1:2, total parts = 4)
         const cementBags = Math.ceil((dryVol * (1 / 4)) * CEMENT_BAGS_PER_M3);
         items.push(row('PT Slab – Core', 'Cement (M30)', 'Mix 1:1:2 for PT slab', cementBags, 'Bags (50kg)', Math.round(FALLBACK.CEMENT * 1.10), true));
         const sandCft = (dryVol * (1 / 4)) * CFT_PER_M3;
         items.push(row('PT Slab – Core', 'Sand', 'Fine aggregate', sandCft, 'cft', FALLBACK.SAND, true));
-        const aggCft  = (dryVol * (2 / 4)) * CFT_PER_M3;
+        const aggCft = (dryVol * (2 / 4)) * CFT_PER_M3;
         items.push(row('PT Slab – Core', 'Aggregate 20mm', 'Coarse aggregate', aggCft, 'cft', FALLBACK.AGGREGATE, true));
         const mildSteelKg = slabVolM3 * 30;  // mild non-PT steel
         items.push(row('PT Slab – Core', 'Steel TMT Bars', '@30 kg/m³ (non-PT)', mildSteelKg, 'Kg', FALLBACK.STEEL, true));
-        const ptStrandKg  = netAreaM2 * 4;   // 4 kg/m² typical for PT slab
+        const ptStrandKg = netAreaM2 * 4;   // 4 kg/m² typical for PT slab
         items.push(row('PT Slab – Core', 'PT Strands (15.2mm dia)', '@4 kg/m² ASTM A416 Grade 270', ptStrandKg, 'Kg', FALLBACK.PT_STRAND, true));
       }
 
       // ── A5. Hollow Core Slab ────────────────────────────────────────
-      else if (roofType === 'Hollow Core Slab') {
+      else if (slabSubType.includes('Hollow')) {
         items.push(row('Hollow Core – Units', 'Hollow Core Slab Units', 'Pre-tensioned, M40, depth 200–300mm', netAreaM2, 'm²', FALLBACK.HOLLOW_CORE, true));
         // 50mm structural topping
-        const toppingVolM3   = netAreaM2 * 0.05;
-        const toppingDry     = toppingVolM3 * DRY_VOL_CONC;
+        const toppingVolM3 = netAreaM2 * 0.05;
+        const toppingDry = toppingVolM3 * DRY_VOL_CONC;
         const toppingCementBags = Math.ceil((toppingDry * (1 / 5.5)) * CEMENT_BAGS_PER_M3);
         items.push(row('Hollow Core – Topping', 'Cement M25 (Structural Topping)', '50mm in-situ topping', toppingCementBags, 'Bags (50kg)', FALLBACK.CEMENT, true));
         const groutKg = Math.ceil(netAreaM2 * 0.3);
@@ -242,7 +285,7 @@ export default function RoofingCostScreen({ route, navigation }: any) {
       if (hasWaterproofing) {
         const wpQtyKg = netAreaM2 * 4; // 2 kg/m² × 2 coats
         items.push(row(
-          `${roofType} – Waterproofing`,
+          `${slabSubType} – Waterproofing`,
           'Waterproofing Chemical',
           '2 coats @2 kg/m² (polymer-modified)',
           wpQtyKg,
@@ -254,11 +297,11 @@ export default function RoofingCostScreen({ route, navigation }: any) {
 
       // ── Parapet Wall (all slab systems) ─────────────────────────────
       if (hasParapet) {
-        const pH_ft   = parseFloat(parapetHeight)    || 3;
-        const pT_ft   = parseFloat(parapetThickness) || 0.75;
-        const perimFt    = 4.4 * Math.sqrt(grossAreaFt2) * 1.05;
+        const pH_ft = parseFloat(parapetHeight) || 3;
+        const pT_ft = parseFloat(parapetThickness) || 0.75;
+        const perimFt = 4.4 * Math.sqrt(grossAreaFt2) * 1.05;
         const wallVolFt3 = perimFt * pH_ft * pT_ft;
-        const wallVolM3  = wallVolFt3 * FT3_TO_M3;
+        const wallVolM3 = wallVolFt3 * FT3_TO_M3;
         const bricksNos = Math.ceil(wallVolM3 * 500 * 1.05);
         items.push(row(
           'Parapet Wall',
@@ -266,8 +309,8 @@ export default function RoofingCostScreen({ route, navigation }: any) {
           `~${perimFt.toFixed(0)} ft perimeter × ${pH_ft} ft ht (4.4√A est.)`,
           bricksNos, 'Nos', FALLBACK.BRICKS, true,
         ));
-        const mortarM3  = wallVolM3 * 0.30;
-        const dryMort   = mortarM3 * DRY_VOL_MORT;
+        const mortarM3 = wallVolM3 * 0.30;
+        const dryMort = mortarM3 * DRY_VOL_MORT;
         const pCem = Math.ceil((dryMort * (1 / 7)) * CEMENT_BAGS_PER_M3);
         items.push(row('Parapet Wall', 'Cement (Mortar 1:6)', 'Brickwork mortar', pCem, 'Bags (50kg)', FALLBACK.CEMENT, true));
         const pSandM3 = dryMort * (6 / 7);
@@ -276,177 +319,188 @@ export default function RoofingCostScreen({ route, navigation }: any) {
     }
 
     // ────────────────────────────────────────────
-    //  B.  SLOPED ROOF – TILE
+    //  B.  SLOPED ROOFS (Tile or Sheet)
     // ────────────────────────────────────────────
-    else if (roofType === 'Sloped Roof - Tile') {
+    else if (roofType === 'Sloped Roof - Tile' || roofType === 'Sloped Roof - Sheet') {
       const slopedAreaM2 = netAreaM2 * slopeFactor;
 
-      // --- TRUSS STRUCTURE (Steel or Timber) ---
-      const matSteelTruss  = getMat('Steel Truss');
+      // --- 1. TRUSS STRUCTURE (Steel or Timber) ---
+      const matSteelTruss = getMat('Steel Truss');
       const matTimber = getMat('Timber/Wood Truss');
-      // Use whichever is selected; prefer steel truss first
+
       if (matSteelTruss.exists) {
         const steelKg = slopedAreaM2 * 12; // 12 kg/m² standard steel truss
         const steelUnitT = matSteelTruss.unit.toLowerCase();
-        const trussQty  = steelUnitT.includes('ton') ? steelKg / 1000 : steelKg;
+        const trussQty = steelUnitT.includes('ton') ? steelKg / 1000 : steelKg;
         const trussUnit = steelUnitT.includes('ton') ? 'Ton' : 'Kg';
         items.push(row('Truss Structure', `Steel Truss (${matSteelTruss.name})`, '@12 kg/m² of roof area', trussQty, trussUnit, matSteelTruss.price));
       } else if (matTimber.exists) {
         const timberKg = slopedAreaM2 * 8; // ~8 kg/m² timber density estimate
         const timberUnitT = matTimber.unit.toLowerCase();
-        const timbQty  = timberUnitT.includes('ton') ? timberKg / 1000 : timberKg;
+        const timbQty = timberUnitT.includes('ton') ? timberKg / 1000 : timberKg;
         const timbUnit = timberUnitT.includes('ton') ? 'Ton' : 'Kg';
         items.push(row('Truss Structure', `Timber Truss (${matTimber.name})`, '@8 kg/m² of roof area', timbQty, timbUnit, matTimber.price));
       } else {
-        // Fallback: assume steel truss – warn user
-        const steelKg = slopedAreaM2 * 12;
-        items.push(row('Truss Structure', 'Steel Truss (Not Selected)', '@12 kg/m²', steelKg, 'Kg', FALLBACK.TRUSS_STEEL, true));
-      }
+        // Fallback: assume steel truss
+        // --- Shape & Material Load Aware Truss Density (Engineering Refinement) ---
+        // 1. Base density (kg per m² of sloped area) for standard Gable tiles
+        let trussDensity = 12;
 
-      // --- ROOF COVERING (Fix #4) ─────────────────────────────────────────────
-      // The selections object may contain initialised defaults for all tile types
-      // because RoofingScreen initialises all types on load. To ensure only the
-      // ACTUALLY SELECTED tile type is priced, we use the `selectedCovering`
-      // param which is passed by RoofingScreen's handleSave after single-select
-      // cleanup. If absent we fall back to checking existence of each type.
-      // Clay Roof Tile  : 16×10 in → effective ~0.065 m²/tile  (≈15 tiles/m²)
-      // Concrete Roof Tile: 20×12 in → effective ~0.10 m²/tile (≈10 tiles/m²)
-      // Slate Tile       : 24×14 in → effective ~0.13 m²/tile  (≈8 tiles/m²)
-      const WASTAGE = 1.10; // 10%
+        // 2. Adjust for Shape Complexity
+        if (roofShape === 'hip') trussDensity = 15;   // Hip/Valley rafters add weight
+        if (roofShape === 'shed') trussDensity = 8.5; // Single slope Mono-truss is lighter
 
-      // Determine the user's single chosen covering type from passed param or
-      // by finding the first type whose selection key is present.
-      const COVERING_TYPES_TILE: Array<{ type: string; coverage: number; label: string; fallbackRate: number }> = [
-        { type: 'Clay Roof Tile',     coverage: 0.065, label: '~15 tiles/m² + 10% wastage', fallbackRate: FALLBACK.TILE_CLAY },
-        { type: 'Concrete Roof Tile', coverage: 0.10,  label: '~10 tiles/m² + 10% wastage', fallbackRate: FALLBACK.TILE_CONCRETE },
-        { type: 'Slate Tile',         coverage: 0.13,  label: '~8 tiles/m² + 10% wastage',  fallbackRate: FALLBACK.TILE_SLATE },
-      ];
-
-      // Use selectedCovering route param if provided (set after single-select cleanup)
-      const selectedCoveringType: string | undefined = (route.params as any)?.selectedCovering;
-      const activeCovering = selectedCoveringType
-        ? COVERING_TYPES_TILE.find(c => c.type === selectedCoveringType)
-        : COVERING_TYPES_TILE.find(c => getMat(c.type).exists);
-
-      if (activeCovering) {
-        const mat = getMat(activeCovering.type);
-        const qty = Math.ceil((slopedAreaM2 / activeCovering.coverage) * WASTAGE);
-        const matUnitL = mat.unit.toLowerCase();
-        // Most tile DB entries are priced per Nos; handle m² pricing too
-        const coverQty  = matUnitL.includes('m²') || matUnitL.includes('sqm') ? slopedAreaM2 * WASTAGE : qty;
-        const coverUnit = matUnitL.includes('m²') || matUnitL.includes('sqm') ? 'm²' : 'Nos';
-        items.push(row('Roof Covering', `${activeCovering.type} (${mat.name})`, activeCovering.label, coverQty, coverUnit, mat.price));
-      } else {
-        const qty = Math.ceil((slopedAreaM2 / 0.065) * WASTAGE);
-        items.push(row('Roof Covering', 'Clay Tile (Not Selected)', '~15 tiles/m²', qty, 'Nos', FALLBACK.TILE_CLAY, true));
-      }
-
-      // --- PROTECTION (Fix #5 – price ALL selected protection layers) ───────
-      // Each roll = 1m × 50m = 50 m²
-      const rolls = Math.ceil((slopedAreaM2 * 1.1) / 50);
-      const PROTECTION_TYPES_TILE = [
-        { type: 'Roofing Underlayment', label: 'Underlayment' },
-        { type: 'Waterproof Membrane',  label: 'Waterproof Membrane' },
-      ];
-      let anyProtection = false;
-      PROTECTION_TYPES_TILE.forEach(({ type, label }) => {
-        const mat = getMat(type);
-        if (mat.exists) {
-          anyProtection = true;
-          items.push(row('Protection', `${label} (${mat.name})`, '50m² per roll, +10% overlap', rolls, 'Rolls', mat.price));
+        // 3. Adjust for Dead Load (Sheet vs Tile)
+        // Clay tiles (~45kg/m²) vs GI Sheets (~5kg/m²) allows for significantly lighter trusses
+        if (roofType === 'Sloped Roof - Sheet') {
+          trussDensity *= 0.75; // 25% reduction in steel weight for light sheet loading
         }
-      });
-      if (!anyProtection) {
-        items.push(row('Protection', 'Roofing Underlayment (Not Selected)', '50m² per roll', rolls, 'Rolls', FALLBACK.UNDERLAYMENT, true));
+
+        const steelKg = slopedAreaM2 * trussDensity;
+        const note = `@${trussDensity.toFixed(1)} kg/m² (${roofShape}${roofType.includes('Sheet') ? ' + light load' : ' + tile load'})`;
+        items.push(row('Truss Structure', `Steel Truss (Refined)`, note, steelKg, 'Kg', FALLBACK.TRUSS_STEEL, true));
+      }
+
+      // --- 2. COVERING & WASTAGE (Shape-Aware) ---
+      // Hip roofs have significantly more cut-waste than Gable or Shed
+      const SHAPE_WASTAGE = {
+        hip: 1.18,   // 18% waste (diagonal cuts)
+        gable: 1.08, // 8% waste
+        shed: 1.05,  // 5% waste
+        flat: 1.05,
+      }[roofShape as keyof typeof SHAPE_WASTAGE] || 1.10;
+
+      // ─── B-I. TILE SPECIFIC COVERING & PROTECTION ──────────────────────────
+      if (roofType === 'Sloped Roof - Tile') {
+        const COVERING_TYPES_TILE = [
+          { type: 'Clay Roof Tile', coverage: 0.065, label: `~15 tiles/m² + ${Math.round((SHAPE_WASTAGE - 1) * 100)}% waste`, fallbackRate: FALLBACK.TILE_CLAY },
+          { type: 'Concrete Roof Tile', coverage: 0.10, label: `~10 tiles/m² + ${Math.round((SHAPE_WASTAGE - 1) * 100)}% waste`, fallbackRate: FALLBACK.TILE_CONCRETE },
+          { type: 'Slate Tile', coverage: 0.13, label: `~8 tiles/m² + ${Math.round((SHAPE_WASTAGE - 1) * 100)}% waste`, fallbackRate: FALLBACK.TILE_SLATE },
+        ];
+
+        const selectedCoveringType: string | undefined = (route.params as any)?.selectedCovering;
+        const activeCovering = selectedCoveringType
+          ? COVERING_TYPES_TILE.find(c => c.type === selectedCoveringType)
+          : COVERING_TYPES_TILE.find(c => getMat(c.type).exists);
+
+        if (activeCovering) {
+          const mat = getMat(activeCovering.type);
+          const qty = Math.ceil((slopedAreaM2 / activeCovering.coverage) * SHAPE_WASTAGE);
+          const matUnitL = mat.unit.toLowerCase();
+          const coverQty = matUnitL.includes('m²') || matUnitL.includes('sqm') ? slopedAreaM2 * SHAPE_WASTAGE : qty;
+          const coverUnit = matUnitL.includes('m²') || matUnitL.includes('sqm') ? 'm²' : 'Nos';
+          items.push(row('Roof Covering', `${activeCovering.type} (${mat.name})`, activeCovering.label, coverQty, coverUnit, mat.price));
+        } else {
+          const qty = Math.ceil((slopedAreaM2 / 0.065) * SHAPE_WASTAGE);
+          items.push(row('Roof Covering', 'Clay Tile (Not Selected)', `~15 tiles/m² + ${Math.round((SHAPE_WASTAGE - 1) * 100)}% waste`, qty, 'Nos', FALLBACK.TILE_CLAY, true));
+        }
+
+        // --- RIDGE CAPPING (Shape-Aware) ---
+        // Hip roofs have ridges on all 4 corners + main peak
+        const RIDGE_MULT = roofShape === 'hip' ? 2.2 : (roofShape === 'shed' ? 0.2 : 1.1);
+        const ridgeLengthFt = RIDGE_MULT * Math.sqrt(grossAreaFt2);
+        const ridgeLengthM = ridgeLengthFt * FT_TO_M;
+        const ridgeTiles = Math.ceil(ridgeLengthM / 0.35);
+        items.push(row('Roof Covering', 'Ridge Capping (Tiles)', `${ridgeTiles} nos for ${roofShape} ridge (${ridgeLengthFt.toFixed(0)}ft)`, ridgeTiles, 'Nos', FALLBACK.TILE_CONCRETE, true));
+        const ridgeMortarCem = Math.ceil(ridgeLengthM * 0.15);
+        items.push(row('Roof Covering', 'Ridge Mortar (Cement)', 'Capping installation mortar', ridgeMortarCem, 'Bags (50kg)', FALLBACK.CEMENT, true));
+
+        // --- PROTECTION ---
+        const rolls = Math.ceil((slopedAreaM2 * 1.1) / 50);
+        const PROTECTION_TYPES_TILE = [
+          { type: 'Roofing Underlayment', label: 'Underlayment' },
+          { type: 'Waterproof Membrane', label: 'Waterproof Membrane' },
+        ];
+        let anyProtection = false;
+        PROTECTION_TYPES_TILE.forEach(({ type, label }) => {
+          const mat = getMat(type);
+          if (mat.exists) {
+            anyProtection = true;
+            items.push(row('Protection', `${label} (${mat.name})`, '50m² per roll, +10% overlap', rolls, 'Rolls', mat.price));
+          }
+        });
+        if (!anyProtection) {
+          items.push(row('Protection', 'Roofing Underlayment (Not Selected)', '50m² per roll', rolls, 'Rolls', FALLBACK.UNDERLAYMENT, true));
+        }
+      }
+
+      // ─── B-II. SHEET SPECIFIC COVERING & PROTECTION ─────────────────────────
+      else {
+        const matGI = getMat('Galvanized Iron Sheet');
+        const matAlum = getMat('Aluminium Sheet');
+        const matPoly = getMat('Polycarbonate Sheet');
+
+        const resolveSheetQty = (m: any, sheetCount: number, kgPerSheet: number, areaM2: number) => {
+          const u = m.unit.toLowerCase();
+          if (u.includes('kg')) return { qty: parseFloat((sheetCount * kgPerSheet).toFixed(1)), unit: 'Kg' };
+          if (u.includes('ton')) return { qty: parseFloat(((sheetCount * kgPerSheet) / 1000).toFixed(3)), unit: 'Ton' };
+          if (u.includes('m²') || u.includes('sqm')) return { qty: parseFloat((areaM2 * SHAPE_WASTAGE).toFixed(2)), unit: 'm²' };
+          return { qty: sheetCount, unit: 'Nos' };
+        };
+
+        const selectedSheetCovering: string | undefined = (route.params as any)?.selectedCovering;
+        let sheetPriced = false;
+
+        if (!selectedSheetCovering || selectedSheetCovering === 'Galvanized Iron Sheet') {
+          if (matGI.exists) {
+            const sheets = Math.ceil((slopedAreaM2 / 2.7) * SHAPE_WASTAGE);
+            const { qty, unit } = resolveSheetQty(matGI, sheets, 10.6, slopedAreaM2);
+            items.push(row('Roof Covering', `GI Sheet (${matGI.name})`, `${sheets} sheets (1m×3m) + ${Math.round((SHAPE_WASTAGE - 1) * 100)}% waste`, qty, unit, matGI.price));
+            sheetPriced = true;
+          }
+        }
+        if (!sheetPriced && (!selectedSheetCovering || selectedSheetCovering === 'Aluminium Sheet')) {
+          if (matAlum.exists) {
+            const sheets = Math.ceil((slopedAreaM2 / 2.7) * SHAPE_WASTAGE);
+            const { qty, unit } = resolveSheetQty(matAlum, sheets, 6.5, slopedAreaM2);
+            items.push(row('Roof Covering', `Aluminium Sheet (${matAlum.name})`, `${sheets} sheets (1m×3m), 0.8mm + ${Math.round((SHAPE_WASTAGE - 1) * 100)}% waste`, qty, unit, matAlum.price));
+            sheetPriced = true;
+          }
+        }
+        if (!sheetPriced && (!selectedSheetCovering || selectedSheetCovering === 'Polycarbonate Sheet')) {
+          if (matPoly.exists) {
+            const sheets = Math.ceil((slopedAreaM2 / 1.8) * SHAPE_WASTAGE);
+            const { qty, unit } = resolveSheetQty(matPoly, sheets, 2.6, slopedAreaM2);
+            items.push(row('Roof Covering', `Polycarbonate Sheet (${matPoly.name})`, `${sheets} sheets (1m×2m) + ${Math.round((SHAPE_WASTAGE - 1) * 100)}% waste`, qty, unit, matPoly.price));
+            sheetPriced = true;
+          }
+        }
+        if (!sheetPriced) {
+          const sheets = Math.ceil((slopedAreaM2 / 2.7) * SHAPE_WASTAGE);
+          items.push(row('Roof Covering', 'GI Sheet (Not Selected)', `${sheets} sheets estimate`, parseFloat((sheets * 10.6).toFixed(1)), 'Kg', FALLBACK.GI_SHEET, true));
+        }
+
+        // --- Ridge/Edge Flashing (Shape-Aware) ---
+        const FLASH_MULT = roofShape === 'hip' ? 2.5 : (roofShape === 'shed' ? 0.3 : 1.2);
+        const flashLenFt = FLASH_MULT * Math.sqrt(grossAreaFt2);
+        const flashLenM = flashLenFt * FT_TO_M;
+        const flashKg = flashLenM * 2.5; // ~2.5 kg/m for typical flashing
+        items.push(row('Roof Covering', 'Ridge/Edge Flashing', `${roofShape} capping/apron (~${flashLenFt.toFixed(0)}ft)`, flashKg, 'Kg', FALLBACK.GI_SHEET + 10, true));
+
+        // --- PROTECTION ---
+        const rolls = Math.ceil((slopedAreaM2 * 1.1) / 50);
+        const PROTECTION_TYPES_SHEET = [
+          { type: 'Anti-condensation Felt', label: 'Anti-condensation Felt' },
+          { type: 'Waterproof Membrane', label: 'Waterproof Membrane' },
+        ];
+        let anyProtectionSheet = false;
+        PROTECTION_TYPES_SHEET.forEach(({ type, label }) => {
+          const mat = getMat(type);
+          if (mat.exists) {
+            anyProtectionSheet = true;
+            items.push(row('Protection', `${label} (${mat.name})`, '50m² per roll, +10% overlap', rolls, 'Rolls', mat.price));
+          }
+        });
+        if (!anyProtectionSheet) {
+          items.push(row('Protection', 'Anti-condensation Felt (Not Selected)', '50m² per roll', rolls, 'Rolls', FALLBACK.FELT, true));
+        }
       }
     }
 
-    // ────────────────────────────────────────────
-    //  C.  SLOPED ROOF – SHEET
-    // ────────────────────────────────────────────
-    else if (roofType === 'Sloped Roof - Sheet') {
-      const slopedAreaM2 = netAreaM2 * slopeFactor; // Fix #3
-      const WASTAGE = 1.10;
-
-      // --- ROOF COVERING (Fix #2 – unit-aware pricing) --------------------------
-      // GI Sheet    : 1m × 3m = 3 m², 10% lap → 2.7 m²/sheet  | 0.45mm → 10.6 kg/sheet
-      // Alum Sheet  : 1m × 3m = 3 m², 10% lap → 2.7 m²/sheet  | 0.8mm → 6.5 kg/sheet
-      // Polycarbonate: 1m × 2m = 2 m², 10% lap → 1.8 m²/sheet
-      const matGI   = getMat('Galvanized Iron Sheet');
-      const matAlum = getMat('Aluminium Sheet');
-      const matPoly = getMat('Polycarbonate Sheet');
-
-      /** Resolve quantity + unit based on how the DB material is priced */
-      const resolveSheetQty = (
-        m: typeof matGI,
-        sheetCount: number,
-        kgPerSheet: number,
-        areaM2: number,
-      ): { qty: number; unit: string } => {
-        const u = m.unit.toLowerCase();
-        if (u.includes('kg'))                              return { qty: parseFloat((sheetCount * kgPerSheet).toFixed(1)), unit: 'Kg' };
-        if (u.includes('ton'))                             return { qty: parseFloat(((sheetCount * kgPerSheet) / 1000).toFixed(3)), unit: 'Ton' };
-        if (u.includes('m²') || u.includes('sqm') || u.includes('sq.m')) return { qty: parseFloat((areaM2 * WASTAGE).toFixed(2)), unit: 'm²' };
-        return { qty: sheetCount, unit: 'Nos' }; // default: priced per sheet
-      };
-
-      const selectedSheetCovering: string | undefined = (route.params as any)?.selectedCovering;
-
-      // Determine which sheet material to price (only the selected one – Fix #4)
-      let sheetPriced = false;
-      if (!selectedSheetCovering || selectedSheetCovering === 'Galvanized Iron Sheet') {
-        if (matGI.exists) {
-          const sheets = Math.ceil((slopedAreaM2 / 2.7) * WASTAGE);
-          const { qty, unit } = resolveSheetQty(matGI, sheets, 10.6, slopedAreaM2);
-          items.push(row('Roof Covering', `GI Sheet (${matGI.name})`, `${sheets} sheets (1m×3m), 0.45mm GI`, qty, unit, matGI.price));
-          sheetPriced = true;
-        }
-      }
-      if (!sheetPriced && (!selectedSheetCovering || selectedSheetCovering === 'Aluminium Sheet')) {
-        if (matAlum.exists) {
-          const sheets = Math.ceil((slopedAreaM2 / 2.7) * WASTAGE);
-          const { qty, unit } = resolveSheetQty(matAlum, sheets, 6.5, slopedAreaM2);
-          items.push(row('Roof Covering', `Aluminium Sheet (${matAlum.name})`, `${sheets} sheets (1m×3m), 0.8mm`, qty, unit, matAlum.price));
-          sheetPriced = true;
-        }
-      }
-      if (!sheetPriced && (!selectedSheetCovering || selectedSheetCovering === 'Polycarbonate Sheet')) {
-        if (matPoly.exists) {
-          const sheets = Math.ceil((slopedAreaM2 / 1.8) * WASTAGE);
-          const { qty, unit } = resolveSheetQty(matPoly, sheets, 1.2, slopedAreaM2); // poly is light
-          items.push(row('Roof Covering', `Polycarbonate Sheet (${matPoly.name})`, `${sheets} sheets (1m×2m), 6mm`, qty, unit, matPoly.price));
-          sheetPriced = true;
-        }
-      }
-      if (!sheetPriced) {
-        const sheets = Math.ceil((slopedAreaM2 / 2.7) * WASTAGE);
-        const totalKg = parseFloat((sheets * 10.6).toFixed(1));
-        items.push(row('Roof Covering', 'GI Sheet (Not Selected)', `${sheets} sheets estimate`, totalKg, 'Kg', FALLBACK.GI_SHEET, true));
-      }
-
-      // --- PROTECTION (Fix #5 – price ALL selected protection layers) ───────
-      const rolls = Math.ceil((slopedAreaM2 * 1.1) / 50);
-      const PROTECTION_TYPES_SHEET = [
-        { type: 'Anti-condensation Felt', label: 'Anti-condensation Felt' },
-        { type: 'Waterproof Membrane',    label: 'Waterproof Membrane' },
-      ];
-      let anyProtectionSheet = false;
-      PROTECTION_TYPES_SHEET.forEach(({ type, label }) => {
-        const mat = getMat(type);
-        if (mat.exists) {
-          anyProtectionSheet = true;
-          items.push(row('Protection', `${label} (${mat.name})`, '50m² per roll, +10% overlap', rolls, 'Rolls', mat.price));
-        }
-      });
-      if (!anyProtectionSheet) {
-        items.push(row('Protection', 'Anti-condensation Felt (Not Selected)', '50m² per roll', rolls, 'Rolls', FALLBACK.FELT, true));
-      }
-    }
-
-    const grandTotal   = items.reduce((s, i) => s + i.total, 0);
+    const grandTotal = items.reduce((s, i) => s + i.total, 0);
     const fallbackCount = items.filter(i => i.isFallback).length;
     return { items, grandTotal, fallbackCount };
-  }, [roofType, roofArea, slabThickness, openingDeduction, hasWaterproofing, hasParapet, parapetHeight, parapetThickness, selections, slopeFactor]);
+  }, [isSlabRoof, slabSubType, roofType, roofArea, slabThickness, openingDeduction, hasWaterproofing, hasParapet, parapetHeight, parapetThickness, selections, slopeFactor]);
 
 
 
@@ -477,9 +531,18 @@ export default function RoofingCostScreen({ route, navigation }: any) {
   };
 
   // ─── RENDER ───────────────────────────────────────────────────────────
-  const netAreaFt2   = parseFloat(roofArea) * (1 - (parseFloat(openingDeduction) || 0) / 100);
-  const isCostSlab    = ['RCC Solid Slab', 'Filler Slab', 'Precast Concrete Slab', 'Post-Tension Slab', 'Hollow Core Slab'].includes(roofType);
+  const netAreaFt2 = parseFloat(roofArea) * (1 - (parseFloat(openingDeduction) || 0) / 100);
+  const isCostSlab = isSlabRoof;
   const slopedAreaM2display = !isCostSlab ? (netAreaFt2 * FT2_TO_M2 * slopeFactor).toFixed(1) : null;
+
+  // ── Roof shape display meta ────────────────────────────────────────────
+  const ROOF_SHAPE_META: Record<string, { label: string; icon: string }> = {
+    gable: { label: 'Pitched / Gable', icon: 'home-outline' },
+    flat: { label: 'Flat Roof', icon: 'remove-circle-outline' },
+    hip: { label: 'Hip Roof', icon: 'stats-chart-outline' },
+    shed: { label: 'Shed Roof', icon: 'trending-up-outline' },
+  };
+  const shapeMeta = ROOF_SHAPE_META[roofShape] ?? { label: roofShape, icon: 'home-outline' };
 
   return (
     <View style={styles.container}>
@@ -501,14 +564,20 @@ export default function RoofingCostScreen({ route, navigation }: any) {
 
           {/* SUMMARY CARD */}
           <View style={styles.summaryCard}>
-            {/* Label + Total + Badge row */}
-            <Text style={styles.summaryLabel}>ESTIMATED MATERIAL COST</Text>
-            <View style={styles.summaryHeader}>
-              <Text style={styles.summaryTotal}>₹{calculation.grandTotal.toLocaleString('en-IN')}</Text>
-              <View style={styles.methodBadge}>
-                <Text style={styles.methodBadgeText}>{roofType}</Text>
+
+            {/* Header Row: Label + Chip */}
+            <View style={styles.summaryTopRow}>
+              <Text style={styles.summaryLabel}>ESTIMATED MATERIAL COST</Text>
+
+              {/* Roof shape chip */}
+              <View style={styles.shapeChip}>
+                <Ionicons name={shapeMeta.icon as any} size={11} color="#94a3b8" />
+                <Text style={styles.shapeChipText}>{shapeMeta.label}</Text>
               </View>
             </View>
+
+            {/* Grand total */}
+            <Text style={styles.summaryTotal}>₹{calculation.grandTotal.toLocaleString('en-IN')}</Text>
 
             <View style={styles.divider} />
 
@@ -542,42 +611,21 @@ export default function RoofingCostScreen({ route, navigation }: any) {
           <Text style={styles.sectionTitle}>MATERIAL BREAKDOWN</Text>
           <View style={styles.table}>
             <View style={styles.tableHeader}>
-              <Text style={[styles.th, { flex: 2 }]}>Material</Text>
-              <Text style={[styles.th, { flex: 1, textAlign: 'center' }]}>Qty</Text>
-              <Text style={[styles.th, { flex: 1.2, textAlign: 'right' }]}>Cost</Text>
+              <Text style={[styles.th, { flex: 2.5 }]}>Material</Text>
+              <Text style={[styles.th, { flex: 1.5, textAlign: 'center' }]}>Quantity</Text>
+              <Text style={[styles.th, { flex: 1.5, textAlign: 'right' }]}>Cost (₹)</Text>
             </View>
 
-            {/* Fix #7 – show fallback banner when any row used a FALLBACK rate */}
-            {calculation.fallbackCount > 0 && (
-              <View style={styles.fallbackBanner}>
-                <Ionicons name="warning-outline" size={15} color="#b45309" />
-                <Text style={styles.fallbackBannerText}>
-                  {calculation.fallbackCount} line item{calculation.fallbackCount > 1 ? 's use' : ' uses'} market fallback pricing — no material was selected for those items.
-                </Text>
-              </View>
-            )}
-
             {calculation.items.map((item, index) => (
-              <View key={index} style={[styles.tableRow, item.isFallback && styles.tableRowFallback]}>
-                <View style={{ flex: 2 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                    <Text style={styles.categoryLabel}>{item.category}</Text>
-                    {item.isFallback && (
-                      <View style={styles.fallbackTag}>
-                        <Text style={styles.fallbackTagText}>FALLBACK</Text>
-                      </View>
-                    )}
-                  </View>
+              <View key={index} style={styles.tableRow}>
+                <View style={{ flex: 2.5 }}>
                   <Text style={styles.itemName}>{item.name}</Text>
-                  <Text style={styles.itemDesc}>{item.desc}</Text>
                 </View>
-                <View style={{ flex: 1, alignItems: 'center' }}>
-                  <Text style={styles.itemQty}>{item.qty.toLocaleString('en-IN')}</Text>
-                  <Text style={styles.itemUnit}>{item.unit}</Text>
+                <View style={{ flex: 1.5, alignItems: 'center' }}>
+                  <Text style={styles.itemQty}>{item.qty.toLocaleString('en-IN')} {item.unit}</Text>
                 </View>
-                <View style={{ flex: 1.2, alignItems: 'flex-end' }}>
-                  <Text style={styles.itemPrice}>₹{item.total.toLocaleString('en-IN')}</Text>
-                  <Text style={styles.itemRate}>@ ₹{item.rate}/{item.unit}</Text>
+                <View style={{ flex: 1.5, alignItems: 'flex-end' }}>
+                  <Text style={styles.itemPrice}>{item.total.toLocaleString('en-IN')}</Text>
                 </View>
               </View>
             ))}
@@ -588,7 +636,7 @@ export default function RoofingCostScreen({ route, navigation }: any) {
             <Ionicons name="information-circle-outline" size={18} color="#0369a1" />
             <Text style={styles.disclaimerText}>
               {isCostSlab
-                ? 'Auto-calculated from slab geometry and 2026 market fallback rates. Waterproofing and parapet included when toggled.'
+                ? 'Auto-calculated from slab geometry. Waterproofing and parapet included when toggled.'
                 : `Slope: ${pitchLabel}. Qty includes 10% wastage. Each protection roll covers 50 m². Parapet perimeter estimated via 4.4√A formula.`
               }
               {' '}Actual site requirements may vary by ±10–15%.
@@ -603,9 +651,9 @@ export default function RoofingCostScreen({ route, navigation }: any) {
           {saving
             ? <ActivityIndicator color="#fff" />
             : <>
-                <Text style={styles.saveBtnText}>Save Material Estimate</Text>
-                <Ionicons name="save-outline" size={20} color="#fff" />
-              </>
+              <Text style={styles.saveBtnText}>Save Material Estimate</Text>
+              <Ionicons name="save-outline" size={20} color="#fff" />
+            </>
           }
         </TouchableOpacity>
 
@@ -616,51 +664,46 @@ export default function RoofingCostScreen({ route, navigation }: any) {
 
 // ─── STYLES ────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container:       { flex: 1, backgroundColor: '#F8FAFC' },
-  safeArea:        { flex: 1 },
-  scroll:          { padding: 20 },
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  safeArea: { flex: 1 },
+  scroll: { padding: 20 },
 
-  header:          { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 20 },
-  headerTitle:     { fontSize: 18, fontWeight: '700', color: '#1e293b' },
-  roundBtn:        { width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', elevation: 2 },
-  tierBadge:       { backgroundColor: '#315b76', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 },
-  tierText:        { color: '#fff', fontSize: 12, fontWeight: '800' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 20 },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: '#1e293b' },
+  roundBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', elevation: 2 },
+  tierBadge: { backgroundColor: '#315b76', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 },
+  tierText: { color: '#fff', fontSize: 12, fontWeight: '800' },
 
-  summaryCard:      { backgroundColor: '#1e293b', borderRadius: 24, padding: 25, marginBottom: 25, elevation: 8 },
-  summaryLabel:     { color: '#94a3b8', fontSize: 11, fontWeight: '700', letterSpacing: 1, marginBottom: 6 },
-  summaryHeader:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  summaryTotal:     { color: '#fff', fontSize: 28, fontWeight: '900' },
-  methodBadge:      { backgroundColor: '#315b76', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, maxWidth: 130 },
-  methodBadgeText:  { color: '#fff', fontSize: 11, fontWeight: '700', textAlign: 'center' },
-  divider:          { height: 1, backgroundColor: 'rgba(255,255,255,0.1)', marginVertical: 18 },
-  summaryRow:       { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center' },
-  summaryItem:      { alignItems: 'center', flex: 1 },
+  summaryCard: { backgroundColor: '#1e293b', borderRadius: 24, padding: 25, marginBottom: 25, elevation: 8 },
+  summaryLabel: { color: '#94a3b8', fontSize: 11, fontWeight: '700', letterSpacing: 1 },
+  summaryTotal: { color: '#fff', fontSize: 30, fontWeight: '900', marginTop: 4, marginBottom: 14 },
+
+  summaryTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+
+  // roof shape chip
+  shapeChip: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#334155', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: '#475569' },
+  shapeChipText: { color: '#cbd5e1', fontSize: 11, fontWeight: '700' },
+
+  divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.1)', marginVertical: 18 },
+  summaryRow: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center' },
+  summaryItem: { alignItems: 'center', flex: 1 },
   summaryItemValue: { fontSize: 16, color: '#fff', fontWeight: '800' },
-  summaryItemUnit:  { fontSize: 10, color: '#64748b', fontWeight: '600', marginBottom: 4 },
+  summaryItemUnit: { fontSize: 10, color: '#64748b', fontWeight: '600', marginBottom: 4 },
   summaryItemLabel: { fontSize: 10, color: '#94a3b8', fontWeight: '600', letterSpacing: 0.3 },
-  summaryDivider:   { width: 1, height: 36, backgroundColor: '#334155' },
+  summaryDivider: { width: 1, height: 36, backgroundColor: '#334155' },
 
-  sectionTitle:    { fontSize: 12, fontWeight: '800', color: '#64748b', marginBottom: 15, letterSpacing: 0.5 },
-  table:           { backgroundColor: '#fff', borderRadius: 20, overflow: 'hidden', borderWidth: 1, borderColor: '#e2e8f0' },
-  tableHeader:     { flexDirection: 'row', backgroundColor: '#f1f5f9', padding: 15, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
-  th:              { fontSize: 11, fontWeight: '700', color: '#64748b', textTransform: 'uppercase' },
-  tableRow:        { flexDirection: 'row', padding: 15, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', alignItems: 'center' },
-  categoryLabel:   { fontSize: 9, fontWeight: '800', color: '#315b76', textTransform: 'uppercase', marginBottom: 2 },
-  itemName:        { fontSize: 12, fontWeight: '700', color: '#334155' },
-  itemDesc:        { fontSize: 11, color: '#94a3b8', marginTop: 1 },
-  itemQty:         { fontSize: 14, fontWeight: '700', color: '#1e293b' },
-  itemUnit:        { fontSize: 10, color: '#94a3b8', fontWeight: '500' },
-  itemPrice:       { fontSize: 14, fontWeight: '700', color: '#10b981' },
-  itemRate:        { fontSize: 10, color: '#94a3b8', marginTop: 1 },
+  sectionTitle: { fontSize: 12, fontWeight: '800', color: '#64748b', marginBottom: 15, letterSpacing: 0.5 },
+  table: { backgroundColor: '#fff', borderRadius: 20, overflow: 'hidden', borderWidth: 1, borderColor: '#e2e8f0' },
+  tableHeader: { flexDirection: 'row', backgroundColor: '#f1f5f9', padding: 15, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
+  th: { fontSize: 11, fontWeight: '700', color: '#64748b', textTransform: 'uppercase' },
+  tableRow: { flexDirection: 'row', padding: 15, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', alignItems: 'center' },
+  itemName: { fontSize: 13, fontWeight: '600', color: '#334155' },
+  itemQty: { fontSize: 13, fontWeight: '600', color: '#1e293b' },
+  itemPrice: { fontSize: 13, fontWeight: '700', color: '#1e293b' },
 
-  disclaimer:        { flexDirection: 'row', gap: 10, backgroundColor: '#E0F2FE', padding: 15, borderRadius: 16, marginTop: 20, borderWidth: 1, borderColor: '#BAE6FD' },
-  disclaimerText:    { flex: 1, fontSize: 11, color: '#0369a1', lineHeight: 16 },
-  fallbackBanner:    { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: '#fffbeb', padding: 12, borderBottomWidth: 1, borderBottomColor: '#fde68a' },
-  fallbackBannerText:{ flex: 1, fontSize: 11, color: '#92400e', lineHeight: 15 },
-  tableRowFallback:  { backgroundColor: '#fffdf0' },
-  fallbackTag:       { backgroundColor: '#fef3c7', paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4, borderWidth: 1, borderColor: '#fde68a' },
-  fallbackTagText:   { fontSize: 8, fontWeight: '800', color: '#b45309', letterSpacing: 0.5 },
+  disclaimer: { flexDirection: 'row', gap: 10, backgroundColor: '#E0F2FE', padding: 15, borderRadius: 16, marginTop: 20, borderWidth: 1, borderColor: '#BAE6FD' },
+  disclaimerText: { flex: 1, fontSize: 11, color: '#0369a1', lineHeight: 16 },
 
-  saveBtn:         { position: 'absolute', bottom: 30, alignSelf: 'center', width: width * 0.85, backgroundColor: '#315b76', padding: 18, borderRadius: 20, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, elevation: 5 },
-  saveBtnText:     { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+  saveBtn: { position: 'absolute', bottom: 30, alignSelf: 'center', width: width * 0.85, backgroundColor: '#315b76', padding: 18, borderRadius: 20, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, elevation: 5 },
+  saveBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
 });
