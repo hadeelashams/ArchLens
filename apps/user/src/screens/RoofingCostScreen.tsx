@@ -39,7 +39,7 @@ const FALLBACK = {
   MEMBRANE: 1800,  // per roll
   UNDERLAYMENT: 1200,  // per roll
   FELT: 950,   // per roll
-  WATERPROOF: 850,   // per litre/kg
+  WATERPROOF: 450,   // per kg/litre (standard crystalline or liquid membrane)
   BRICKS: 8,     // per Nos (parapet)
   // ── Slab system materials (always FALLBACK – no user material selection for slab types)
   FILLER_BLOCK: 18,  // per Nos (clay/terracotta filler block ~200×200mm)
@@ -179,64 +179,63 @@ export default function RoofingCostScreen({ route, navigation }: any) {
     // ────────────────────────────────────────────
     if (isSlabRoof) {
       const thickFt = parseFloat(slabThickness) || 0.5;
+      const slabVolM3 = netAreaM2 * (thickFt * FT_TO_M);
 
-      // ── A0. Structural Support (Beams/Joists) ──────────────────────
+      // ── A0. Structural Support (Beams/Joists) Estimation ──────────────
       const matRCCBeams = getMat('RCC Beams');
       const matSteelFrame = getMat('Structural Steel Frame');
+      let beamVolM3 = 0;
 
       if (matRCCBeams.exists) {
-        // Engineering rule: Beams add ~20% additional concrete volume to a standard slab
-        const beamVolM3 = (netAreaM2 * (thickFt * FT_TO_M)) * 0.20;
-        const dryVol = beamVolM3 * DRY_VOL_CONC;
-        const cementBags = Math.ceil((dryVol * (1 / 5.5)) * CEMENT_BAGS_PER_M3);
-        items.push(row('Structural Support', 'Cement (Beams)', 'Integrated RCC beams (@20% slab vol)', cementBags, 'Bags (50kg)', FALLBACK.CEMENT, true));
-        // Beams are steel-heavy: ~120kg/m³
-        const steelKg = beamVolM3 * 120;
-        items.push(row('Structural Support', 'Steel TMT (Beams)', '@120 kg/m³ beam reinforcement', steelKg, 'Kg', FALLBACK.STEEL, true));
+        // Engineering rule: Beams add ~15% additional concrete volume to a standard slab
+        beamVolM3 = slabVolM3 * 0.15;
+        const beamSteelKg = beamVolM3 * 100; // standard 100kg/m3 reinforcement
+        items.push(row('Structural Support', 'Steel TMT (Beams)', '@100 kg/m³ beam reinforcement', beamSteelKg, 'Kg', FALLBACK.STEEL, true));
       } else if (matSteelFrame.exists) {
         // Steel Joists/Beams support: ~15 kg/m²
         const steelKg = netAreaM2 * 15;
         items.push(row('Structural Support', `Steel Frame (${matSteelFrame.name})`, 'Primary/Secondary I-beams @15kg/m²', steelKg, 'Kg', matSteelFrame.price));
       } else {
         // Fallback: assume integrated RCC beams if none selected
-        const beamVolM3 = (netAreaM2 * (thickFt * FT_TO_M)) * 0.15;
-        const dryVol = beamVolM3 * DRY_VOL_CONC;
-        const cementBags = Math.ceil((dryVol * (1 / 5.5)) * CEMENT_BAGS_PER_M3);
-        items.push(row('Structural Support', 'Cement (Beams)', 'Assumed minimal beam support (@15% vol)', cementBags, 'Bags (50kg)', FALLBACK.CEMENT, true));
-        const steelKg = beamVolM3 * 100; // standard 100kg/m3 for integrated beams
-        items.push(row('Structural Support', 'Steel TMT (Beams)', 'Assumed integrated beam steel (@100kg/m³)', steelKg, 'Kg', FALLBACK.STEEL, true));
+        beamVolM3 = slabVolM3 * 0.12; // minimal integrated beams
+        const beamSteelKg = beamVolM3 * 80;
+        items.push(row('Structural Support', 'Steel TMT (Beams)', 'Assumed integrated beam steel (@80kg/m³)', beamSteelKg, 'Kg', FALLBACK.STEEL, true));
       }
 
-      // ── A1. RCC Solid Slab ───────────────────────────────────────────
+      // ── A1. RCC Solid Slab / Integrated Concrete Mix Calculation ──────
       if (slabSubType.includes('RCC') || slabSubType.includes('Solid')) {
-        const slabVolM3 = netAreaM2 * (thickFt * FT_TO_M);
-        const dryVol = slabVolM3 * DRY_VOL_CONC;
+        const totalVolM3 = slabVolM3 + beamVolM3;
+        const dryVol = totalVolM3 * DRY_VOL_CONC;
+
         // M20 mix 1:1.5:3  (parts total = 5.5)
         const cementBags = Math.ceil((dryVol * (1 / 5.5)) * CEMENT_BAGS_PER_M3);
-        items.push(row('RCC Solid Slab – Core', 'Cement (M20)', 'Mix 1:1.5:3', cementBags, 'Bags (50kg)', FALLBACK.CEMENT, true));
-        const steelKg = slabVolM3 * 80;
-        items.push(row('RCC Solid Slab – Core', 'Steel TMT Bars', '@80 kg/m³ reinforcement', steelKg, 'Kg', FALLBACK.STEEL, true));
+        items.push(row('RCC Solid Slab – Core', 'Cement (M20)', 'Mix 1:1.5:3 (Slab + Beams)', cementBags, 'Bags (50kg)', FALLBACK.CEMENT, true));
+
+        const slabSteelKg = slabVolM3 * 80;
+        items.push(row('RCC Solid Slab – Core', 'Steel TMT Bars (Slab)', '@80 kg/m³ slab reinforcement', slabSteelKg, 'Kg', FALLBACK.STEEL, true));
+
         const sandCft = (dryVol * (1.5 / 5.5)) * CFT_PER_M3;
-        items.push(row('RCC Solid Slab – Core', 'Sand (Fine Agg.)', 'Washed river sand', sandCft, 'cft', FALLBACK.SAND, true));
+        items.push(row('RCC Solid Slab – Core', 'Sand (Fine Agg.)', 'Concrete mix aggregate', sandCft, 'cft', FALLBACK.SAND, true));
+
         const aggCft = (dryVol * (3 / 5.5)) * CFT_PER_M3;
-        items.push(row('RCC Solid Slab – Core', 'Aggregate 20mm', 'Coarse aggregate', aggCft, 'cft', FALLBACK.AGGREGATE, true));
+        items.push(row('RCC Solid Slab – Core', 'Aggregate 20mm', 'Coarse aggregate for mix', aggCft, 'cft', FALLBACK.AGGREGATE, true));
       }
 
       // ── A2. Filler Slab ──────────────────────────────────────────────
       else if (slabSubType.includes('Filler')) {
-        const grossVolM3 = netAreaM2 * (thickFt * FT_TO_M);
-        const concreteVolM3 = grossVolM3 * 0.70;  // fillers displace ~30% concrete
+        const grossVolM3 = slabVolM3 + beamVolM3;
+        const concreteVolM3 = (slabVolM3 * 0.70) + beamVolM3;  // fillers only displace slab concrete
         const dryVol = concreteVolM3 * DRY_VOL_CONC;
         const cementBags = Math.ceil((dryVol * (1 / 5.5)) * CEMENT_BAGS_PER_M3);
-        items.push(row('Filler Slab – Core', 'Cement (M20)', 'Mix 1:1.5:3, 30% vol offset by fillers', cementBags, 'Bags (50kg)', FALLBACK.CEMENT, true));
-        const steelKg = grossVolM3 * 50;  // reduced vs solid slab
-        items.push(row('Filler Slab – Core', 'Steel TMT Bars', '@50 kg/m³ (reduced reinforcement)', steelKg, 'Kg', FALLBACK.STEEL, true));
+        items.push(row('Filler Slab – Core', 'Cement (M20)', 'Mix 1:1.5:3, slab vol offset by fillers', cementBags, 'Bags (50kg)', FALLBACK.CEMENT, true));
+        const steelKg = grossVolM3 * 55;  // slightly increased reinforcing for filler slab girders
+        items.push(row('Filler Slab – Core', 'Steel TMT Bars', 'Reinforcement for slab & joists', steelKg, 'Kg', FALLBACK.STEEL, true));
         const sandCft = (dryVol * (1.5 / 5.5)) * CFT_PER_M3;
         items.push(row('Filler Slab – Core', 'Sand', 'Fine aggregate', sandCft, 'cft', FALLBACK.SAND, true));
         const aggCft = (dryVol * (3 / 5.5)) * CFT_PER_M3;
         items.push(row('Filler Slab – Core', 'Aggregate 20mm', 'Coarse aggregate', aggCft, 'cft', FALLBACK.AGGREGATE, true));
-        const fillerNos = Math.ceil(netAreaM2 * 10);  // ~10 filler blocks per m²
-        items.push(row('Filler Slab – Fillers', 'Filler Blocks (Clay/Terracotta)', '~10 nos/m² – reduces dead load ~25%', fillerNos, 'Nos', FALLBACK.FILLER_BLOCK, true));
+        const fillerNos = Math.ceil(slabVolM3 * 10 * (1 / (thickFt * FT_TO_M))); // Approx Nos based on volume displacement
+        items.push(row('Filler Slab – Fillers', 'Filler Blocks (Clay/Terracotta)', 'Reduces dead load and concrete volume', fillerNos, 'Nos', FALLBACK.FILLER_BLOCK, true));
       }
 
       // ── A3. Precast Concrete Slab ─────────────────────────────────────
@@ -283,11 +282,11 @@ export default function RoofingCostScreen({ route, navigation }: any) {
 
       // ── Waterproofing (all slab systems) ────────────────────────────────
       if (hasWaterproofing) {
-        const wpQtyKg = netAreaM2 * 4; // 2 kg/m² × 2 coats
+        const wpQtyKg = netAreaM2 * 1.5; // 2 coats standard consumption
         items.push(row(
           `${slabSubType} – Waterproofing`,
           'Waterproofing Chemical',
-          '2 coats @2 kg/m² (polymer-modified)',
+          '2 coats @1.5 kg/m² (liquid applied membrane)',
           wpQtyKg,
           'Kg',
           FALLBACK.WATERPROOF,

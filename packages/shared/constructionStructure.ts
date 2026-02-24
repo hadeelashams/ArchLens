@@ -115,4 +115,12 @@ export const CONSTRUCTION_HIERARCHY = {
       'Wallpaper': ["Vinyl Wallpaper", "Fabric Wallpaper", "3D Wallpaper"],
     },
   },
+  'Openings': {
+    label: "Openings",
+    subCategories: {
+      'Doors': ["Main Door (Teak)", "Flush Door", "Skin Door", "PVC/UPVC Door", "FRP Door"],
+      'Windows': ["UPVC Window", "Aluminium Window", "Timber Window", "MS Safety Grill"],
+      'Hardware': ["Lock Set", "Hinges", "Tower Bolt", "Handle"],
+    },
+  },
 } as const;

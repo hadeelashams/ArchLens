@@ -702,28 +702,13 @@ export default function RoofingScreen({ route, navigation }: any) {
               </>
             )}
 
-            {/* Sub-type tabs (e.g. GI / Alum / Polycarbonate) - ONLY shown for Sheet */}
-            {coveringChoice === 'sheet' && roofShape !== 'flat' && coveringTypes.length > 1 && (
-              <View style={styles.trussTabRow}>
-                {coveringTypes.map(t => (
-                  <TouchableOpacity
-                    key={t}
-                    style={[styles.trussTab, activeCoveringType === t && styles.trussTabActive]}
-                    onPress={() => handleGroupTypeTab(roofType, 'Roof Covering', t, activeCoveringType)}
-                  >
-                    <Text style={[styles.trussTabText, activeCoveringType === t && styles.trussTabTextActive]} numberOfLines={2}>{t}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
             {/* Material cards */}
             <Text style={{ fontSize: 11, fontWeight: '600', color: '#64748b', marginBottom: 8, marginTop: 10 }}>
-              {roofShape === 'flat' ? 'Select Slab Type:' : (coveringChoice === 'tile' ? 'Select Tile material:' : `Select ${activeCoveringType}:`)}
+              {roofShape === 'flat' ? 'Select Slab Type:' : (coveringChoice === 'tile' ? 'Select Tile material:' : 'Select Sheet material:')}
             </Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 20 }}>
               {materials
-                .filter(m => (roofShape === 'flat' ? coveringTypes.includes(m.type) : (coveringChoice === 'tile' ? coveringTypes.includes(m.type) : m.type === activeCoveringType)))
+                .filter(m => coveringTypes.includes(m.type))
                 .map(item => (
                   <MaterialCard
                     key={item.id}
@@ -732,14 +717,12 @@ export default function RoofingScreen({ route, navigation }: any) {
                     onPress={() => handleMaterialSelect(roofType, item.type, item, coveringGroup?.groupName || 'Roof Covering', coveringTypes)}
                   />
                 ))}
-              {(roofShape === 'flat' ? materials.filter(m => coveringTypes.includes(m.type)).length : (coveringChoice === 'tile'
-                ? materials.filter(m => coveringTypes.includes(m.type)).length
-                : materials.filter(m => m.type === activeCoveringType).length)) === 0 && (
-                  <View style={{ padding: 20, alignItems: 'center' }}>
-                    <Ionicons name="alert-circle-outline" size={24} color="#94a3b8" />
-                    <Text style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>No materials found</Text>
-                  </View>
-                )}
+              {materials.filter(m => coveringTypes.includes(m.type)).length === 0 && (
+                <View style={{ padding: 20, alignItems: 'center' }}>
+                  <Ionicons name="alert-circle-outline" size={24} color="#94a3b8" />
+                  <Text style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>No materials found</Text>
+                </View>
+              )}
             </ScrollView>
           </View>
 

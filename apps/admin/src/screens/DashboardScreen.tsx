@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  View, Text, TouchableOpacity, StyleSheet, Modal, 
-  TextInput, ScrollView, FlatList, ActivityIndicator, Alert, Image 
+import {
+  View, Text, TouchableOpacity, StyleSheet, Modal,
+  TextInput, ScrollView, FlatList, ActivityIndicator, Alert, Image
 } from 'react-native';
-import { 
-  db, createDocument, updateDocument, deleteDocument, 
-  CONSTRUCTION_HIERARCHY, MATERIAL_UNITS, WALL_MATERIALS_SEED_DATA, ROOFING_MATERIALS_SEED_DATA
+import {
+  db, createDocument, updateDocument, deleteDocument,
+  CONSTRUCTION_HIERARCHY, MATERIAL_UNITS, WALL_MATERIALS_SEED_DATA, ROOFING_MATERIALS_SEED_DATA, OPENINGS_MATERIALS_SEED_DATA
 } from '@archlens/shared';
 import { collection, onSnapshot, query, orderBy, where, getDocs, serverTimestamp, doc, writeBatch } from 'firebase/firestore';
 import { Feather } from '@expo/vector-icons';
@@ -22,8 +22,9 @@ export default function DashboardScreen({ navigation }: any) {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [isSeedingWallMaterials, setIsSeedingWallMaterials] = useState(false);
   const [isSeedingRoofingMaterials, setIsSeedingRoofingMaterials] = useState(false);
+  const [isSeedingOpeningsMaterials, setIsSeedingOpeningsMaterials] = useState(false);
   const [showSeedConfirm, setShowSeedConfirm] = useState(false);
-  const [seedType, setSeedType] = useState<'wall' | 'roofing' | null>(null);
+  const [seedType, setSeedType] = useState<'wall' | 'roofing' | 'openings' | null>(null);
 
   // --- UI STATE ---
   const [searchQuery, setSearchQuery] = useState('');
@@ -36,11 +37,11 @@ export default function DashboardScreen({ navigation }: any) {
   const [selCategory, setSelCategory] = useState<string | null>(null);
   const [selSubCategory, setSelSubCategory] = useState<string | null>(null); // "Method" e.g., RCC
   const [selIngredient, setSelIngredient] = useState<string | null>(null);   // "Ingredient" e.g., Cement
-  
-  const [name, setName] = useState(''); 
+
+  const [name, setName] = useState('');
   const [price, setPrice] = useState('');
   const [unit, setUnit] = useState<string>('');
-  const [grade, setGrade] = useState(''); 
+  const [grade, setGrade] = useState('');
   const [dimensions, setDimensions] = useState('');
   const [imageUrl, setImageUrl] = useState('');
 
@@ -66,7 +67,7 @@ export default function DashboardScreen({ navigation }: any) {
     let result = materials;
     if (filterCategory !== 'All') result = result.filter(m => m.category === filterCategory);
     if (searchQuery) {
-      result = result.filter(m => 
+      result = result.filter(m =>
         m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (m.subCategory && m.subCategory.toLowerCase().includes(searchQuery.toLowerCase()))
       );
@@ -88,7 +89,7 @@ export default function DashboardScreen({ navigation }: any) {
     const root = CONSTRUCTION_HIERARCHY[category]?.subCategories;
     // @ts-ignore
     const leaves = root?.[sub];
-    
+
     // Handle both array and object (grouped) structures
     if (Array.isArray(leaves)) {
       return leaves;
@@ -105,7 +106,7 @@ export default function DashboardScreen({ navigation }: any) {
   // Auto-fill Logic
   const handleIngredientSelect = (ing: string) => {
     setSelIngredient(ing);
-    if (!editingId) setName(ing); 
+    if (!editingId) setName(ing);
     if (ing.includes('Cement')) setUnit('Bag (50kg)');
     else if (ing.includes('Steel')) setUnit('Kg');
     else if (ing.includes('Sand') || ing.includes('Aggregate')) setUnit('Cubic Feet (cft)');
@@ -132,9 +133,9 @@ export default function DashboardScreen({ navigation }: any) {
         imageUrl: imageUrl.trim(),
         updatedAt: serverTimestamp()
       };
-      
+
       console.log('📤 Attempting to save material:', payload);
-      
+
       let savedId = null;
       if (editingId) {
         await updateDocument('materials', editingId, payload);
@@ -144,23 +145,23 @@ export default function DashboardScreen({ navigation }: any) {
         savedId = await createDocument('materials', payload);
         console.log('✅ Material created with ID:', savedId);
       }
-      
+
       // Wait briefly for real-time listener to update
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 1500);
-      
+
       // Auto-close modal after successful save
-      setTimeout(() => { 
-        setModalVisible(false); 
-        resetForm(); 
+      setTimeout(() => {
+        setModalVisible(false);
+        resetForm();
       }, 1200);
-    } catch (e: any) { 
+    } catch (e: any) {
       console.error('❌ Save Error Details:', {
         message: e.message,
         code: e.code,
         fullError: e
       });
-      Alert.alert("Save Failed ❌", `${e.message || 'Unknown error'}\n\nCheck console for details.`); 
+      Alert.alert("Save Failed ❌", `${e.message || 'Unknown error'}\n\nCheck console for details.`);
     }
     setSaveLoading(false);
   };
@@ -171,7 +172,7 @@ export default function DashboardScreen({ navigation }: any) {
   };
 
   // ===== SEED MATERIALS FUNCTION (WALL & ROOFING) =====
-  const handleSeedMaterials = (type: 'wall' | 'roofing') => {
+  const handleSeedMaterials = (type: 'wall' | 'roofing' | 'openings') => {
     console.log(`🔘 Seed ${type} materials button clicked!`);
     setSeedType(type);
     setShowSeedConfirm(true);
@@ -182,20 +183,26 @@ export default function DashboardScreen({ navigation }: any) {
     console.log(`Starting ${seedType} seed process...`);
     if (seedType === 'wall') {
       setIsSeedingWallMaterials(true);
-    } else {
+    } else if (seedType === 'roofing') {
       setIsSeedingRoofingMaterials(true);
+    } else {
+      setIsSeedingOpeningsMaterials(true);
     }
     await seedMaterials();
   };
 
   const seedMaterials = async () => {
     try {
-      const seedData = seedType === 'wall' ? WALL_MATERIALS_SEED_DATA : ROOFING_MATERIALS_SEED_DATA;
-      const seedName = seedType === 'wall' ? 'Wall' : 'Roof';
-      // Also delete old materials that may have had the wrong category name (e.g. "Roofing" instead of "Roof")
-      const categoriesToDelete = seedType === 'wall' ? ['Wall'] : ['Roof', 'Roofing'];
+      let seedData: any[] = [];
+      if (seedType === 'wall') seedData = WALL_MATERIALS_SEED_DATA;
+      else if (seedType === 'roofing') seedData = ROOFING_MATERIALS_SEED_DATA;
+      else seedData = OPENINGS_MATERIALS_SEED_DATA;
+
+      const seedName = seedType === 'wall' ? 'Wall' : seedType === 'roofing' ? 'Roof' : 'Openings';
+      // Also delete old materials that may have had the wrong category name
+      const categoriesToDelete = seedType === 'wall' ? ['Wall'] : seedType === 'roofing' ? ['Roof', 'Roofing'] : ['Openings'];
       const seedCount = seedData.length;
-      
+
       // Step 1: Delete existing materials for this category
       console.log(`🗑️ Deleting old ${seedName} materials...`);
       const deleteBatch = writeBatch(db);
@@ -216,13 +223,13 @@ export default function DashboardScreen({ navigation }: any) {
       // Step 2: Seed fresh materials
       console.log('📝 Creating batch write...');
       console.log(`Materials to seed (${seedName}):`, seedCount);
-      
+
       const batch = writeBatch(db);
       let count = 0;
 
       for (const material of seedData) {
         const ref = doc(collection(db, 'materials'));
-        
+
         batch.set(ref, {
           ...material,
           createdAt: serverTimestamp(),
@@ -233,11 +240,12 @@ export default function DashboardScreen({ navigation }: any) {
 
       console.log(`✅ Batch ready: ${count} ${seedName} materials`);
       await batch.commit();
-      
+
       console.log(`✨ Batch successfully committed to Firestore!`);
       setIsSeedingWallMaterials(false);
       setIsSeedingRoofingMaterials(false);
-      
+      setIsSeedingOpeningsMaterials(false);
+
       Alert.alert(
         "✨ Success!",
         `${deleteCount > 0 ? `Removed ${deleteCount} old materials. ` : ''}All ${seedCount} ${seedName.toLowerCase()} materials have been seeded!\n\nThey will appear in the list below.`
@@ -250,19 +258,20 @@ export default function DashboardScreen({ navigation }: any) {
       });
       setIsSeedingWallMaterials(false);
       setIsSeedingRoofingMaterials(false);
+      setIsSeedingOpeningsMaterials(false);
       Alert.alert("❌ Seed Failed", error.message || "Unknown error occurred");
     }
   };
 
 
   const openEdit = (item: any) => {
-    setEditingId(item.id); 
-    setSelCategory(item.category); 
+    setEditingId(item.id);
+    setSelCategory(item.category);
     setSelSubCategory(item.subCategory);
-    setSelIngredient(item.type); 
-    setName(item.name); 
+    setSelIngredient(item.type);
+    setName(item.name);
     setPrice(item.pricePerUnit.toString());
-    setUnit(item.unit); 
+    setUnit(item.unit);
     setGrade(item.grade || '');
     setDimensions(item.dimensions || '');
     setImageUrl(item.imageUrl || '');
@@ -277,8 +286,8 @@ export default function DashboardScreen({ navigation }: any) {
         <Text style={styles.label}>{label}</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipScroll}>
           {options.map((opt: string) => (
-            <TouchableOpacity 
-              key={opt} 
+            <TouchableOpacity
+              key={opt}
               style={[styles.chip, selected === opt && styles.chipActive]}
               onPress={() => onSelect(opt)}
             >
@@ -301,44 +310,61 @@ export default function DashboardScreen({ navigation }: any) {
             <Text style={styles.pageTitle}>Material Rate Master</Text>
             <Text style={styles.subHeaderText}>Manage construction materials, units, and market prices.</Text>
           </View>
-          <View style={styles.headerActions}>
-            <View style={styles.searchBox}>
-              <Feather name="search" size={18} color="#64748b" />
-              <TextInput 
-                style={styles.searchInput} 
-                placeholder="Search material..." 
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-              />
+          <View style={{ alignItems: 'flex-end', gap: 12 }}>
+            <View style={styles.headerActions}>
+              <View style={styles.searchBox}>
+                <Feather name="search" size={18} color="#64748b" />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search material..."
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                />
+              </View>
+              <TouchableOpacity
+                style={[styles.secondaryBtn, isSeedingWallMaterials && { opacity: 0.6 }]}
+                onPress={() => handleSeedMaterials('wall')}
+                disabled={isSeedingWallMaterials}
+              >
+                {isSeedingWallMaterials ? (
+                  <ActivityIndicator color="#1e293b" size={18} />
+                ) : (
+                  <>
+                    <Feather name="download" size={18} color="#1e293b" />
+                    <Text style={[styles.btnText, { color: '#1e293b' }]}>Seed Wall (19)</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.secondaryBtn, isSeedingRoofingMaterials && { opacity: 0.6 }]}
+                onPress={() => handleSeedMaterials('roofing')}
+                disabled={isSeedingRoofingMaterials}
+              >
+                {isSeedingRoofingMaterials ? (
+                  <ActivityIndicator color="#1e293b" size={18} />
+                ) : (
+                  <>
+                    <Feather name="download" size={18} color="#1e293b" />
+                    <Text style={[styles.btnText, { color: '#1e293b' }]}>Seed Roofing (21)</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.secondaryBtn, isSeedingOpeningsMaterials && { opacity: 0.6 }]}
+                onPress={() => handleSeedMaterials('openings')}
+                disabled={isSeedingOpeningsMaterials}
+              >
+                {isSeedingOpeningsMaterials ? (
+                  <ActivityIndicator color="#1e293b" size={18} />
+                ) : (
+                  <>
+                    <Feather name="download" size={18} color="#1e293b" />
+                    <Text style={[styles.btnText, { color: '#1e293b' }]}>Seed Openings (10)</Text>
+                  </>
+                )}
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity 
-              style={[styles.secondaryBtn, isSeedingWallMaterials && { opacity: 0.6 }]} 
-              onPress={() => handleSeedMaterials('wall')}
-              disabled={isSeedingWallMaterials}
-            >
-              {isSeedingWallMaterials ? (
-                <ActivityIndicator color="#1e293b" size={18} />
-              ) : (
-                <>
-                  <Feather name="download" size={18} color="#1e293b" />
-                  <Text style={[styles.btnText, { color: '#1e293b' }]}>Seed Wall (19)</Text>
-                </>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.secondaryBtn, isSeedingRoofingMaterials && { opacity: 0.6 }]} 
-              onPress={() => handleSeedMaterials('roofing')}
-              disabled={isSeedingRoofingMaterials}
-            >
-              {isSeedingRoofingMaterials ? (
-                <ActivityIndicator color="#1e293b" size={18} />
-              ) : (
-                <>
-                  <Feather name="download" size={18} color="#1e293b" />
-                  <Text style={[styles.btnText, { color: '#1e293b' }]}>Seed Roofing (21)</Text>
-                </>
-              )}
-            </TouchableOpacity>
+
             <TouchableOpacity style={styles.primaryBtn} onPress={() => { resetForm(); setModalVisible(true); }}>
               <Feather name="plus" size={18} color="#fff" />
               <Text style={styles.btnText}>Add Material</Text>
@@ -350,8 +376,8 @@ export default function DashboardScreen({ navigation }: any) {
         <View style={styles.filterRow}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             {['All', ...Object.keys(CONSTRUCTION_HIERARCHY)].map(cat => (
-              <TouchableOpacity 
-                key={cat} 
+              <TouchableOpacity
+                key={cat}
                 style={[styles.filterChip, filterCategory === cat && styles.filterChipActive]}
                 onPress={() => setFilterCategory(cat)}
               >
@@ -362,9 +388,9 @@ export default function DashboardScreen({ navigation }: any) {
         </View>
 
         {/* SYNC STATUS BAR */}
-        <View style={{ 
-          flexDirection: 'row', 
-          alignItems: 'center', 
+        <View style={{
+          flexDirection: 'row',
+          alignItems: 'center',
           gap: 8,
           paddingHorizontal: 16,
           paddingVertical: 10,
@@ -389,13 +415,13 @@ export default function DashboardScreen({ navigation }: any) {
             <Text style={[styles.th, { flex: 0.5, textAlign: 'right' }]}>ACTIONS</Text>
           </View>
 
-          {loading ? <ActivityIndicator size="large" color={BLUE_ARCH} style={{marginTop: 50}} /> : (
+          {loading ? <ActivityIndicator size="large" color={BLUE_ARCH} style={{ marginTop: 50 }} /> : (
             <FlatList
               data={filteredMaterials}
               keyExtractor={item => item.id}
               renderItem={({ item }) => (
                 <View style={styles.tr}>
-                  
+
                   {/* COLUMN 1: IMAGE + NAME + SPECS */}
                   <View style={{ flex: 2, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                     <View style={styles.tableImageContainer}>
@@ -412,30 +438,30 @@ export default function DashboardScreen({ navigation }: any) {
                       {item.dimensions ? <Text style={styles.tdDim}>Size: {item.dimensions}</Text> : null}
                     </View>
                   </View>
-                  
+
                   {/* COLUMN 2: HIERARCHY (The Fix you wanted) */}
                   <View style={{ flex: 2, justifyContent: 'center' }}>
                     {/* 1. Category Pill */}
                     <View style={styles.badge}>
                       <Text style={styles.badgeText}>{item.category}</Text>
                     </View>
-                    
+
                     {/* 2. SubCategory > Type (Logic Restored) */}
                     <Text style={styles.subText} numberOfLines={1}>
-                      {item.subCategory} 
+                      {item.subCategory}
                       {/* Check if 'type' exists and is not same as subCat or 'Standard' */}
-                      {item.type && item.type !== 'Standard' && item.type !== item.subCategory 
-                        ? ` › ${item.type}` 
+                      {item.type && item.type !== 'Standard' && item.type !== item.subCategory
+                        ? ` › ${item.type}`
                         : ''}
                     </Text>
                   </View>
-                  
+
                   {/* COLUMN 3: PRICE */}
                   <Text style={styles.tdPrice}>
-                    ₹{item.pricePerUnit} 
+                    ₹{item.pricePerUnit}
                     <Text style={styles.unitText}> / {item.unit}</Text>
                   </Text>
-                  
+
                   {/* COLUMN 4: ACTIONS */}
                   <View style={styles.actionCell}>
                     <TouchableOpacity onPress={() => openEdit(item)} style={styles.iconBtn}>
@@ -462,95 +488,95 @@ export default function DashboardScreen({ navigation }: any) {
                 <Feather name="x" size={24} color="#64748b" />
               </TouchableOpacity>
             </View>
-            
+
             <ScrollView showsVerticalScrollIndicator={false}>
-              
-              <SelectorGroup 
-                label="1. Root Category" 
-                options={Object.keys(CONSTRUCTION_HIERARCHY)} 
-                selected={selCategory} 
-                onSelect={(val: string) => { setSelCategory(val); setSelSubCategory(null); setSelIngredient(null); }} 
+
+              <SelectorGroup
+                label="1. Root Category"
+                options={Object.keys(CONSTRUCTION_HIERARCHY)}
+                selected={selCategory}
+                onSelect={(val: string) => { setSelCategory(val); setSelSubCategory(null); setSelIngredient(null); }}
               />
-              
+
               {selCategory && (
-                <SelectorGroup 
-                  label="2. Classification / Method" 
-                  options={getSubOptions(selCategory)} 
-                  selected={selSubCategory} 
-                  onSelect={(val: string) => { setSelSubCategory(val); setSelIngredient(null); }} 
+                <SelectorGroup
+                  label="2. Classification / Method"
+                  options={getSubOptions(selCategory)}
+                  selected={selSubCategory}
+                  onSelect={(val: string) => { setSelSubCategory(val); setSelIngredient(null); }}
                 />
               )}
-              
+
               {selCategory && selSubCategory && getLeafOptions(selCategory, selSubCategory).length > 0 && (
-                <SelectorGroup 
-                  label="3. Material Type" 
-                  options={getLeafOptions(selCategory, selSubCategory)} 
-                  selected={selIngredient} 
-                  onSelect={handleIngredientSelect} 
+                <SelectorGroup
+                  label="3. Material Type"
+                  options={getLeafOptions(selCategory, selSubCategory)}
+                  selected={selIngredient}
+                  onSelect={handleIngredientSelect}
                 />
               )}
 
               <View style={styles.formSection}>
                 <Text style={styles.sectionTitle}>Material Details</Text>
-                
+
                 <View style={{ marginBottom: 15 }}>
                   <Text style={styles.label}>Product Display Name</Text>
-                  <TextInput 
-                    style={styles.input} 
-                    placeholder="e.g. Ultratech PPC Cement" 
-                    value={name} 
-                    onChangeText={setName} 
+                  <TextInput
+                    style={styles.input}
+                    placeholder="e.g. Ultratech PPC Cement"
+                    value={name}
+                    onChangeText={setName}
                   />
                 </View>
 
                 <View style={styles.row}>
                   <View style={{ flex: 1 }}>
-                     <Text style={styles.label}>Specification / Grade</Text>
-                     <TextInput 
-                       style={styles.input} 
-                       placeholder="e.g. 53 Grade, Fe550" 
-                       value={grade} 
-                       onChangeText={setGrade} 
-                     />
+                    <Text style={styles.label}>Specification / Grade</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="e.g. 53 Grade, Fe550"
+                      value={grade}
+                      onChangeText={setGrade}
+                    />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.label}>Image URL</Text>
-                    <TextInput 
-                      style={styles.input} 
-                      placeholder="https://..." 
-                      value={imageUrl} 
-                      onChangeText={setImageUrl} 
+                    <TextInput
+                      style={styles.input}
+                      placeholder="https://..."
+                      value={imageUrl}
+                      onChangeText={setImageUrl}
                     />
                   </View>
                 </View>
 
                 {isWallCategory() && (
                   <View style={{ marginTop: 15 }}>
-                     <Text style={[styles.label, {color: '#d97706'}]}>Block Dimensions</Text>
-                     <TextInput 
-                       style={[styles.input, { borderColor: '#fcd34d', backgroundColor: '#fffbeb' }]} 
-                       placeholder="L x W x H (inches)" 
-                       value={dimensions} 
-                       onChangeText={setDimensions} 
-                     />
+                    <Text style={[styles.label, { color: '#d97706' }]}>Block Dimensions</Text>
+                    <TextInput
+                      style={[styles.input, { borderColor: '#fcd34d', backgroundColor: '#fffbeb' }]}
+                      placeholder="L x W x H (inches)"
+                      value={dimensions}
+                      onChangeText={setDimensions}
+                    />
                   </View>
                 )}
 
                 <View style={[styles.row, { marginTop: 15 }]}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.label}>Market Price (₹)</Text>
-                    <TextInput 
-                      style={styles.input} 
-                      placeholder="0.00" 
-                      keyboardType="numeric" 
-                      value={price} 
-                      onChangeText={setPrice} 
+                    <TextInput
+                      style={styles.input}
+                      placeholder="0.00"
+                      keyboardType="numeric"
+                      value={price}
+                      onChangeText={setPrice}
                     />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.label}>Unit (Strict Selection)</Text>
                     {/* Unit Picker - Force selection from predefined list for consistency */}
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       style={[styles.input, { justifyContent: 'center', paddingVertical: 0 }]}
                       onPress={() => setUnitPickerVisible(true)}
                     >
@@ -572,7 +598,7 @@ export default function DashboardScreen({ navigation }: any) {
                             data={MATERIAL_UNITS}
                             keyExtractor={(item) => item}
                             renderItem={({ item }) => (
-                              <TouchableOpacity 
+                              <TouchableOpacity
                                 style={[styles.pickerItem, unit === item && styles.pickerItemActive]}
                                 onPress={() => {
                                   setUnit(item);
@@ -596,13 +622,13 @@ export default function DashboardScreen({ navigation }: any) {
 
             {/* SAVE BUTTON WITH FEEDBACK */}
             <View style={{ gap: 10 }}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[
-                  styles.saveBtn, 
+                  styles.saveBtn,
                   saveLoading && { opacity: 0.6 },
                   saveSuccess && { backgroundColor: '#10b981' }
-                ]} 
-                onPress={handleSave} 
+                ]}
+                onPress={handleSave}
                 disabled={saveLoading}
               >
                 {saveLoading ? (
@@ -631,14 +657,16 @@ export default function DashboardScreen({ navigation }: any) {
         <View style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.7)', justifyContent: 'center', alignItems: 'center' }}>
           <View style={{ backgroundColor: '#fff', borderRadius: 24, padding: 40, width: 500, gap: 20 }}>
             <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#0f172a' }}>
-              {seedType === 'wall' ? '🧱 Seed Wall Materials?' : '🏠 Seed Roofing Materials?'}
+              {seedType === 'wall' ? '🧱 Seed Wall Materials?' : seedType === 'roofing' ? '🏠 Seed Roofing Materials?' : '🚪 Seed Openings Materials?'}
             </Text>
             <Text style={{ fontSize: 14, color: '#64748b', lineHeight: 20 }}>
-              {seedType === 'wall' 
+              {seedType === 'wall'
                 ? 'This will add all 19 wall materials (bricks, blocks, cement, sand) to Firestore.'
-                : 'This will add all 21 roofing materials (RCC slab, sloped tiles & sheets) to Firestore.'}
+                : seedType === 'roofing'
+                  ? 'This will add all 21 roofing materials (RCC slab, sloped tiles & sheets) to Firestore.'
+                  : 'This will add all 10 openings materials (Doors, Windows, Hardware) to Firestore.'}
             </Text>
-            
+
             <View style={{ backgroundColor: '#f0fdf4', padding: 15, borderRadius: 12, gap: 6 }}>
               {seedType === 'wall' ? (
                 <>
@@ -648,28 +676,34 @@ export default function DashboardScreen({ navigation }: any) {
                   <Text style={{ fontSize: 13, fontWeight: '600', color: '#166534' }}>✓ 4 partition blocks (AAC+Hollow)</Text>
                   <Text style={{ fontSize: 13, fontWeight: '600', color: '#166534' }}>✓ 6 mortar materials (Cement+Sand)</Text>
                 </>
-              ) : (
+              ) : seedType === 'roofing' ? (
                 <>
                   <Text style={{ fontSize: 13, fontWeight: '600', color: '#166534' }}>✓ RCC Slab (7 materials): Cement, Steel, Sand, Aggregate</Text>
                   <Text style={{ fontSize: 13, fontWeight: '600', color: '#166534' }}>✓ Sloped Roof - Tile (6 materials): Truss, Clay/Concrete Tiles, Underlayment</Text>
                   <Text style={{ fontSize: 13, fontWeight: '600', color: '#166534' }}>✓ Sloped Roof - Sheet (8 materials): Truss, GI, Aluminium, Polycarbonate Sheets</Text>
                 </>
+              ) : (
+                <>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: '#166534' }}>✓ 4 Doors (Main, Flush, PVC)</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: '#166534' }}>✓ 4 Windows (UPVC, Aluminium, Timber)</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: '#166534' }}>✓ 2 Hardware Sets</Text>
+                </>
               )}
             </View>
 
             <View style={{ flexDirection: 'row', gap: 12 }}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={{ flex: 1, padding: 14, borderRadius: 12, backgroundColor: '#e2e8f0', alignItems: 'center' }}
                 onPress={() => setShowSeedConfirm(false)}
               >
                 <Text style={{ fontWeight: '600', color: '#475569' }}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={{ flex: 1, padding: 14, borderRadius: 12, backgroundColor: '#10b981', alignItems: 'center' }}
                 onPress={confirmSeed}
-                disabled={isSeedingWallMaterials || isSeedingRoofingMaterials}
+                disabled={isSeedingWallMaterials || isSeedingRoofingMaterials || isSeedingOpeningsMaterials}
               >
-                {isSeedingWallMaterials || isSeedingRoofingMaterials ? (
+                {isSeedingWallMaterials || isSeedingRoofingMaterials || isSeedingOpeningsMaterials ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
                   <Text style={{ fontWeight: '600', color: '#fff' }}>Seed Now 🚀</Text>
@@ -699,13 +733,13 @@ const styles = StyleSheet.create({
   filterChip: { paddingHorizontal: 20, paddingVertical: 10, backgroundColor: '#fff', borderRadius: 12, marginRight: 12, borderWidth: 1, borderColor: '#e2e8f0', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.02, shadowRadius: 4 },
   filterChipActive: { backgroundColor: BLUE_ARCH, borderColor: BLUE_ARCH },
   filterText: { fontSize: 13, color: '#64748b', fontWeight: '700' },
-  
+
   // Table Styles
   tableContainer: { flex: 1, backgroundColor: '#fff', borderRadius: 22, borderWidth: 1, borderColor: '#e2e8f0', overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 12 },
   tableHeader: { flexDirection: 'row', backgroundColor: '#f8fafc', padding: 20, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
   th: { fontSize: 11, fontWeight: '800', color: '#64748b', letterSpacing: 1.2, textTransform: 'uppercase' },
   tr: { flexDirection: 'row', padding: 24, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', alignItems: 'center', minHeight: 72 },
-  
+
   tableImageContainer: { width: 48, height: 48, borderRadius: 11, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
   tableImage: { width: '100%', height: '100%' },
 
@@ -714,12 +748,12 @@ const styles = StyleSheet.create({
   tdDim: { fontSize: 12, color: '#94a3b8', marginTop: 3, fontWeight: '500' },
   tdPrice: { flex: 1.5, fontSize: 17, fontWeight: '800', color: '#10b981' },
   unitText: { fontSize: 12, color: '#94a3b8', fontWeight: '500' },
-  
+
   // HIERARCHY STYLES
   badge: { backgroundColor: '#f1f5f9', alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 9, marginBottom: 7 },
   badgeText: { color: '#475569', fontSize: 11, fontWeight: '700' },
   subText: { fontSize: 13, color: '#64748b', fontWeight: '600' },
-  
+
   actionCell: { flex: 0.5, flexDirection: 'row', justifyContent: 'flex-end', gap: 14 },
   iconBtn: { padding: 10, borderRadius: 9, backgroundColor: '#f1f5f9' },
 
@@ -728,10 +762,10 @@ const styles = StyleSheet.create({
   modalContent: { backgroundColor: '#fff', width: 700, borderRadius: 28, padding: 40, maxHeight: '90%', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 20 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 },
   modalTitle: { fontSize: 24, fontWeight: '800', color: '#0f172a' },
-  
+
   formSection: { marginTop: 10, paddingTop: 22, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
   sectionTitle: { fontSize: 12, fontWeight: '800', color: '#94a3b8', marginBottom: 16, textTransform: 'uppercase', letterSpacing: 1.2 },
-  
+
   selectorContainer: { marginBottom: 22 },
   label: { fontSize: 13, fontWeight: '700', color: '#475569', marginBottom: 10 },
   chipScroll: { gap: 10 },
@@ -739,7 +773,7 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: BLUE_ARCH, borderColor: BLUE_ARCH },
   chipText: { fontSize: 13, color: '#64748b', fontWeight: '500' },
   chipTextActive: { color: '#fff', fontWeight: '700' },
-  
+
   input: { backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, padding: 14, fontSize: 14, outlineStyle: 'none', color: '#1e293b' } as any,
   row: { flexDirection: 'row', gap: 16 },
   miniChip: { backgroundColor: '#f1f5f9', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, marginRight: 6 },

@@ -66,12 +66,21 @@ export default function EstimateResultScreen({ route, navigation }: any) {
     // 1. Fetch Projects List
     const qProjects = query(
       collection(db, 'projects'),
-      where('userId', '==', auth.currentUser.uid),
-      orderBy('createdAt', 'desc')
+      where('userId', '==', auth.currentUser.uid)
+      // Removed orderBy('createdAt', 'desc') to avoid missing index error. 
+      // We sort client-side in the snapshot listener instead.
     );
 
     unsubscribeProjects = onSnapshot(qProjects, (snap) => {
-      const projData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const projData = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+
+      // Sort client-side: descending by createdAt
+      projData.sort((a, b) => {
+        const timeA = a.createdAt?.seconds || 0;
+        const timeB = b.createdAt?.seconds || 0;
+        return timeB - timeA;
+      });
+
       setProjects(projData);
 
       // If we have an activeProjectId, find and set the activeProject object

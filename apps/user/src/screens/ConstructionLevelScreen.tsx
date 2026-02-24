@@ -44,6 +44,14 @@ const COMPONENT_DATA = [
     gradientColors: ['#0ea5e9', '#38bdf8'],
   },
   {
+    id: '7',
+    title: 'Openings',
+    description: 'Main doors, windows, and hardware',
+    icon: 'door-open',
+    iconLib: 'MaterialCommunityIcons',
+    gradientColors: ['#f59e0b', '#fbbf24'],
+  },
+  {
     id: '4',
     title: 'Plastering',
     description: 'Internal gypsum, external sand finish',
@@ -157,6 +165,9 @@ export default function ConstructionLevelScreen({ route, navigation }: any) {
     else if (item.title === 'Painting') {
       navigation.navigate('PaintingScreen', { totalArea, projectId, tier: activeTab });
     }
+    else if (item.title === 'Openings') {
+      navigation.navigate('OpeningsScreen', { totalArea, projectId, tier: activeTab });
+    }
     else {
       navigation.navigate('EstimateResult', { totalArea, level: activeTab, projectId });
     }
@@ -166,24 +177,7 @@ export default function ConstructionLevelScreen({ route, navigation }: any) {
     if (!activeTab || !allTierRecommendations?.[activeTab]) return null;
     const tierRec = allTierRecommendations[activeTab];
 
-    if (itemTitle === 'Foundation') {
-      const found = tierRec.foundation;
-      if (found?.success && found.data) {
-        return `Steel & Cement`;
-      }
-    }
-    else if (itemTitle === 'Wall and Masonry') {
-      if (tierRec.success) {
-        let label = '';
-        if (wallComposition) {
-          label = `${(wallComposition.loadBearingPercentage || 0).toFixed(0)}% LB Wall`;
-        } else {
-          label = `Optimized Materials`;
-        }
-        return label;
-      }
-    }
-    else if (itemTitle === 'Roofing') {
+    if (itemTitle === 'Roofing') {
       const roof = tierRec.roofing;
       if (roof?.success) {
         return `${roof.shape === 'gable' ? 'Pitched' : roof.shape} Roof`;

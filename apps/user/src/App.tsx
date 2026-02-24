@@ -14,9 +14,9 @@ import OnboardingScreen from './screens/OnboardingScreen';
 import LoginScreen from './screens/LoginScreen';
 import RegisterScreen from './screens/RegisterScreen';
 import HomeScreen from './screens/HomeScreen';
-import UploadPlanScreen from './screens/UploadPlanScreen'; 
-import PlanVerificationScreen from './screens/PlanVerificationScreen'; 
-import ConstructionLevelScreen from './screens/ConstructionLevelScreen'; 
+import UploadPlanScreen from './screens/UploadPlanScreen';
+import PlanVerificationScreen from './screens/PlanVerificationScreen';
+import ConstructionLevelScreen from './screens/ConstructionLevelScreen';
 import ProjectSummaryScreen from './screens/ProjectSummaryScreen';
 import MaterialRatesScreen from './screens/MaterialRatesScreen';
 
@@ -24,12 +24,13 @@ import MaterialRatesScreen from './screens/MaterialRatesScreen';
 import FoundationSelection from './screens/FoundationSelection';
 import FoundationCost from './screens/FoundationCost';
 
-import WallScreen from './screens/WallScreen'; 
+import WallScreen from './screens/WallScreen';
 import WallCostSummaryScreen from './screens/WallCostSummaryScreen';
 import RoofingScreen from './screens/RoofingScreen';
 import RoofingCostScreen from './screens/RoofingCostScreen';
 import FlooringScreen from './screens/FlooringScreen';
 import PaintingScreen from './screens/PaintingScreen';
+import OpeningsScreen from './screens/OpeningsScreen';
 import ProfileScreen from './screens/ProfileScreen';
 
 // Settings Screens
@@ -49,40 +50,40 @@ export type RootStackParamList = {
 
   // Main Flow
   Home: undefined;
-  UploadPlan: undefined; 
-  PlanVerification: { planImage: string }; 
-  ConstructionLevel: { totalArea: number; projectId: string; rooms: any[] }; 
+  UploadPlan: undefined;
+  PlanVerification: { planImage: string };
+  ConstructionLevel: { totalArea: number; projectId: string; rooms: any[] };
   ProjectSummary: { projectId: string };
   MaterialRates: undefined;
-  FoundationSelection: { totalArea: number; projectId: string }; 
-  
-  FoundationCost: { 
-    projectId: string; 
-    area: number | string; 
-    depth: string; 
-    activeMethod: string; 
-    selections: any; 
+  FoundationSelection: { totalArea: number; projectId: string };
+
+  FoundationCost: {
+    projectId: string;
+    area: number | string;
+    depth: string;
+    activeMethod: string;
+    selections: any;
   };
 
   // Other Estimates
-  WallDetails: { totalArea: number; projectId: string; rooms: any[]; tier: string }; 
-  WallCostSummary: { 
-    totalArea: number; 
-    rooms: any[]; 
-    projectId: string; 
-    tier: string; 
-    height: string; 
-    wallThickness: string; 
-    jointThickness: string; 
-    openingDeduction: string; 
-    partitionWallThickness: number; 
-    avgMainWallRatio: number; 
-    avgPartitionWallRatio: number; 
-    avgOpeningPercentage: number; 
-    loadBearingBrick: any; 
-    partitionBrick: any; 
-    cement: any; 
-    sand: any; 
+  WallDetails: { totalArea: number; projectId: string; rooms: any[]; tier: string };
+  WallCostSummary: {
+    totalArea: number;
+    rooms: any[];
+    projectId: string;
+    tier: string;
+    height: string;
+    wallThickness: string;
+    jointThickness: string;
+    openingDeduction: string;
+    partitionWallThickness: number;
+    avgMainWallRatio: number;
+    avgPartitionWallRatio: number;
+    avgOpeningPercentage: number;
+    loadBearingBrick: any;
+    partitionBrick: any;
+    cement: any;
+    sand: any;
     aiInsights?: any;
   };
   RoofingScreen: { totalArea: number; projectId: string; tier: string };
@@ -95,10 +96,11 @@ export type RootStackParamList = {
   };
   FlooringScreen: { totalArea: number; projectId: string; tier: string };
   PaintingScreen: { totalArea: number; projectId: string; tier: string };
-  EstimateResult: { 
-    totalArea: number; 
-    level: string; 
-    projectId: string; 
+  OpeningsScreen: { totalArea: number; projectId: string; tier: string };
+  EstimateResult: {
+    totalArea: number;
+    level: string;
+    projectId: string;
     foundationData?: any; // Added optional data props for result screen
   };
 
@@ -135,47 +137,11 @@ function AppContent() {
 
   return (
     <NavigationContainer>
-      <Stack.Navigator 
-        screenOptions={{ 
+      <Stack.Navigator
+        screenOptions={{
           headerShown: false,
-          animationEnabled: true,
+          animation: 'slide_from_right',
           gestureEnabled: true,
-          transitionSpec: {
-            open: {
-              animation: 'timing',
-              config: {
-                duration: 400,
-                useNativeDriver: true,
-              },
-            },
-            close: {
-              animation: 'timing',
-              config: {
-                duration: 400,
-                useNativeDriver: true,
-              },
-            },
-          },
-          cardStyleInterpolator: ({ current, next, layouts }) => {
-            return {
-              cardStyle: {
-                transform: [
-                  {
-                    translateX: current.progress.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [layouts.screen.width, 0],
-                    }),
-                  },
-                ],
-              },
-              overlayStyle: {
-                opacity: current.progress.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0, 0.07],
-                }),
-              },
-            };
-          },
         }}
       >
         {user ? (
@@ -186,7 +152,7 @@ function AppContent() {
             <Stack.Screen name="ConstructionLevel" component={ConstructionLevelScreen} />
             <Stack.Screen name="ProjectSummary" component={ProjectSummaryScreen} />
             <Stack.Screen name="MaterialRates" component={MaterialRatesScreen} />
-            
+
             {/* --- UPDATED FOUNDATION SCREENS --- */}
             <Stack.Screen name="FoundationSelection" component={FoundationSelection} />
             <Stack.Screen name="FoundationCost" component={FoundationCost} />
@@ -197,10 +163,11 @@ function AppContent() {
             <Stack.Screen name="RoofingCostScreen" component={RoofingCostScreen} />
             <Stack.Screen name="FlooringScreen" component={FlooringScreen} />
             <Stack.Screen name="PaintingScreen" component={PaintingScreen} />
+            <Stack.Screen name="OpeningsScreen" component={OpeningsScreen} />
             <Stack.Screen name="EstimateResult" component={EstimateResultScreen} />
 
             <Stack.Screen name="Profile" component={ProfileScreen} />
-            
+
             <Stack.Screen name="PersonalInfo" component={PersonalInfoScreen} />
             <Stack.Screen name="Notifications" component={NotificationsScreen} />
             <Stack.Screen name="Security" component={SecurityScreen} />
