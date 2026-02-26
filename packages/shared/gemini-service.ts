@@ -2,10 +2,10 @@
  * Gemini AI Service
  * Provides AI-powered capabilities using Firebase Gemini API
  * Supports text generation, analysis, and multi-turn conversations
- * Includes automatic fallback to alternative models on rate limits
+ * Includes automatic fallback to alternative models and direct Google Gen AI SDK on rate limits
  */
 
-import { geminiModel, GEMINI_MODELS, MODEL_NAMES, createGeminiModel, ai } from './firebase';
+import { geminiModel, directGeminiAI, GEMINI_MODELS, MODEL_NAMES, createGeminiModel, ai, AI_BACKEND } from './firebase';
 
 export interface ChatMessage {
   role: 'user' | 'model';
@@ -22,6 +22,15 @@ export interface GenerationConfig {
 // Track current model being used
 let currentModelIndex = 0;
 let currentModel = geminiModel;
+
+// Determine initial backend based on AI_BACKEND setting
+// 'firebase' = use Firebase only
+// 'genai' = use Direct GenAI SDK only (exclusively)
+// 'auto' = start with Firebase, fallback to GenAI on quota
+let useDirectAPI = AI_BACKEND === 'genai';
+let isExclusiveGenAI = AI_BACKEND === 'genai';
+
+console.log(`ℹ️ AI Backend Mode: ${AI_BACKEND} (Currently using: ${useDirectAPI ? 'Direct Google Gen AI' : 'Firebase Gemini'})`);
 
 /**
  * Switch to the next available fallback model
@@ -45,9 +54,30 @@ const switchToNextModel = async () => {
 };
 
 /**
+ * Switch to direct Google Gen AI SDK (higher rate limits)
+ * Only available in 'auto' mode - not available in exclusive Firebase mode
+ */
+const switchToDirectAPI = async () => {
+  if (isExclusiveGenAI) {
+    console.warn('Cannot switch to Direct API in exclusive GenAI mode');
+    return false;
+  }
+  
+  if (!directGeminiAI) {
+    console.warn('Direct Google Gen AI SDK not initialized');
+    return false;
+  }
+  
+  useDirectAPI = true;
+  console.log('ℹ️ Switched to Direct Google Gen AI SDK (auto fallback due to Firebase quota)');
+  return true;
+};
+
+/**
  * Reset to primary model (can be called after successful request or on app restart)
  */
 export const resetToPrimaryModel = () => {
+  useDirectAPI = false;
   if (currentModelIndex > 0) {
     currentModelIndex = 0;
     currentModel = geminiModel;
@@ -70,9 +100,47 @@ export const getCurrentModelName = (): string => {
 };
 
 /**
+ * Check if currently using Direct Google Gen AI SDK (high rate limit mode)
+ */
+export const isUsingDirectAPI = (): boolean => {
+  return useDirectAPI;
+};
+
+/**
+ * Get current backend mode
+ */
+export const getCurrentBackend = (): string => {
+  return useDirectAPI ? 'Direct Google Gen AI (High Rate Limit)' : `Firebase Gemini (${MODEL_NAMES[getCurrentModel()]})`;
+};
+
+/**
+ * Get current backend for generation (handles exclusive GenAI mode)
+ * Returns Direct API in exclusive genai mode, Firebase otherwise
+ */
+const getBackendModel = () => {
+  if (isExclusiveGenAI) {
+    if (!directGeminiAI) {
+      throw new Error('Direct Google Gen AI SDK not initialized. Check EXPO_PUBLIC_GENAI_API_KEY.');
+    }
+    return { type: 'genai' as const, client: directGeminiAI };
+  }
+  
+  if (useDirectAPI && directGeminiAI) {
+    return { type: 'genai' as const, client: directGeminiAI };
+  }
+
+  if (!currentModel) {
+    throw new Error('Gemini model not initialized. Check Firebase configuration.');
+  }
+
+  return { type: 'firebase' as const, client: currentModel };
+};
+
+/**
  * Retry helper with exponential backoff AND model fallback for rate-limited API calls
  * Automatically retries on 429 (overloaded) errors with increasing delays
  * Falls back to alternative models if primary model is rate-limited
+ * Finally tries Direct Google Gen AI SDK on quota exhaustion
  */
 const retryWithBackoff = async <T>(
   fn: () => Promise<T>,
@@ -101,9 +169,19 @@ const retryWithBackoff = async <T>(
         }
       }
 
-      // On quota error with no fallback models, throw quota error
-      if (errorMessage.includes('quota') && currentModelIndex >= GEMINI_MODELS.length - 1) {
-        const quotaError = new Error('AI_QUOTA_EXCEEDED');
+      // On quota error with all Firebase models exhausted, try Direct API
+      if (errorMessage.includes('quota') && currentModelIndex >= GEMINI_MODELS.length - 1 && !useDirectAPI && directGeminiAI) {
+        const switched = await switchToDirectAPI();
+        if (switched) {
+          console.log('Firebase quota exceeded. Switching to Direct Google Gen AI SDK for higher rates...');
+          attempt--; // Don't count this as a retry attempt
+          continue;
+        }
+      }
+
+      // Final fallback: quota exhausted on all backends
+      if (errorMessage.includes('quota') && currentModelIndex >= GEMINI_MODELS.length - 1 && useDirectAPI) {
+        const quotaError = new Error('AI_QUOTA_EXCEEDED_ALL_BACKENDS');
         (quotaError as any).originalError = error;
         throw quotaError;
       }
@@ -133,6 +211,30 @@ export const generateText = async (
 ): Promise<string> => {
   return retryWithBackoff(async () => {
     try {
+      // In exclusive GenAI mode, ALWAYS use Direct API
+      if (isExclusiveGenAI) {
+        if (!directGeminiAI) {
+          throw new Error('Direct Google Gen AI SDK not initialized. Check EXPO_PUBLIC_GENAI_API_KEY.');
+        }
+        const model = GEMINI_MODELS[currentModelIndex];
+        const result = await directGeminiAI.models.generateContent({
+          model: model,
+          contents: prompt,
+        });
+        return result.text;
+      }
+
+      // Otherwise use Firebase backend (or fallback to Direct API if switched)
+      if (useDirectAPI && directGeminiAI) {
+        const model = GEMINI_MODELS[currentModelIndex];
+        const result = await directGeminiAI.models.generateContent({
+          model: model,
+          contents: prompt,
+        });
+        return result.text;
+      }
+
+      // Use Firebase if available
       if (!currentModel) {
         throw new Error('Gemini model not initialized. Check Firebase configuration.');
       }
@@ -574,7 +676,12 @@ export const getWallPerspectives = async (
 ): Promise<WallPerspective[]> => {
   return retryWithBackoff(async () => {
     try {
-      if (!currentModel) {
+      // Check for exclusive GenAI mode first
+      if (isExclusiveGenAI && !directGeminiAI) {
+        throw new Error('Direct Google Gen AI SDK not initialized. Check EXPO_PUBLIC_GENAI_API_KEY.');
+      }
+
+      if (!isExclusiveGenAI && !currentModel) {
         throw new Error('Gemini model not initialized. Check Firebase configuration.');
       }
 
@@ -661,11 +768,18 @@ Return ONLY valid JSON (no markdown, no explanation):
 }
       `;
 
-      const result = await currentModel.generateContent({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      });
+      const result = await (isExclusiveGenAI && directGeminiAI
+        ? directGeminiAI.models.generateContent({
+            model: GEMINI_MODELS[currentModelIndex],
+            contents: prompt,
+          })
+        : currentModel!.generateContent({
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          }));
 
-      const responseText = result.response.text();
+      const responseText = isExclusiveGenAI && directGeminiAI
+        ? (result as any).text
+        : result.response.text();
       let jsonText = responseText.trim();
       if (jsonText.startsWith('```')) {
         jsonText = jsonText.replace(/^```json\n?/, '').replace(/^```\n?/, '').replace(/\n?```$/, '');
@@ -718,7 +832,14 @@ export const getFoundationPerspectives = async (
 ): Promise<FoundationPerspective[]> => {
   return retryWithBackoff(async () => {
     try {
-      if (!currentModel) throw new Error('Gemini model not initialized.');
+      // Check for exclusive GenAI mode first
+      if (isExclusiveGenAI && !directGeminiAI) {
+        throw new Error('Direct Google Gen AI SDK not initialized. Check EXPO_PUBLIC_GENAI_API_KEY.');
+      }
+
+      if (!isExclusiveGenAI && !currentModel) {
+        throw new Error('Gemini model not initialized.');
+      }
 
       const cementMaterials = availableMaterials.filter(m => m.type === 'Cement');
       const steelMaterials = availableMaterials.filter(m => m.type === 'Steel (TMT Bar)' || m.type === 'Steel' || m.type === 'TMT Bar');
@@ -761,8 +882,22 @@ Return ONLY valid JSON:
   ]
 }`;
 
-      const result = await currentModel.generateContent({ contents: [{ role: 'user', parts: [{ text: prompt }] }] });
-      let jsonText = result.response.text().trim().replace(/^```json\n?/, '').replace(/^```\n?/, '').replace(/\n?```$/, '');
+      let result;
+      
+      if (isExclusiveGenAI && directGeminiAI) {
+        // Use Direct Google Gen AI in exclusive mode
+        const model = GEMINI_MODELS[currentModelIndex];
+        result = await directGeminiAI.models.generateContent({
+          model: model,
+          contents: prompt,
+        });
+        var jsonText = result.text.trim().replace(/^```json\n?/, '').replace(/^```\n?/, '').replace(/\n?```$/, '');
+      } else {
+        // Use Firebase
+        result = await currentModel!.generateContent({ contents: [{ role: 'user', parts: [{ text: prompt }] }] });
+        var jsonText = result.response.text().trim().replace(/^```json\n?/, '').replace(/^```\n?/, '').replace(/\n?```$/, '');
+      }
+      
       const match = jsonText.match(/\{[\s\S]*\}/);
       if (match) jsonText = match[0];
       const parsed = JSON.parse(jsonText);
@@ -844,7 +979,14 @@ export const getRoofingPerspectives = async (
 ): Promise<RoofingPerspective[]> => {
   return retryWithBackoff(async () => {
     try {
-      if (!currentModel) throw new Error('Gemini model not initialized.');
+      // Check for exclusive GenAI mode first
+      if (isExclusiveGenAI && !directGeminiAI) {
+        throw new Error('Direct Google Gen AI SDK not initialized. Check EXPO_PUBLIC_GENAI_API_KEY.');
+      }
+
+      if (!isExclusiveGenAI && !currentModel) {
+        throw new Error('Gemini model not initialized.');
+      }
 
       const roofingMats = availableMaterials.filter(m =>
         ['Roof', 'Roofing', 'Foundation', 'Structural'].includes(m.category)
@@ -925,8 +1067,17 @@ Return ONLY valid JSON (no markdown fences):
   ]
 }`;
 
-      const result = await currentModel.generateContent({ contents: [{ role: 'user', parts: [{ text: prompt }] }] });
-      let jsonText = result.response.text().trim().replace(/^```json\n?/, '').replace(/^```\n?/, '').replace(/\n?```$/, '');
+      const result = await (isExclusiveGenAI && directGeminiAI
+        ? directGeminiAI.models.generateContent({
+            model: GEMINI_MODELS[currentModelIndex],
+            contents: prompt,
+          })
+        : currentModel!.generateContent({ contents: [{ role: 'user', parts: [{ text: prompt }] }] }));
+      
+      let jsonText = isExclusiveGenAI && directGeminiAI
+        ? (result as any).text.trim().replace(/^```json\n?/, '').replace(/^```\n?/, '').replace(/\n?```$/, '')
+        : result.response.text().trim().replace(/^```json\n?/, '').replace(/^```\n?/, '').replace(/\n?```$/, '');
+      
       const match2 = jsonText.match(/\{[\s\S]*\}/);
       if (match2) jsonText = match2[0];
       const parsed = JSON.parse(jsonText);

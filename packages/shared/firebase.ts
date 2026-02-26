@@ -6,6 +6,7 @@ import {
   browserLocalPersistence
 } from 'firebase/auth';
 import { getAI, getGenerativeModel, GoogleAIBackend } from 'firebase/ai';
+import { GoogleGenAI } from '@google/genai';
 import { Platform } from 'react-native';
 
 // Only import AsyncStorage on React Native
@@ -67,28 +68,41 @@ try {
 // 3. Initialize Firestore
 const db = getFirestore(app);
 
+// Get AI backend preference from environment
+const AI_BACKEND = (process.env.EXPO_PUBLIC_AI_BACKEND || 'auto').toLowerCase() as 'firebase' | 'genai' | 'auto';
+
+if (!['firebase', 'genai', 'auto'].includes(AI_BACKEND)) {
+  console.warn(`⚠️ Invalid AI_BACKEND value: ${process.env.EXPO_PUBLIC_AI_BACKEND}. Using 'auto'.`);
+}
+
 // 4. Initialize Gemini AI with Model Fallback Strategy
 let ai: any = null;
 let geminiModel: any = null;
+let directGeminiAI: GoogleGenAI | null = null;
 
-// Model priority list - tries primary first, then falls back to secondaries
-const GEMINI_MODELS = [
+// Firebase models - only Gemini models, Gemma not supported by Firebase
+const FIREBASE_MODELS = [
+  'gemini-2.5-flash',          // Primary: Best balance of speed and quality
   'gemini-flash-latest',       // Fallback: Stable latest
   'gemini-3-flash-preview',    // Fallback: Latest with extended thinking
-  'gemini-2.5-flash',          // Fallback: Previous stable
-  'gemini-flash-lite-latest',  // Primary: Lite version for higher rate limits
+  'gemini-2.5-flash-lite',     // Fallback: Lite version for higher rate limits
 ];
+
+// Direct Google Gen AI models - supports Gemini AND Gemma
+const GENAI_MODELS = [          // Fallback: Gemma model for variety
+  'gemini-2.5-flash',          // Primary: Best balance
+];
+
+// Use appropriate model list based on backend
+const GEMINI_MODELS = AI_BACKEND === 'genai' ? GENAI_MODELS : FIREBASE_MODELS;
 
 // Map of model names to display names
 const MODEL_NAMES: Record<string, string> = {
+  'gemini-2.5-flash': 'Gemini 2.5 Flash',
   'gemini-flash-latest': 'Gemini Flash Latest',
   'gemini-3-flash-preview': 'Gemini 3.0 Flash Preview',
-  'gemini-2.5-flash': 'Gemini 2.5 Flash',
-  'gemini-flash-lite-latest': 'Gemini Flash Lite',
-
-
-
-
+  'gemini-2.5-flash-lite': 'Gemini 2.5 Flash Lite',
+  'gemma-3-27b': 'Gemma 3 27B',
 };
 
 /**
@@ -106,20 +120,46 @@ const createGeminiModel = (aiInstance: any, modelName: string) => {
 };
 
 /**
- * Initialize Gemini AI with primary model
- * Fallback models are used automatically on rate limit/overload errors
+ * Initialize Firebase Gemini AI (Firebase backend)
+ * Only initialized in 'firebase' or 'auto' modes
+ * In 'genai' exclusive mode, skipped to use only Direct Google Gen AI
  */
 try {
-  // Initialize Firebase AI backend with Gemini
-  ai = getAI(app, { backend: new GoogleAIBackend() });
-  
-  // Initialize primary model
-  geminiModel = createGeminiModel(ai, GEMINI_MODELS[0]);
-  
-  console.log(`✓ Gemini AI initialized with ${MODEL_NAMES[GEMINI_MODELS[0]]}`);
+  if (AI_BACKEND !== 'genai') {
+    ai = getAI(app, { backend: new GoogleAIBackend() });
+    geminiModel = createGeminiModel(ai, GEMINI_MODELS[0]);
+    
+    const modeLabel = AI_BACKEND === 'firebase' ? 'EXCLUSIVE' : 'PRIMARY';
+    console.log(`✓ Firebase Gemini AI initialized [${modeLabel}] with ${MODEL_NAMES[GEMINI_MODELS[0]]}`);
+  }
 } catch (error) {
-  console.warn('Gemini AI initialization warning:', error);
+  console.warn('Firebase Gemini AI initialization warning:', error);
 }
 
-export { app, auth, db, ai, geminiModel, GEMINI_MODELS, MODEL_NAMES, createGeminiModel };
+/**
+ * Initialize Direct Google Gen AI SDK (for higher rate limits and as fallback)
+ * In 'genai' mode: Exclusive backend with Gemma support
+ * In 'auto' mode: Fallback backend when Firebase quota exceeded
+ * Not used in 'firebase' exclusive mode
+ */
+try {
+  if (AI_BACKEND !== 'firebase') {
+    const genaiApiKey = process.env.EXPO_PUBLIC_GENAI_API_KEY;
+    
+    if (genaiApiKey) {
+      directGeminiAI = new GoogleGenAI({ apiKey: genaiApiKey });
+      const modeLabel = AI_BACKEND === 'genai' ? 'EXCLUSIVE' : 'FALLBACK';
+      console.log(`✓ Direct Google Gen AI SDK initialized [${modeLabel}] (supports Gemma + higher rate limits)`);
+    } else {
+      console.warn('⚠️ EXPO_PUBLIC_GENAI_API_KEY not found. Direct Gen AI SDK will not be available.');
+      if (AI_BACKEND === 'genai') {
+        console.error('ERROR: AI_BACKEND is set to "genai" but EXPO_PUBLIC_GENAI_API_KEY is missing!');
+      }
+    }
+  }
+} catch (error) {
+  console.warn('Direct Google Gen AI initialization warning:', error);
+}
+
+export { app, auth, db, ai, geminiModel, directGeminiAI, GEMINI_MODELS, MODEL_NAMES, createGeminiModel, AI_BACKEND };
 export default app;

@@ -46,12 +46,13 @@ const getStructuralLabel = (shape: RoofShapeId) =>
   shape === 'flat' ? 'SUPPORT SYSTEM' : 'STRUCTURAL SYSTEM';
 
 // Protection is multi-select (user can pick Underlayment AND Membrane together)
-const SINGLE_SELECT_GROUPS = ['Truss Structure', 'Structural Support', 'Roof Covering', 'Slab Core'];
+const SINGLE_SELECT_GROUPS = ['Truss Structure', 'Structural Support', 'Roof Covering', 'Slab Core', 'Protection'];
 
 // Types that must NOT be shown for a given roofType.
 // Tile roofs only need underlayment — waterproof membrane is for flat/slab roofs.
 const HIDDEN_PROTECTION_TYPES: Record<string, string[]> = {
-  'Sloped Roof - Tile': ['Waterproof Membrane'],
+  // 'Sloped Roof - Tile': ['Waterproof Membrane'],
+  // 'Sloped Roof - Sheet': ['Waterproof Membrane'],
 };
 
 const PITCH_OPTIONS = [
@@ -148,6 +149,10 @@ export default function RoofingScreen({ route, navigation }: any) {
     groups.forEach(({ groupName, types }) => {
       types.forEach(t => validTypes.add(t));
       if (SINGLE_SELECT_GROUPS.includes(groupName)) {
+        // For Protection, we don't force a switch if something else is already active, 
+        // to avoid clobbering multi-layer selections during the auto-sync.
+        if (groupName === 'Protection') return;
+
         const current = selectedGroupType[`${roofType}__${groupName}`];
         newSelectedGroupType[`${roofType}__${groupName}`] =
           (current && types.includes(current)) ? current : types[0];
@@ -173,6 +178,7 @@ export default function RoofingScreen({ route, navigation }: any) {
 
         const typesToFill = activeType ? [activeType] : types;
         typesToFill.forEach(type => {
+          if (groupName === 'Protection') return; // Step 4 is optional
           const selKey = `${roofType}_${type}`;
           if (!next[selKey]) {
             const mat = getDefaultMaterial(type);
@@ -192,7 +198,18 @@ export default function RoofingScreen({ route, navigation }: any) {
     if (roofShape === 'flat') {
       setRoofType('Slab');
     } else {
+      // Auto-select sheet for shed roofs as they are typically industrial/modern sheet constructions
+      if (roofShape === 'shed') {
+        setCoveringChoice('sheet');
+      }
       setRoofType(coveringChoice === 'sheet' ? 'Sloped Roof - Sheet' : 'Sloped Roof - Tile');
+
+      // Auto-set the active tab for Protection based on covering choice
+      const targetProtection = coveringChoice === 'sheet' ? 'Anti-condensation Felt' : 'Roofing Underlayment';
+      setSelectedGroupType(prev => ({
+        ...prev,
+        [`${coveringChoice === 'sheet' ? 'Sloped Roof - Sheet' : 'Sloped Roof - Tile'}__Protection`]: targetProtection
+      }));
     }
   }, [roofShape, coveringChoice]);
 
@@ -245,7 +262,9 @@ export default function RoofingScreen({ route, navigation }: any) {
 
   const handleGroupTypeTab = (layer: string, groupName: string, type: string, prev: string) => {
     setSelectedGroupType(s => ({ ...s, [`${layer}__${groupName}`]: type }));
-    if (prev !== type) {
+    // For most groups, switching tabs means replacing the selection.
+    // For 'Protection', we allow persistence across tabs so users can pick multiple layers.
+    if (prev !== type && groupName !== 'Protection') {
       setSelections(s => {
         const u = { ...s };
         delete u[`${layer}_${prev}`];
@@ -341,19 +360,12 @@ export default function RoofingScreen({ route, navigation }: any) {
       return Alert.alert(`Missing ${coveringNeeded}`, `Please select a ${coveringNeeded} material.`);
     }
 
-    // Auto-apply first VISIBLE protection layer if none chosen
-    // Respects HIDDEN_PROTECTION_TYPES — e.g. Tile roofs only get Underlayment, never Membrane
+    // Removal of auto-apply protection logic to make Step 4 strictly optional
+    /*
     if (!protectionSelected) {
-      const protectionGroup = groups.find(g => g.groupName === 'Protection');
-      if (protectionGroup) {
-        const hiddenTypes = HIDDEN_PROTECTION_TYPES[roofType] ?? [];
-        const defaultType = protectionGroup.types.find(t => !hiddenTypes.includes(t));
-        if (defaultType) {
-          const mat = getDefaultMaterial(defaultType);
-          if (mat) cleaned[`${roofType}_${defaultType}`] = mat;
-        }
-      }
+      ...
     }
+    */
 
     navigation.navigate('RoofingCostScreen', {
       projectId,
@@ -437,7 +449,7 @@ export default function RoofingScreen({ route, navigation }: any) {
               >
                 {isPerspectiveLoading
                   ? <ActivityIndicator size="small" color="#315b76" />
-                  : <><Ionicons name="refresh" size={12} color="#315b76" /><Text style={styles.regenerateBtnText}>Refresh</Text></>}
+                  : <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><Ionicons name="refresh" size={12} color="#315b76" /><Text style={styles.regenerateBtnText}>Refresh</Text></View>}
               </TouchableOpacity>
             </View>
 
@@ -479,21 +491,22 @@ export default function RoofingScreen({ route, navigation }: any) {
                         <View style={styles.hierChain}>
                           <HierChainItem icon="home-outline" label={p.recommendedRoofShape === 'gable' ? 'Pitched' : p.recommendedRoofShape} />
                           {p.recommendedRoofType && (
-                            <>
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                               <Ionicons name="chevron-forward" size={9} color="#94a3b8" />
                               <HierChainItem icon="layers-outline" label={p.recommendedRoofType} />
-                            </>
-                          )}                          {p.recommendedCoveringMethod && (
-                            <>
+                            </View>
+                          )}
+                          {p.recommendedCoveringMethod && (
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                               <Ionicons name="chevron-forward" size={9} color="#94a3b8" />
                               <HierChainItem icon="grid-outline" label={p.recommendedCoveringMethod} />
-                            </>
+                            </View>
                           )}
                           {p.recommendedConstructionMethod && (
-                            <>
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                               <Ionicons name="chevron-forward" size={9} color="#94a3b8" />
                               <HierChainItem icon="construct-outline" label={p.recommendedConstructionMethod} />
-                            </>
+                            </View>
                           )}
                         </View>
                       )}
@@ -684,7 +697,7 @@ export default function RoofingScreen({ route, navigation }: any) {
 
             {/* High-level Tile / Sheet toggle (sloped only) */}
             {roofShape !== 'flat' && (
-              <>
+              <View>
                 <Text style={{ fontSize: 12, fontWeight: '700', color: '#1e293b', marginBottom: 8 }}>Covering Material Category</Text>
                 <View style={{ flexDirection: 'row', gap: 10, marginBottom: 12 }}>
                   {COVERING_OPTIONS.map(({ value, icon, label }) => (
@@ -699,7 +712,7 @@ export default function RoofingScreen({ route, navigation }: any) {
                     </TouchableOpacity>
                   ))}
                 </View>
-              </>
+              </View>
             )}
 
             {/* Material cards */}
@@ -726,79 +739,50 @@ export default function RoofingScreen({ route, navigation }: any) {
             </ScrollView>
           </View>
 
-          {/* ════ Material Specification ════════════════════════════════════ */}
-          <Text style={styles.sectionLabel}>MATERIAL SPECIFICATION ({tier})</Text>
-          <View key={roofType} style={styles.layerContainer}>
-            <View style={styles.layerTitleRow}>
-              <View style={styles.layerTitleDot} />
-              <Text style={styles.layerTitle}>{roofType}</Text>
-            </View>
-            {getMaterialGroupsForRoofType(roofType).map(({ groupName, types }) => {
-              // Only show Protection group; Structural and Covering are handled in Steps 2 & 3
-              if (groupName === 'Truss Structure' || groupName === 'Structural Support' || groupName === 'Roof Covering' || groupName === 'Slab Core') return null;
-
-              // Filter out protection types that don't apply to this roof type
-              // e.g. Waterproof Membrane is hidden for Tile roofs — underlayment only
+          {/* ════ Step 4: Protection Layers ═══════════════════════════════ */}
+          <View style={{ marginBottom: 18 }}>
+            <Text style={styles.sectionLabel}>STEP 4 · PROTECTION LAYERS</Text>
+            {getMaterialGroupsForRoofType(roofType).filter(g => g.groupName === 'Protection').map(({ groupName, types }) => {
               const hiddenTypes = HIDDEN_PROTECTION_TYPES[roofType] ?? [];
               const visibleTypes = types.filter(t => !hiddenTypes.includes(t));
               if (!visibleTypes.length) return null;
 
               const activeType = getActiveGroupType(roofType, groupName, visibleTypes);
               return (
-                <View key={groupName || 'default'}>
-                  {groupName && groupName !== 'System' && (
-                    <View style={styles.groupHeaderRow}>
-                      <Ionicons name="play" size={9} color="#315b76" />
-                      <Text style={styles.groupHeaderText}>{groupName}</Text>
-                    </View>
-                  )}
-                  {SINGLE_SELECT_GROUPS.includes(groupName) ? (
-                    <View>
-                      <View style={styles.trussTabRow}>
-                        {visibleTypes.map(t => (
-                          <TouchableOpacity
-                            key={t}
-                            style={[styles.trussTab, activeType === t && styles.trussTabActive]}
-                            onPress={() => handleGroupTypeTab(roofType, groupName, t, activeType)}
-                          >
-                            <Text style={[styles.trussTabText, activeType === t && styles.trussTabTextActive]}>{t}</Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                      <View style={styles.materialRow}>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 20 }}>
-                          {materials.filter(m => m.type === activeType).map(item => (
-                            <MaterialCard
-                              key={item.id}
-                              item={item}
-                              selected={selections[`${roofType}_${activeType}`]?.id === item.id}
-                              onPress={() => handleMaterialSelect(roofType, activeType, item, groupName, visibleTypes)}
-                            />
-                          ))}
-                        </ScrollView>
-                      </View>
-                    </View>
-                  ) : (
-                    visibleTypes.map(type => (
-                      <View key={type} style={styles.materialRow}>
-                        <Text style={styles.materialTypeLabel}>{type}</Text>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 20 }}>
-                          {materials.filter(m => m.type === type).map(item => (
-                            <MaterialCard
-                              key={item.id}
-                              item={item}
-                              selected={selections[`${roofType}_${type}`]?.id === item.id}
-                              onPress={() => handleMaterialSelect(roofType, type, item, groupName, visibleTypes)}
-                            />
-                          ))}
-                        </ScrollView>
-                      </View>
-                    ))
-                  )}
+                <View key={groupName}>
+                  <View style={styles.filterContainer}>
+                    {visibleTypes.map(t => {
+                      const isActive = activeType === t;
+                      const hasSelection = !!selections[`${roofType}_${t}`];
+                      return (
+                        <TouchableOpacity
+                          key={t}
+                          style={[styles.filterCard, isActive && styles.filterCardActive]}
+                          onPress={() => handleGroupTypeTab(roofType, groupName, t, activeType)}
+                        >
+                          <Text style={[styles.filterCardText, isActive && styles.filterCardTextActive]}>{t.split(' ').pop()}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+
+                  <Text style={{ fontSize: 11, fontWeight: '600', color: '#64748b', marginBottom: 8 }}>Available {activeType} Options:</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 20 }}>
+                    {materials.filter(m => m.type === activeType).map(item => (
+                      <MaterialCard
+                        key={item.id}
+                        item={item}
+                        selected={selections[`${roofType}_${activeType}`]?.id === item.id}
+                        onPress={() => handleMaterialSelect(roofType, activeType, item, groupName, visibleTypes)}
+                      />
+                    ))}
+                  </ScrollView>
                 </View>
               );
             })}
           </View>
+
+
 
           <View style={{ height: 120 }} />
         </ScrollView>
@@ -806,7 +790,10 @@ export default function RoofingScreen({ route, navigation }: any) {
         <TouchableOpacity style={styles.mainBtn} onPress={handleSave}>
           {saving
             ? <ActivityIndicator color="#fff" />
-            : <><Text style={styles.mainBtnText}>Calculate & Save</Text><Ionicons name="calculator" size={20} color="#fff" /></>}
+            : <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <Text style={styles.mainBtnText}>Calculate & Save</Text>
+                <Ionicons name="calculator" size={20} color="#fff" />
+              </View>}
         </TouchableOpacity>
       </SafeAreaView>
     </View>
@@ -873,6 +860,13 @@ const styles = StyleSheet.create({
   trussTabActive: { backgroundColor: '#f0f9ff', borderColor: '#315b76', borderWidth: 2 },
   trussTabText: { fontSize: 12, fontWeight: '700', color: '#64748b' },
   trussTabTextActive: { color: '#315b76' },
+
+  filterContainer: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  filterCard: { flex: 1, backgroundColor: '#f1f5f9', paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center', justifyContent: 'center' },
+  filterCardActive: { backgroundColor: '#fff', borderColor: '#315b76', elevation: 2 },
+  filterCardText: { fontSize: 10, fontWeight: '700', color: '#64748b', textAlign: 'center' },
+  filterCardTextActive: { color: '#315b76' },
+  miniCheck: { position: 'absolute', top: -4, right: -4, backgroundColor: '#10b981', borderRadius: 10, padding: 2, borderWidth: 1, borderColor: '#fff' },
   materialRow: { marginBottom: 16 },
   materialTypeLabel: { fontSize: 12, color: '#64748b', fontWeight: '600', marginBottom: 8, marginLeft: 4 },
   materialCard: { width: 140, backgroundColor: '#fff', borderRadius: 16, marginRight: 12, padding: 10, borderWidth: 1, borderColor: '#f1f5f9', elevation: 1, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 2 },

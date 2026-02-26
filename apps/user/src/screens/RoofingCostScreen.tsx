@@ -409,6 +409,7 @@ export default function RoofingCostScreen({ route, navigation }: any) {
         const PROTECTION_TYPES_TILE = [
           { type: 'Roofing Underlayment', label: 'Underlayment' },
           { type: 'Waterproof Membrane', label: 'Waterproof Membrane' },
+          { type: 'Anti-condensation Felt', label: 'Anti-condensation Felt' },
         ];
         let anyProtection = false;
         PROTECTION_TYPES_TILE.forEach(({ type, label }) => {
@@ -479,6 +480,7 @@ export default function RoofingCostScreen({ route, navigation }: any) {
         // --- PROTECTION ---
         const rolls = Math.ceil((slopedAreaM2 * 1.1) / 50);
         const PROTECTION_TYPES_SHEET = [
+          { type: 'Roofing Underlayment', label: 'Underlayment' },
           { type: 'Anti-condensation Felt', label: 'Anti-condensation Felt' },
           { type: 'Waterproof Membrane', label: 'Waterproof Membrane' },
         ];

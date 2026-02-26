@@ -87,12 +87,12 @@ export const CONSTRUCTION_HIERARCHY = {
       "Sloped Roof - Tile": {
         "Truss Structure": ["Steel Truss", "Timber/Wood Truss"],
         "Roof Covering": ["Clay Roof Tile", "Concrete Roof Tile", "Slate Tile"],
-        "Protection": ["Roofing Underlayment", "Waterproof Membrane"]
+        "Protection": ["Roofing Underlayment", "Waterproof Membrane", "Anti-condensation Felt"]
       },
       "Sloped Roof - Sheet": {
         "Truss Structure": ["Steel Truss"],
         "Roof Covering": ["Galvanized Iron Sheet", "Aluminium Sheet", "Polycarbonate Sheet"],
-        "Protection": ["Anti-condensation Felt", "Waterproof Membrane"]
+        "Protection": ["Roofing Underlayment", "Waterproof Membrane", "Anti-condensation Felt"]
       }
     },
   },
