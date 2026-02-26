@@ -166,7 +166,7 @@ export default function ConstructionLevelScreen({ route, navigation }: any) {
       navigation.navigate('PaintingScreen', { totalArea, projectId, tier: activeTab });
     }
     else if (item.title === 'Openings') {
-      navigation.navigate('OpeningsScreen', { totalArea, projectId, tier: activeTab });
+      navigation.navigate('OpeningsScreen', { totalArea, projectId, tier: activeTab, rooms });
     }
     else {
       navigation.navigate('EstimateResult', { totalArea, level: activeTab, projectId });

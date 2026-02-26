@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, Image, ScrollView,
   TouchableOpacity, TextInput, ActivityIndicator, Alert, Platform,
@@ -24,8 +24,6 @@ interface RoomData {
     partitionWallRatio: number;
   };
   openingPercentage?: number;
-  doorCount?: number;
-  windowCount?: number;
   features?: string[];
 }
 
@@ -90,8 +88,6 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
           roomType: room.roomType || 'standard',
           wallMetadata: room.wallMetadata, // AI-only, no defaults
           openingPercentage: room.openingPercentage, // AI-only, no defaults
-          doorCount: room.doorCount,
-          windowCount: room.windowCount,
           features: room.features || []
         }));
         setRooms(roomsWithIds);
@@ -117,8 +113,6 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
               "partitionWallRatio": "number"
             },
             "openingPercentage": "number",
-            "doorCount": "number (count of doors detected in this room)",
-            "windowCount": "number (count of windows detected in this room)",
             "features": ["string"]
           }
         ],
@@ -156,8 +150,6 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
           roomType: room.roomType || 'standard',
           wallMetadata: room.wallMetadata, // AI-only, no defaults
           openingPercentage: room.openingPercentage, // AI-only, no defaults
-          doorCount: room.doorCount,
-          windowCount: room.windowCount,
           features: room.features || []
         }));
         setRooms(roomsWithIds);

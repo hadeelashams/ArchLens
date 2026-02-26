@@ -23,18 +23,29 @@ export default function HomeScreen({ navigation }: any) {
       const name = user.displayName || user.email?.split('@')[0] || 'User';
       setUserName(name);
 
-      // Listen for the most recent project
+      // Listen for projects and pick the most recent one client-side
       const q = query(
         collection(db, 'projects'),
-        where('userId', '==', user.uid),
-        orderBy('updatedAt', 'desc'),
-        limit(1)
+        where('userId', '==', user.uid)
       );
 
       const unsubscribe = onSnapshot(q, (snapshot) => {
         if (!snapshot.empty) {
-          const project = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
-          setRecentProject(project);
+          const projects = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          } as any));
+
+          // Sort descending by updatedAt
+          projects.sort((a, b) => {
+            const timeA = a.updatedAt?.toMillis ? a.updatedAt.toMillis() : (a.updatedAt?.seconds || 0) * 1000;
+            const timeB = b.updatedAt?.toMillis ? b.updatedAt.toMillis() : (b.updatedAt?.seconds || 0) * 1000;
+            return timeB - timeA;
+          });
+
+          setRecentProject(projects[0]);
+        } else {
+          setRecentProject(null);
         }
       });
 

@@ -62,12 +62,12 @@ const switchToDirectAPI = async () => {
     console.warn('Cannot switch to Direct API in exclusive GenAI mode');
     return false;
   }
-  
+
   if (!directGeminiAI) {
     console.warn('Direct Google Gen AI SDK not initialized');
     return false;
   }
-  
+
   useDirectAPI = true;
   console.log('ℹ️ Switched to Direct Google Gen AI SDK (auto fallback due to Firebase quota)');
   return true;
@@ -124,7 +124,7 @@ const getBackendModel = () => {
     }
     return { type: 'genai' as const, client: directGeminiAI };
   }
-  
+
   if (useDirectAPI && directGeminiAI) {
     return { type: 'genai' as const, client: directGeminiAI };
   }
@@ -770,12 +770,12 @@ Return ONLY valid JSON (no markdown, no explanation):
 
       const result = await (isExclusiveGenAI && directGeminiAI
         ? directGeminiAI.models.generateContent({
-            model: GEMINI_MODELS[currentModelIndex],
-            contents: prompt,
-          })
+          model: GEMINI_MODELS[currentModelIndex],
+          contents: prompt,
+        })
         : currentModel!.generateContent({
-            contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          }));
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        }));
 
       const responseText = isExclusiveGenAI && directGeminiAI
         ? (result as any).text
@@ -883,7 +883,7 @@ Return ONLY valid JSON:
 }`;
 
       let result;
-      
+
       if (isExclusiveGenAI && directGeminiAI) {
         // Use Direct Google Gen AI in exclusive mode
         const model = GEMINI_MODELS[currentModelIndex];
@@ -897,7 +897,7 @@ Return ONLY valid JSON:
         result = await currentModel!.generateContent({ contents: [{ role: 'user', parts: [{ text: prompt }] }] });
         var jsonText = result.response.text().trim().replace(/^```json\n?/, '').replace(/^```\n?/, '').replace(/\n?```$/, '');
       }
-      
+
       const match = jsonText.match(/\{[\s\S]*\}/);
       if (match) jsonText = match[0];
       const parsed = JSON.parse(jsonText);
@@ -1069,15 +1069,15 @@ Return ONLY valid JSON (no markdown fences):
 
       const result = await (isExclusiveGenAI && directGeminiAI
         ? directGeminiAI.models.generateContent({
-            model: GEMINI_MODELS[currentModelIndex],
-            contents: prompt,
-          })
+          model: GEMINI_MODELS[currentModelIndex],
+          contents: prompt,
+        })
         : currentModel!.generateContent({ contents: [{ role: 'user', parts: [{ text: prompt }] }] }));
-      
+
       let jsonText = isExclusiveGenAI && directGeminiAI
         ? (result as any).text.trim().replace(/^```json\n?/, '').replace(/^```\n?/, '').replace(/\n?```$/, '')
         : result.response.text().trim().replace(/^```json\n?/, '').replace(/^```\n?/, '').replace(/\n?```$/, '');
-      
+
       const match2 = jsonText.match(/\{[\s\S]*\}/);
       if (match2) jsonText = match2[0];
       const parsed = JSON.parse(jsonText);

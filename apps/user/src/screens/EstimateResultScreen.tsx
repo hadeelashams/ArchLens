@@ -507,6 +507,10 @@ export default function EstimateResultScreen({ route, navigation }: any) {
                     <Text style={styles.statLabel}>Categories</Text>
                     <Text style={styles.statValue}>{Object.keys(categoryBreakdown).length}</Text>
                   </View>
+                  <View style={styles.statItem}>
+                    <Text style={styles.statLabel}>Plan Area</Text>
+                    <Text style={styles.statValue}>{activeProject?.totalArea || 0} sq.ft</Text>
+                  </View>
                 </View>
               </LinearGradient>
             </View>
