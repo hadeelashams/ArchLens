@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import {
   db, createDocument, updateDocument, deleteDocument,
-  CONSTRUCTION_HIERARCHY, MATERIAL_UNITS, WALL_MATERIALS_SEED_DATA, ROOFING_MATERIALS_SEED_DATA, OPENINGS_MATERIALS_SEED_DATA
+  CONSTRUCTION_HIERARCHY, MATERIAL_UNITS, WALL_MATERIALS_SEED_DATA, ROOFING_MATERIALS_SEED_DATA, OPENINGS_MATERIALS_SEED_DATA, PLASTERING_MATERIALS_SEED_DATA, WALL_FINISHING_MATERIALS_SEED_DATA
 } from '@archlens/shared';
 import { collection, onSnapshot, query, orderBy, where, getDocs, serverTimestamp, doc, writeBatch } from 'firebase/firestore';
 import { Feather } from '@expo/vector-icons';
@@ -23,8 +23,10 @@ export default function DashboardScreen({ navigation }: any) {
   const [isSeedingWallMaterials, setIsSeedingWallMaterials] = useState(false);
   const [isSeedingRoofingMaterials, setIsSeedingRoofingMaterials] = useState(false);
   const [isSeedingOpeningsMaterials, setIsSeedingOpeningsMaterials] = useState(false);
+  const [isSeedingPlasteringMaterials, setIsSeedingPlasteringMaterials] = useState(false);
+  const [isSeedingWallFinishingMaterials, setIsSeedingWallFinishingMaterials] = useState(false);
   const [showSeedConfirm, setShowSeedConfirm] = useState(false);
-  const [seedType, setSeedType] = useState<'wall' | 'roofing' | 'openings' | null>(null);
+  const [seedType, setSeedType] = useState<'wall' | 'roofing' | 'openings' | 'plastering' | 'wall-finishing' | null>(null);
 
   // --- UI STATE ---
   const [searchQuery, setSearchQuery] = useState('');
@@ -101,7 +103,11 @@ export default function DashboardScreen({ navigation }: any) {
     return [];
   };
 
-  const isWallCategory = () => selCategory?.toLowerCase().includes('wall');
+  const showDimensions = () => {
+    const cat = selCategory?.toLowerCase();
+    // Dimensions needed for Wall and Flooring, but NOT for Wall Finishing
+    return cat === 'wall' || cat === 'flooring';
+  };
 
   // Auto-fill Logic
   const handleIngredientSelect = (ing: string) => {
@@ -171,8 +177,8 @@ export default function DashboardScreen({ navigation }: any) {
     setName(''); setPrice(''); setUnit(''); setGrade(''); setDimensions(''); setImageUrl('');
   };
 
-  // ===== SEED MATERIALS FUNCTION (WALL & ROOFING) =====
-  const handleSeedMaterials = (type: 'wall' | 'roofing' | 'openings') => {
+  // ===== SEED MATERIALS FUNCTION (WALL, ROOFING, OPENINGS, PLASTERING, WALL FINISHING) =====
+  const handleSeedMaterials = (type: 'wall' | 'roofing' | 'openings' | 'plastering' | 'wall-finishing') => {
     console.log(`🔘 Seed ${type} materials button clicked!`);
     setSeedType(type);
     setShowSeedConfirm(true);
@@ -185,8 +191,12 @@ export default function DashboardScreen({ navigation }: any) {
       setIsSeedingWallMaterials(true);
     } else if (seedType === 'roofing') {
       setIsSeedingRoofingMaterials(true);
-    } else {
+    } else if (seedType === 'openings') {
       setIsSeedingOpeningsMaterials(true);
+    } else if (seedType === 'plastering') {
+      setIsSeedingPlasteringMaterials(true);
+    } else {
+      setIsSeedingWallFinishingMaterials(true);
     }
     await seedMaterials();
   };
@@ -196,11 +206,13 @@ export default function DashboardScreen({ navigation }: any) {
       let seedData: any[] = [];
       if (seedType === 'wall') seedData = WALL_MATERIALS_SEED_DATA;
       else if (seedType === 'roofing') seedData = ROOFING_MATERIALS_SEED_DATA;
-      else seedData = OPENINGS_MATERIALS_SEED_DATA;
+      else if (seedType === 'openings') seedData = OPENINGS_MATERIALS_SEED_DATA;
+      else if (seedType === 'plastering') seedData = PLASTERING_MATERIALS_SEED_DATA;
+      else seedData = WALL_FINISHING_MATERIALS_SEED_DATA;
 
-      const seedName = seedType === 'wall' ? 'Wall' : seedType === 'roofing' ? 'Roof' : 'Openings';
+      const seedName = seedType === 'wall' ? 'Wall' : seedType === 'roofing' ? 'Roof' : seedType === 'openings' ? 'Openings' : seedType === 'plastering' ? 'Plastering' : 'Wall Finishing';
       // Also delete old materials that may have had the wrong category name
-      const categoriesToDelete = seedType === 'wall' ? ['Wall'] : seedType === 'roofing' ? ['Roof', 'Roofing'] : ['Openings'];
+      const categoriesToDelete = seedType === 'wall' ? ['Wall'] : seedType === 'roofing' ? ['Roof', 'Roofing'] : seedType === 'openings' ? ['Openings'] : seedType === 'plastering' ? ['Plastering'] : ['Wall Finishing'];
       const seedCount = seedData.length;
 
       // Step 1: Delete existing materials for this category
@@ -245,6 +257,8 @@ export default function DashboardScreen({ navigation }: any) {
       setIsSeedingWallMaterials(false);
       setIsSeedingRoofingMaterials(false);
       setIsSeedingOpeningsMaterials(false);
+      setIsSeedingPlasteringMaterials(false);
+      setIsSeedingWallFinishingMaterials(false);
 
       Alert.alert(
         "✨ Success!",
@@ -259,6 +273,8 @@ export default function DashboardScreen({ navigation }: any) {
       setIsSeedingWallMaterials(false);
       setIsSeedingRoofingMaterials(false);
       setIsSeedingOpeningsMaterials(false);
+      setIsSeedingPlasteringMaterials(false);
+      setIsSeedingWallFinishingMaterials(false);
       Alert.alert("❌ Seed Failed", error.message || "Unknown error occurred");
     }
   };
@@ -363,12 +379,42 @@ export default function DashboardScreen({ navigation }: any) {
                   </>
                 )}
               </TouchableOpacity>
-            </View>
 
-            <TouchableOpacity style={styles.primaryBtn} onPress={() => { resetForm(); setModalVisible(true); }}>
-              <Feather name="plus" size={18} color="#fff" />
-              <Text style={styles.btnText}>Add Material</Text>
-            </TouchableOpacity>
+              <TouchableOpacity style={styles.primaryBtn} onPress={() => { resetForm(); setModalVisible(true); }}>
+                <Feather name="plus" size={18} color="#fff" />
+                <Text style={styles.btnText}>Add Material</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.secondaryBtn, isSeedingPlasteringMaterials && { opacity: 0.6 }]}
+                onPress={() => handleSeedMaterials('plastering')}
+                disabled={isSeedingPlasteringMaterials}
+              >
+                {isSeedingPlasteringMaterials ? (
+                  <ActivityIndicator color="#1e293b" size={18} />
+                ) : (
+                  <>
+                    <Feather name="download" size={18} color="#1e293b" />
+                    <Text style={[styles.btnText, { color: '#1e293b' }]}>Seed Plaster (5)</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.secondaryBtn, isSeedingWallFinishingMaterials && { opacity: 0.6 }]}
+                onPress={() => handleSeedMaterials('wall-finishing')}
+                disabled={isSeedingWallFinishingMaterials}
+              >
+                {isSeedingWallFinishingMaterials ? (
+                  <ActivityIndicator color="#1e293b" size={18} />
+                ) : (
+                  <>
+                    <Feather name="download" size={18} color="#1e293b" />
+                    <Text style={[styles.btnText, { color: '#1e293b' }]}>Seed Finish (9)</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 
@@ -550,9 +596,9 @@ export default function DashboardScreen({ navigation }: any) {
                   </View>
                 </View>
 
-                {isWallCategory() && (
+                {showDimensions() && (
                   <View style={{ marginTop: 15 }}>
-                    <Text style={[styles.label, { color: '#d97706' }]}>Block Dimensions</Text>
+                    <Text style={[styles.label, { color: '#d97706' }]}>Dimensions / Size</Text>
                     <TextInput
                       style={[styles.input, { borderColor: '#fcd34d', backgroundColor: '#fffbeb' }]}
                       placeholder="L x W x H (inches)"
@@ -657,14 +703,18 @@ export default function DashboardScreen({ navigation }: any) {
         <View style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.7)', justifyContent: 'center', alignItems: 'center' }}>
           <View style={{ backgroundColor: '#fff', borderRadius: 24, padding: 40, width: 500, gap: 20 }}>
             <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#0f172a' }}>
-              {seedType === 'wall' ? '🧱 Seed Wall Materials?' : seedType === 'roofing' ? '🏠 Seed Roofing Materials?' : '🚪 Seed Openings Materials?'}
+              {seedType === 'wall' ? '🧱 Seed Wall Materials?' : seedType === 'roofing' ? '🏠 Seed Roofing Materials?' : seedType === 'openings' ? '🚪 Seed Openings Materials?' : seedType === 'plastering' ? '🎨 Seed Plastering Materials?' : '✨ Seed Wall Finishing?'}
             </Text>
             <Text style={{ fontSize: 14, color: '#64748b', lineHeight: 20 }}>
               {seedType === 'wall'
                 ? 'This will add all 19 wall materials (bricks, blocks, cement, sand) to Firestore.'
                 : seedType === 'roofing'
                   ? 'This will add all 21 roofing materials (RCC slab, sloped tiles & sheets) to Firestore.'
-                  : 'This will add all 10 openings materials (Doors, Windows, Hardware) to Firestore.'}
+                  : seedType === 'openings'
+                    ? 'This will add all 10 openings materials (Doors, Windows, Hardware) to Firestore.'
+                    : seedType === 'plastering'
+                      ? 'This will add 5 plastering materials (Gypsum, Putty, Plastering Cement & Sand) to Firestore.'
+                      : 'This will add 9 wall finishing materials (Paint, Cladding, Paneling, Wallpaper) to Firestore.'}
             </Text>
 
             <View style={{ backgroundColor: '#f0fdf4', padding: 15, borderRadius: 12, gap: 6 }}>
@@ -682,11 +732,24 @@ export default function DashboardScreen({ navigation }: any) {
                   <Text style={{ fontSize: 13, fontWeight: '600', color: '#166534' }}>✓ Sloped Roof - Tile (6 materials): Truss, Clay/Concrete Tiles, Underlayment</Text>
                   <Text style={{ fontSize: 13, fontWeight: '600', color: '#166534' }}>✓ Sloped Roof - Sheet (8 materials): Truss, GI, Aluminium, Polycarbonate Sheets</Text>
                 </>
-              ) : (
+              ) : seedType === 'openings' ? (
                 <>
                   <Text style={{ fontSize: 13, fontWeight: '600', color: '#166534' }}>✓ 4 Doors (Main, Flush, PVC)</Text>
                   <Text style={{ fontSize: 13, fontWeight: '600', color: '#166534' }}>✓ 4 Windows (UPVC, Aluminium, Timber)</Text>
                   <Text style={{ fontSize: 13, fontWeight: '600', color: '#166534' }}>✓ 2 Hardware Sets</Text>
+                </>
+              ) : seedType === 'plastering' ? (
+                <>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: '#166534' }}>✓ 1 Gypsum Plaster</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: '#166534' }}>✓ 2 Wall Putty types</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: '#166534' }}>✓ Plastering Cement & Sand</Text>
+                </>
+              ) : (
+                <>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: '#166534' }}>✓ 4 Paint types (Emulsion, Primer, Putty)</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: '#166534' }}>✓ 2 Cladding types (Tiles, Stone)</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: '#166534' }}>✓ 2 Paneling types (PVC, WPC)</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: '#166534' }}>✓ 1 Wallpaper type</Text>
                 </>
               )}
             </View>
@@ -701,9 +764,9 @@ export default function DashboardScreen({ navigation }: any) {
               <TouchableOpacity
                 style={{ flex: 1, padding: 14, borderRadius: 12, backgroundColor: '#10b981', alignItems: 'center' }}
                 onPress={confirmSeed}
-                disabled={isSeedingWallMaterials || isSeedingRoofingMaterials || isSeedingOpeningsMaterials}
+                disabled={isSeedingWallMaterials || isSeedingRoofingMaterials || isSeedingOpeningsMaterials || isSeedingPlasteringMaterials || isSeedingWallFinishingMaterials}
               >
-                {isSeedingWallMaterials || isSeedingRoofingMaterials || isSeedingOpeningsMaterials ? (
+                {isSeedingWallMaterials || isSeedingRoofingMaterials || isSeedingOpeningsMaterials || isSeedingPlasteringMaterials || isSeedingWallFinishingMaterials ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
                   <Text style={{ fontWeight: '600', color: '#fff' }}>Seed Now 🚀</Text>

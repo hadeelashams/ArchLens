@@ -21,7 +21,10 @@ import {
   detectWallComposition,
   getWallPerspectives,
   WallPerspective,
+  saveWallRecommendation,
+  loadWallRecommendation,
 } from '@archlens/shared';
+import { auth } from '@archlens/shared';
 import {
   IN_TO_FT,
   CEMENT_BAGS_PER_M3,
@@ -52,6 +55,7 @@ interface UseWallCalculationsParams {
   rooms:           any[];
   tier:            string;
   wallComposition: any;
+  projectId?:      string;
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
@@ -61,6 +65,7 @@ export function useWallCalculations({
   rooms,
   tier,
   wallComposition,
+  projectId,
 }: UseWallCalculationsParams) {
 
   // ── Data & loading ──────────────────────────────────────────────────────────
@@ -107,6 +112,7 @@ export function useWallCalculations({
   const [aiPerspectives,     setAiPerspectives]     = useState<WallPerspective[]>([]);
   const [selectedPerspectiveId, setSelectedPerspectiveId] = useState<string | null>(null);
   const [isPerspectiveLoading,  setIsPerspectiveLoading]  = useState(false);
+  const [isRecommendationFromSaved, setIsRecommendationFromSaved] = useState(false);
 
   // ── Selection-mode tracking ─────────────────────────────────────────────────
   const [materialSelectionMode, setMaterialSelectionMode] = useState<Record<string, 'ai' | 'manual'>>({
@@ -364,7 +370,7 @@ export function useWallCalculations({
   // 5.  AI Perspectives
   // ════════════════════════════════════════════════════════════════════════════
 
-  const applyPerspective = (perspective: WallPerspective) => {
+  const applyPerspective = async (perspective: WallPerspective) => {
     setSelectedPerspectiveId(perspective.id);
 
     const lb   = materials.find(m => m.id === perspective.loadBearingBrickId);
@@ -389,6 +395,25 @@ export function useWallCalculations({
       cement:           perspective.cementId,
       sand:             perspective.sandId,
     });
+    setIsRecommendationFromSaved(false);
+
+    // Save recommendation to Firestore
+    if (projectId && auth.currentUser) {
+      try {
+        await saveWallRecommendation(projectId, auth.currentUser.uid, {
+          tier,
+          loadBearingBrickId: perspective.loadBearingBrickId,
+          partitionBrickId: perspective.partitionBrickId,
+          cementId: perspective.cementId,
+          sandId: perspective.sandId,
+          finishType: perspective.finishType,
+          reasoning: perspective.reasoning,
+          perspectiveId: perspective.id,
+        });
+      } catch (err: any) {
+        console.error('Error saving wall recommendation:', err);
+      }
+    }
   };
 
   const loadAIPerspectives = async () => {
@@ -397,7 +422,7 @@ export function useWallCalculations({
     try {
       const perspectives = await getWallPerspectives(tier, totalArea, materials);
       setAiPerspectives(perspectives);
-      if (perspectives.length > 0) applyPerspective(perspectives[0]);
+      if (perspectives.length > 0) await applyPerspective(perspectives[0]);
     } catch (err: any) {
       console.error('AI Perspectives Error:', err);
     } finally {
@@ -405,10 +430,58 @@ export function useWallCalculations({
     }
   };
 
-  // Auto-trigger once materials are ready
+  // Load saved wall recommendations
+  const loadSavedRecommendation = async () => {
+    if (!projectId || !materials.length) return;
+
+    try {
+      const saved = await loadWallRecommendation(projectId);
+      if (saved) {
+        const lb = materials.find(m => m.id === saved.loadBearingBrickId);
+        const pb = materials.find(m => m.id === saved.partitionBrickId);
+        const cem = materials.find(m => m.id === saved.cementId);
+        const sand = materials.find(m => m.id === saved.sandId);
+
+        // Apply saved materials
+        if (lb) { setLoadBearingBrick(lb); setMaterialSelectionMode(prev => ({ ...prev, loadBearing: 'ai' })); }
+        if (pb) {
+          setPartitionBrick(pb);
+          setMaterialSelectionMode(prev => ({ ...prev, partition: 'ai' }));
+          if (pb.dimensions?.toLowerCase().includes('x3')) setPartitionWallThickness(3);
+        }
+        if (cem) setSelections(prev => ({ ...prev, Cement: cem }));
+        if (sand) setSelections(prev => ({ ...prev, Sand: sand }));
+
+        // Set other properties
+        if (saved.finishType) setFinishPreference(saved.finishType);
+        if (saved.reasoning) setAiAdvice(saved.reasoning);
+        if (saved.perspectiveId) setSelectedPerspectiveId(saved.perspectiveId);
+
+        setAiRecommendations({
+          loadBearingBrick: saved.loadBearingBrickId,
+          partitionBrick: saved.partitionBrickId,
+          cement: saved.cementId,
+          sand: saved.sandId,
+        });
+
+        setIsRecommendationFromSaved(true);
+        console.log('✅ Loaded saved wall recommendation');
+      }
+    } catch (err: any) {
+      console.error('Error loading saved recommendation:', err);
+    }
+  };
+
+  // Auto-trigger once materials are ready - Load saved recommendation or generate AI perspectives
   useEffect(() => {
     if (materials.length > 0 && aiPerspectives.length === 0 && !isPerspectiveLoading) {
-      loadAIPerspectives();
+      // First, try to load saved recommendation
+      loadSavedRecommendation().then(() => {
+        // If no saved recommendation, load AI perspectives
+        if (!isRecommendationFromSaved) {
+          loadAIPerspectives();
+        }
+      });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [materials]);
@@ -471,6 +544,7 @@ export function useWallCalculations({
     // perspectives
     aiPerspectives, selectedPerspectiveId,
     isPerspectiveLoading, loadAIPerspectives, applyPerspective,
+    isRecommendationFromSaved,
     // selection mode
     materialSelectionMode,
     // calculated outputs

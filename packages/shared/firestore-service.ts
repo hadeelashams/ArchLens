@@ -211,6 +211,60 @@ export const batchCreateDocuments = async (
   }
 };
 
+/**
+ * Wall Recommendation Functions - Save & Load AI recommendations
+ */
+
+export const saveWallRecommendation = async (
+  projectId: string,
+  userId: string,
+  recommendation: {
+    tier: string;
+    loadBearingBrickId: string;
+    partitionBrickId: string;
+    cementId: string;
+    sandId: string;
+    finishType?: string;
+    reasoning?: string;
+    perspectiveId?: string;
+  }
+): Promise<void> => {
+  try {
+    const docId = `${projectId}_wall`;
+    await setDocument(
+      'wallRecommendations',
+      docId,
+      {
+        projectId,
+        userId,
+        ...recommendation,
+        savedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+    console.log('✅ Wall recommendation saved:', docId);
+  } catch (error) {
+    console.error('Error saving wall recommendation:', error);
+    throw error;
+  }
+};
+
+export const loadWallRecommendation = async (
+  projectId: string
+): Promise<DocumentData | null> => {
+  try {
+    const docId = `${projectId}_wall`;
+    const recommendation = await getDocument('wallRecommendations', docId);
+    if (recommendation) {
+      console.log('✅ Wall recommendation loaded:', docId);
+    }
+    return recommendation;
+  } catch (error) {
+    console.error('Error loading wall recommendation:', error);
+    return null;
+  }
+};
+
 export default {
   createDocument,
   getDocument,
@@ -221,4 +275,6 @@ export default {
   queryDocuments,
   getUserDocuments,
   batchCreateDocuments,
+  saveWallRecommendation,
+  loadWallRecommendation,
 };

@@ -30,6 +30,7 @@ import RoofingScreen from './screens/RoofingScreen';
 import RoofingCostScreen from './screens/RoofingCostScreen';
 import FlooringScreen from './screens/FlooringScreen';
 import PaintingScreen from './screens/PaintingScreen';
+import PlasteringScreen from './screens/PlasteringScreen';
 import OpeningsScreen from './screens/OpeningsScreen';
 import ProfileScreen from './screens/ProfileScreen';
 
@@ -40,6 +41,8 @@ import SecurityScreen from './screens/settings/SecurityScreen';
 import HelpCenterScreen from './screens/settings/HelpCenterScreen';
 import PrivacyPolicyScreen from './screens/settings/PrivacyPolicyScreen';
 import EstimateResultScreen from './screens/EstimateResultScreen';
+import OpeningsCostEstimationScreen from './screens/OpeningsCostEstimationScreen';
+
 
 // 1. Updated Stack Param List for TypeScript
 export type RootStackParamList = {
@@ -96,7 +99,16 @@ export type RootStackParamList = {
   };
   FlooringScreen: { totalArea: number; projectId: string; tier: string };
   PaintingScreen: { totalArea: number; projectId: string; tier: string };
-  OpeningsScreen: { totalArea: number; projectId: string; tier: string };
+  PlasteringScreen: { totalArea: number; projectId: string; tier: string; wallComposition?: any };
+  OpeningsScreen: { totalArea: number; projectId: string; tier: string; rooms?: any[] };
+  OpeningsCostEstimation: {
+    projectId: string;
+    totalArea: number;
+    tier: string;
+    roomsData: any[];
+    totalCost: number
+  };
+
   EstimateResult: {
     totalArea: number;
     level: string;
@@ -163,7 +175,10 @@ function AppContent() {
             <Stack.Screen name="RoofingCostScreen" component={RoofingCostScreen} />
             <Stack.Screen name="FlooringScreen" component={FlooringScreen} />
             <Stack.Screen name="PaintingScreen" component={PaintingScreen} />
+            <Stack.Screen name="PlasteringScreen" component={PlasteringScreen} />
             <Stack.Screen name="OpeningsScreen" component={OpeningsScreen} />
+            <Stack.Screen name="OpeningsCostEstimation" component={OpeningsCostEstimationScreen} />
+
             <Stack.Screen name="EstimateResult" component={EstimateResultScreen} />
 
             <Stack.Screen name="Profile" component={ProfileScreen} />

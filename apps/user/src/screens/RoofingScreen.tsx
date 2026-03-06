@@ -420,7 +420,6 @@ export default function RoofingScreen({ route, navigation }: any) {
   const coveringGroups = getMaterialGroupsForRoofType(roofType);
   const coveringGroup = coveringGroups.find(g => g.groupName === (roofShape === 'flat' ? 'Slab Core' : 'Roof Covering'));
   const coveringTypes = coveringGroup?.types ?? [];
-  const activeCoveringType = getActiveGroupType(roofType, coveringGroup?.groupName || 'Roof Covering', coveringTypes);
 
   return (
     <View style={styles.container}>
@@ -655,7 +654,7 @@ export default function RoofingScreen({ route, navigation }: any) {
                 return (
                   <TouchableOpacity
                     key={opt}
-                    style={[styles.structuralCard, isActive && { borderColor: accent, backgroundColor: '#f0f9ff', borderWidth: 2 }]}
+                    style={[styles.choiceCard, isActive && { borderColor: accent, backgroundColor: '#f0f9ff', borderWidth: 2 }]}
                     onPress={() => handleGroupTypeTab(roofType, structuralGroupName, opt, activeStructural)}
                     activeOpacity={0.8}
                   >
@@ -668,7 +667,7 @@ export default function RoofingScreen({ route, navigation }: any) {
 
             {/* Structural Materials */}
             <View style={{ marginTop: 12 }}>
-              <Text style={{ fontSize: 11, fontWeight: '600', color: '#64748b', marginBottom: 8 }}>Available {structuralGroupName} Options:</Text>
+              <Text style={styles.subLabel}>Available {structuralGroupName} Options:</Text>
 
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 20 }}>
                 {materials.filter(m => m.type === activeStructural).map(item => (
@@ -703,7 +702,7 @@ export default function RoofingScreen({ route, navigation }: any) {
                   {COVERING_OPTIONS.map(({ value, icon, label }) => (
                     <TouchableOpacity
                       key={value}
-                      style={[styles.coveringCard, coveringChoice === value && { borderColor: '#315b76', backgroundColor: '#f0f9ff', borderWidth: 2 }]}
+                      style={[styles.choiceCard, coveringChoice === value && { borderColor: '#315b76', backgroundColor: '#f0f9ff', borderWidth: 2 }]}
                       onPress={() => setCoveringChoice(value)}
                       activeOpacity={0.8}
                     >
@@ -716,7 +715,7 @@ export default function RoofingScreen({ route, navigation }: any) {
             )}
 
             {/* Material cards */}
-            <Text style={{ fontSize: 11, fontWeight: '600', color: '#64748b', marginBottom: 8, marginTop: 10 }}>
+            <Text style={[styles.subLabel, { marginTop: 10 }]}>
               {roofShape === 'flat' ? 'Select Slab Type:' : (coveringChoice === 'tile' ? 'Select Tile material:' : 'Select Sheet material:')}
             </Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 20 }}>
@@ -753,7 +752,6 @@ export default function RoofingScreen({ route, navigation }: any) {
                   <View style={styles.filterContainer}>
                     {visibleTypes.map(t => {
                       const isActive = activeType === t;
-                      const hasSelection = !!selections[`${roofType}_${t}`];
                       return (
                         <TouchableOpacity
                           key={t}
@@ -766,7 +764,7 @@ export default function RoofingScreen({ route, navigation }: any) {
                     })}
                   </View>
 
-                  <Text style={{ fontSize: 11, fontWeight: '600', color: '#64748b', marginBottom: 8 }}>Available {activeType} Options:</Text>
+                  <Text style={styles.subLabel}>Available {activeType} Options:</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 20 }}>
                     {materials.filter(m => m.type === activeType).map(item => (
                       <MaterialCard
@@ -811,14 +809,15 @@ const styles = StyleSheet.create({
   tierText: { color: '#fff', fontSize: 12, fontWeight: '800' },
   scroll: { padding: 20 },
   sectionLabel: { fontSize: 11, fontWeight: '800', color: '#94a3b8', letterSpacing: 1, marginBottom: 15, marginTop: 10, textTransform: 'uppercase' },
+  subLabel: { fontSize: 11, fontWeight: '600', color: '#64748b', marginBottom: 8 },
   perspectivesSection: { marginBottom: 18 },
   perspectivesHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   regenerateBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#e0f2fe', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1, borderColor: '#bae6fd' },
   regenerateBtnText: { fontSize: 11, color: '#315b76', fontWeight: '700' },
   perspectiveLoadingCard: { backgroundColor: '#f8fafc', borderRadius: 14, padding: 24, alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#e2e8f0' },
   perspectiveLoadingText: { fontSize: 12, color: '#64748b', fontWeight: '600', textAlign: 'center' },
-  perspectiveCard: { width: 300, backgroundColor: '#fff', borderRadius: 14, padding: 14, borderWidth: 1.5, borderColor: '#e2e8f0' },
-  perspectiveCardSelected: { borderColor: '#315b76', backgroundColor: '#f0f9ff', borderWidth: 2 },
+  perspectiveCard: { width: 300, backgroundColor: '#fff', borderRadius: 14, padding: 14, borderWidth: 1.5, borderColor: '#bae6fd' },
+  perspectiveCardSelected: { borderColor: '#bae6fd', backgroundColor: '#f0f9ff', borderWidth: 2 },
   optionBadge: { backgroundColor: '#f1f5f9', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0', minWidth: 64, alignItems: 'center' },
   optionBadgeSelected: { backgroundColor: '#315b76', borderColor: '#315b76' },
   optionBadgeText: { fontSize: 10, fontWeight: '800', color: '#64748b' },
@@ -832,7 +831,7 @@ const styles = StyleSheet.create({
   perspectiveTags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   perspectiveTagChip: { backgroundColor: '#f1f5f9', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: '#e2e8f0' },
   perspectiveTagText: { fontSize: 9, color: '#64748b', fontWeight: '700' },
-  loadPerspectivesBtn: { backgroundColor: '#e0f2fe', borderRadius: 12, padding: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1.5, borderColor: '#315b76' },
+  loadPerspectivesBtn: { backgroundColor: '#e0f2fe', borderRadius: 12, padding: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1.5, borderColor: '#bae6fd' },
   loadPerspectivesBtnText: { fontSize: 13, color: '#315b76', fontWeight: '700' },
   paramsSection: { backgroundColor: '#fff', padding: 20, borderRadius: 20, marginBottom: 20, borderWidth: 1, borderColor: '#e2e8f0' },
   inputRow: { flexDirection: 'row', gap: 12 },
@@ -849,28 +848,13 @@ const styles = StyleSheet.create({
   pitchDropdownItemActive: { backgroundColor: '#eff6ff' },
   pitchDropdownItemLabel: { fontSize: 14, fontWeight: '700', color: '#64748b' },
   pitchDropdownItemDesc: { fontSize: 11, color: '#94a3b8', marginTop: 2, fontWeight: '500' },
-  layerContainer: { marginBottom: 24 },
-  layerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
-  layerTitleDot: { width: 4, height: 16, backgroundColor: '#315b76', borderRadius: 2 },
-  layerTitle: { fontSize: 14, fontWeight: '800', color: '#315b76' },
-  groupHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 14, marginBottom: 8, paddingLeft: 2 },
-  groupHeaderText: { fontSize: 12, fontWeight: '700', color: '#475569', letterSpacing: 0.3 },
-  trussTabRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  trussTab: { flex: 1, paddingVertical: 9, paddingHorizontal: 12, borderRadius: 14, backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#e2e8f0', alignItems: 'center' },
-  trussTabActive: { backgroundColor: '#f0f9ff', borderColor: '#315b76', borderWidth: 2 },
-  trussTabText: { fontSize: 12, fontWeight: '700', color: '#64748b' },
-  trussTabTextActive: { color: '#315b76' },
-
   filterContainer: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   filterCard: { flex: 1, backgroundColor: '#f1f5f9', paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center', justifyContent: 'center' },
   filterCardActive: { backgroundColor: '#fff', borderColor: '#315b76', elevation: 2 },
   filterCardText: { fontSize: 10, fontWeight: '700', color: '#64748b', textAlign: 'center' },
   filterCardTextActive: { color: '#315b76' },
-  miniCheck: { position: 'absolute', top: -4, right: -4, backgroundColor: '#10b981', borderRadius: 10, padding: 2, borderWidth: 1, borderColor: '#fff' },
-  materialRow: { marginBottom: 16 },
-  materialTypeLabel: { fontSize: 12, color: '#64748b', fontWeight: '600', marginBottom: 8, marginLeft: 4 },
   materialCard: { width: 140, backgroundColor: '#fff', borderRadius: 16, marginRight: 12, padding: 10, borderWidth: 1, borderColor: '#f1f5f9', elevation: 1, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 2 },
-  materialCardActive: { borderColor: '#315b76', backgroundColor: '#eff6ff', borderWidth: 2 },
+  materialCardActive: { borderColor: '#315b76', backgroundColor: '#eff6ff', borderWidth: 1 },
   checkBadge: { position: 'absolute', top: 8, right: 8, width: 20, height: 20, borderRadius: 10, backgroundColor: '#315b76', justifyContent: 'center', alignItems: 'center', zIndex: 10 },
   cardImageWrapper: { width: '100%', height: 80, borderRadius: 12, overflow: 'hidden', marginBottom: 10 },
   cardImage: { width: '100%', height: '100%' },
@@ -888,10 +872,9 @@ const styles = StyleSheet.create({
   shapeSubtitle: { fontSize: 11, color: '#94a3b8', lineHeight: 15 },
   shapeCheckBadge: { position: 'absolute', top: 8, right: 8, width: 20, height: 20, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
   structuralRow: { flexDirection: 'row', gap: 10 },
-  structuralCard: { flex: 1, backgroundColor: '#fff', borderRadius: 14, padding: 10, borderWidth: 1.5, borderColor: '#e2e8f0', alignItems: 'center', justifyContent: 'center', minHeight: 48 },
+  choiceCard: { flex: 1, backgroundColor: '#fff', borderRadius: 14, padding: 10, borderWidth: 1.5, borderColor: '#e2e8f0', alignItems: 'center', justifyContent: 'center', minHeight: 48 },
   structuralCardLabel: { fontSize: 12, fontWeight: '700', color: '#64748b', textAlign: 'center' },
   structuralDot: { width: 8, height: 8, borderRadius: 4, marginTop: 2 },
-  coveringCard: { flex: 1, backgroundColor: '#fff', borderRadius: 14, padding: 10, borderWidth: 1.5, borderColor: '#e2e8f0', alignItems: 'center', justifyContent: 'center', minHeight: 48 },
   coveringLabel: { fontSize: 14, fontWeight: '800', color: '#64748b' },
   perspCardTopRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
   perspTypeBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1, flex: 1 },
@@ -901,6 +884,4 @@ const styles = StyleSheet.create({
   hierItemText: { fontSize: 9, fontWeight: '700', color: '#334155', flexShrink: 1, maxWidth: 80 },
   reasoningRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 4, marginBottom: 6 },
   reasoningText: { fontSize: 10, color: '#64748b', fontStyle: 'italic', flex: 1, lineHeight: 13 },
-  autoCalcInfo: { flexDirection: 'row', gap: 10, backgroundColor: '#f0f9ff', padding: 14, borderRadius: 14, borderWidth: 1, borderColor: '#bae6fd', alignItems: 'center', marginTop: 10 },
-  autoCalcText: { flex: 1, fontSize: 12, color: '#0369a1', lineHeight: 18, fontWeight: '500' },
 });

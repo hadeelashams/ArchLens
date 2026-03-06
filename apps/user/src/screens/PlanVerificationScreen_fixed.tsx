@@ -388,16 +388,13 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
 
     setSaving(true);
     try {
-      // Generate AI recommendations for ALL tiers at floor plan upload time (once, for all tiers)
-      console.log('🚀 Generating AI recommendations for all tiers...');
-      const allTierRecommendations = await generateAllTierRecommendations(totalArea);
-
+      // Save project with room dimensions only (no AI recommendations)
       const projectData: any = {
         userId: auth.currentUser.uid,
         name: `Floor Plan ${new Date().toLocaleDateString()}`,
         status: 'active',
         totalArea: totalArea,
-        rooms: rooms,
+        rooms: rooms
         allTierRecommendations: allTierRecommendations || null
       };
 
@@ -413,8 +410,7 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
         totalArea: totalArea,
         projectId: newProjectId,
         rooms: rooms,
-        wallComposition: wallComposition || null,
-        allTierRecommendations: allTierRecommendations || null // Pass all tier recommendations
+        wallComposition: wallComposition || null
       });
 
     } catch (error: any) {

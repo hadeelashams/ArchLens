@@ -84,7 +84,10 @@ const BUDGET_TIERS = [
 ];
 
 export default function ConstructionLevelScreen({ route, navigation }: any) {
-  const { totalArea, projectId, rooms, wallComposition: initialWallComposition, allTierRecommendations: initialAllTierRecommendations } = route.params || { totalArea: 0, projectId: null, rooms: [], wallComposition: null, allTierRecommendations: null };
+  const { totalArea, projectId, rooms: initialRooms, wallComposition: initialWallComposition, allTierRecommendations: initialAllTierRecommendations } = route.params || { totalArea: 0, projectId: null, rooms: [], wallComposition: null, allTierRecommendations: null };
+
+  // Store rooms in state so they persist across navigations
+  const [rooms, setRooms] = useState(initialRooms || []);
 
   // Store wall composition in state so it persists across navigations
   const [wallComposition, setWallComposition] = useState(initialWallComposition);
@@ -95,6 +98,14 @@ export default function ConstructionLevelScreen({ route, navigation }: any) {
   // CHANGED: Initial state is NULL to force selection
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const [searchText, setSearchText] = useState('');
+
+  // Update rooms when route params change (when coming from existing projects or WallScreen)
+  useEffect(() => {
+    if (route.params?.rooms && Array.isArray(route.params.rooms) && route.params.rooms.length > 0) {
+      console.log('📋 Updated rooms from route:', route.params.rooms);
+      setRooms(route.params.rooms);
+    }
+  }, [route.params?.rooms]);
 
   // Update wall composition when route params change (when returning from WallScreen with updated data)
   useEffect(() => {
@@ -160,10 +171,13 @@ export default function ConstructionLevelScreen({ route, navigation }: any) {
       navigation.navigate('RoofingScreen', { totalArea, projectId, tier: activeTab });
     }
     else if (item.title === 'Flooring') {
-      navigation.navigate('FlooringScreen', { totalArea, projectId, tier: activeTab });
+      navigation.navigate('FlooringScreen', { totalArea, projectId, tier: activeTab, rooms });
+    }
+    else if (item.title === 'Plastering') {
+      navigation.navigate('PlasteringScreen', { totalArea, projectId, tier: activeTab, wallComposition });
     }
     else if (item.title === 'Painting') {
-      navigation.navigate('PaintingScreen', { totalArea, projectId, tier: activeTab });
+      navigation.navigate('PaintingScreen', { totalArea, projectId, tier: activeTab, rooms });
     }
     else if (item.title === 'Openings') {
       navigation.navigate('OpeningsScreen', { totalArea, projectId, tier: activeTab, rooms });

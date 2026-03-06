@@ -279,6 +279,10 @@ export default function WallCostSummaryScreen({ route, navigation }: any) {
       await addDoc(collection(db, 'estimates'), estimateData);
 
       const detectedWallComposition = {
+        loadBearingBrick: loadBearingBrick,
+        partitionBrick: partitionBrick,
+        cement: cement,
+        sand: sand,
         loadBearingPercentage: (avgMainWallRatio * 100).toFixed(0),
         partitionPercentage: (avgPartitionWallRatio * 100).toFixed(0),
         openingPercentage: avgOpeningPercentage,
@@ -301,7 +305,22 @@ export default function WallCostSummaryScreen({ route, navigation }: any) {
       <SafeAreaView style={styles.safeArea}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.roundBtn}>
+          <TouchableOpacity
+            onPress={() => {
+              const wallCompositionData = {
+                loadBearingBrick: loadBearingBrick,
+                partitionBrick: partitionBrick,
+                cement: cement,
+                sand: sand,
+                loadBearingPercentage: (avgMainWallRatio * 100).toFixed(0),
+                partitionPercentage: (avgPartitionWallRatio * 100).toFixed(0),
+                openingPercentage: avgOpeningPercentage,
+                averageWallThickness: parseFloat(wallThickness) || 0,
+              };
+              navigation.navigate('ConstructionLevel', { totalArea, projectId, rooms, wallComposition: wallCompositionData });
+            }}
+            style={styles.roundBtn}
+          >
             <Ionicons name="arrow-back" size={20} color="#1e293b" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Material Cost</Text>

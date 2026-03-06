@@ -17,7 +17,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { auth, db } from '@archlens/shared';
-import { collection, query, where, onSnapshot, deleteDoc, doc, getDocs, orderBy } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, deleteDoc, doc, getDocs, orderBy, updateDoc, serverTimestamp } from 'firebase/firestore';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 
 const { width } = Dimensions.get('window');
 
@@ -125,6 +127,15 @@ export default function EstimateResultScreen({ route, navigation }: any) {
         setGrandTotal(total);
         setCategoryBreakdown(breakdown);
         setLoading(false);
+
+        // Sync total to parent project document for HomeScreen visibility
+        if (activeProjectId) {
+          const projectRef = doc(db, 'projects', activeProjectId);
+          updateDoc(projectRef, {
+            totalEstimate: total,
+            updatedAt: serverTimestamp()
+          }).catch(err => console.error("Error syncing project total:", err));
+        }
       }, (err) => {
         console.error("Est fetch error:", err);
         setError("Failed to load estimates.");
@@ -188,6 +199,115 @@ export default function EstimateResultScreen({ route, navigation }: any) {
 
   const formatCurrency = (amount: number) => {
     return amount.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  };
+
+
+  const handlePDFExport = async () => {
+    if (!activeProject || estimates.length === 0) {
+      Alert.alert("PDF Export", "No data available to generate PDF.");
+      return;
+    }
+
+    try {
+      const html = `
+      <html>
+        <head>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
+          <style>
+            body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #1e293b; background-color: #fff; }
+            .header { border-bottom: 3px solid #315b76; padding-bottom: 20px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-end; }
+            .brand { color: #315b76; font-size: 32px; font-weight: 800; }
+            .project-title { font-size: 24px; font-weight: 700; color: #1e293b; margin-top: 10px; }
+            .meta-row { display: flex; justify-content: space-between; margin-top: 15px; font-size: 14px; color: #64748b; }
+            .summary-box { background-color: #f8fafc; border-radius: 16px; padding: 25px; margin-bottom: 30px; border: 1px solid #e2e8f0; }
+            .grand-total { font-size: 36px; font-weight: 800; color: #10b981; margin-top: 5px; }
+            .section-label { font-size: 12px; font-weight: 800; color: #94a3b8; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 15px; }
+            .category-card { margin-bottom: 25px; border: 1px solid #f1f5f9; border-radius: 12px; overflow: hidden; }
+            .category-header { background-color: #f1f5f9; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; font-weight: 700; }
+            table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+            th { text-align: left; font-size: 11px; color: #94a3b8; padding: 10px 20px; border-bottom: 1px solid #f1f5f9; }
+            td { padding: 12px 20px; font-size: 13px; border-bottom: 1px solid #f1f5f9; }
+            .item-name { font-weight: 600; color: #334155; }
+            .item-qty { color: #64748b; }
+            .item-price { font-weight: 700; color: #1e293b; text-align: right; }
+            .plan-img { width: 100%; border-radius: 16px; margin-bottom: 30px; border: 1px solid #e2e8f0; max-height: 400px; object-fit: contain; background-color: #f8fafc; }
+            .footer { margin-top: 50px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 20px; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <div class="brand">ARCHLENS</div>
+              <div class="project-title">${activeProject.name || 'Untitled Project'}</div>
+            </div>
+            <div style="text-align: right; font-size: 14px; color: #94a3b8;">
+              Estimated: ${new Date().toLocaleDateString()}
+            </div>
+          </div>
+
+          <div class="summary-box">
+            <div class="section-label">ESTIMATED GRAND TOTAL</div>
+            <div class="grand-total">₹${formatCurrency(grandTotal)}</div>
+            <div class="meta-row">
+              <div>Plan Area: <b>${activeProject.totalArea || 0} sq.ft</b></div>
+              <div>Budget Tier: <b>${activeProject.tier || 'Standard'}</b></div>
+            </div>
+          </div>
+
+          ${activeProject.planImageBase64 ? `
+          <div class="section-label">FLOOR PLAN LAYOUT</div>
+          <img src="${activeProject.planImageBase64}" class="plan-img" />
+          ` : ''}
+
+          <div class="section-label">MATERIAL BREAKDOWN</div>
+          ${Object.entries(categoryBreakdown).map(([category, data]: [string, any]) => {
+        const categoryEstimates = estimates.filter(e => e.category === category);
+        return `
+              <div class="category-card">
+                <div class="category-header">
+                  <span>${category}</span>
+                  <span>₹${formatCurrency(Math.round(data.total))}</span>
+                </div>
+                <table>
+                  <thead>
+                    <tr>
+                      <th style="width: 50%;">ITEM / MATERIAL</th>
+                      <th style="width: 20%;">QUANTITY</th>
+                      <th style="width: 30%; text-align: right;">COST</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${categoryEstimates.map(estimate =>
+          (estimate.lineItems || []).map((line: any) => `
+                        <tr>
+                          <td>
+                            <div class="item-name">${line.materialName || line.name || 'Material'}</div>
+                            <div style="font-size: 10px; color: #94a3b8;">${line.roomName || estimate.itemName || ''}</div>
+                          </td>
+                          <td class="item-qty">${line.quantity || line.qty} ${line.unit || 'Nos'}</td>
+                          <td class="item-price">₹${formatCurrency(Math.round(line.total))}</td>
+                        </tr>
+                      `).join('')
+        ).join('')}
+                  </tbody>
+                </table>
+              </div>
+            `;
+      }).join('')}
+
+          <div class="footer">
+            This estimation is generated by ArchLens AI. Prices are based on market averages and may vary by location.<br/>
+            © 2026 ArchLens Technology. All rights reserved.
+          </div>
+        </body>
+      </html>
+      `;
+
+      const { uri } = await Print.printToFileAsync({ html });
+      await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
+    } catch (error: any) {
+      Alert.alert("PDF Error", error.message);
+    }
   };
 
   // Category Card Component
@@ -274,11 +394,33 @@ export default function EstimateResultScreen({ route, navigation }: any) {
                     {item.lineItems.map((line: any, lineIdx: number) => (
                       <View key={lineIdx} style={styles.tableRow}>
                         <View style={{ flex: 1.5 }}>
-                          <Text style={styles.lineItemName}>{line.name || line.label}</Text>
-                          {line.desc && <Text style={styles.lineItemDesc}>{line.desc}</Text>}
+                          <Text style={styles.lineItemName}>
+                            {line.materialName || line.name || line.label || 'Unknown Material'}
+                          </Text>
+                          {line.type && (
+                            <View style={styles.materialTypeRow}>
+                              <MaterialCommunityIcons
+                                name={line.type === 'door' ? 'door' : 'window-open-variant'}
+                                size={12}
+                                color="#6366f1"
+                              />
+                              <Text style={styles.lineItemDesc}>
+                                {line.type === 'door' ? 'Door' : 'Window'}
+                                {line.roomName ? ` • ${line.roomName}` : ''}
+                              </Text>
+                            </View>
+                          )}
+                          {!line.type && line.desc && (
+                            <Text style={styles.lineItemDesc}>{line.desc}</Text>
+                          )}
                         </View>
                         <View style={{ flex: 1 }}>
-                          <Text style={styles.lineItemQty}>{line.qty} {line.unit}</Text>
+                          <Text style={styles.lineItemQty}>
+                            {line.quantity || line.qty} {line.unit || 'Nos'}
+                          </Text>
+                          {line.unitPrice && (
+                            <Text style={styles.lineItemRate}>@ ₹{formatCurrency(line.unitPrice)}</Text>
+                          )}
                         </View>
                         <View style={{ flex: 1, alignItems: 'flex-end' }}>
                           <Text style={styles.lineItemPrice}>₹{formatCurrency(Math.round(line.total || 0))}</Text>
@@ -542,9 +684,13 @@ export default function EstimateResultScreen({ route, navigation }: any) {
                 <Text style={styles.addMoreButtonText}>Add More</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.exportButton}>
+              <TouchableOpacity
+                style={styles.exportButton}
+                onPress={handlePDFExport}
+                activeOpacity={0.7}
+              >
                 <Ionicons name="download-outline" size={20} color="#315b76" />
-                <Text style={styles.exportButtonText}>Export</Text>
+                <Text style={styles.exportButtonText}>Download PDF</Text>
               </TouchableOpacity>
             </View>
           </ScrollView>
@@ -649,7 +795,9 @@ const styles = StyleSheet.create({
   tableRow: { flexDirection: 'row', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   lineItemName: { fontSize: 12, fontWeight: '600', color: '#1e293b' },
   lineItemDesc: { fontSize: 10, color: '#94a3b8', marginTop: 2 },
+  materialTypeRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
   lineItemQty: { fontSize: 12, color: '#475569', fontWeight: '500' },
+  lineItemRate: { fontSize: 10, color: '#94a3b8', marginTop: 1 },
   lineItemPrice: { fontSize: 12, fontWeight: '700', color: '#10b981' },
 
   specsBox: { backgroundColor: '#eef2ff', padding: 10, borderRadius: 8, marginVertical: 10, borderLeftWidth: 3, borderLeftColor: '#6366f1' },

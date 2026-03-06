@@ -9,3 +9,5 @@ export * from './local-db-service'; // <--- Local database service for persisten
 export { WALL_MATERIALS_SEED_DATA } from './wallMaterialsSeedData';
 export { ROOFING_MATERIALS_SEED_DATA } from './roofingMaterialsSeedData';
 export { OPENINGS_MATERIALS_SEED_DATA } from './openingsMaterialsSeedData';
+export { PLASTERING_MATERIALS_SEED_DATA } from './plasteringMaterialsSeedData';
+export { WALL_FINISHING_MATERIALS_SEED_DATA } from './wallFinishingMaterialsSeedData';

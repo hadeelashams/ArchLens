@@ -40,6 +40,7 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
   const [wallComposition, setWallComposition] = useState<any>(null); // Store AI-analyzed wall composition
   const [selectedTier, setSelectedTier] = useState<string>('Standard'); // Default tier
   const [aiRecommendations, setAiRecommendations] = useState<any>(null); // Store AI recommendations
+  const [planBase64, setPlanBase64] = useState<string | null>(null); // Store base64 for PDF export
 
   // --- NEW STATE FOR ZOOM MODAL ---
   const [isZoomVisible, setZoomVisible] = useState(false);
@@ -96,11 +97,13 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
         }));
         setRooms(roomsWithIds);
         setWallComposition((cachedAnalysis.data as any).wallComposition); // Store wall composition
+        setPlanBase64(base64String);
         setIsCached(true);
         setLoading(false);
         return;
       }
 
+      setPlanBase64(base64String);
       const analysis = await analyzeFloorPlan(base64String);
 
       const schema = `{
@@ -396,17 +399,14 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
 
     setSaving(true);
     try {
-      // Generate AI recommendations for ALL tiers at floor plan upload time (once, for all tiers)
-      console.log('🚀 Generating AI recommendations for all tiers...');
-      const allTierRecommendations = await generateAllTierRecommendations(totalArea);
-
+      // Save project with room dimensions only (no AI recommendations)
       const projectData: any = {
         userId: auth.currentUser.uid,
         name: `Floor Plan ${new Date().toLocaleDateString()}`,
         status: 'active',
         totalArea: totalArea,
         rooms: rooms,
-        allTierRecommendations: allTierRecommendations || null
+        planImageBase64: planBase64
       };
 
       // Only include wallComposition if it was successfully analyzed
@@ -421,8 +421,7 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
         totalArea: totalArea,
         projectId: newProjectId,
         rooms: rooms,
-        wallComposition: wallComposition || null,
-        allTierRecommendations: allTierRecommendations || null // Pass all tier recommendations
+        wallComposition: wallComposition || null
       });
 
     } catch (error: any) {

@@ -219,9 +219,9 @@ export const generateText = async (
         const model = GEMINI_MODELS[currentModelIndex];
         const result = await directGeminiAI.models.generateContent({
           model: model,
-          contents: prompt,
-        });
-        return result.text;
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        } as any);
+        return (result as any).text;
       }
 
       // Otherwise use Firebase backend (or fallback to Direct API if switched)
@@ -229,9 +229,9 @@ export const generateText = async (
         const model = GEMINI_MODELS[currentModelIndex];
         const result = await directGeminiAI.models.generateContent({
           model: model,
-          contents: prompt,
-        });
-        return result.text;
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        } as any);
+        return (result as any).text;
       }
 
       // Use Firebase if available
@@ -271,15 +271,11 @@ export const analyzeFloorPlan = async (
 ): Promise<string> => {
   return retryWithBackoff(async () => {
     try {
-      if (!currentModel) {
-        throw new Error('Gemini model not initialized. Check Firebase configuration.');
-      }
+      // Support for exclusive GenAI mode with proper image handling
+      if (isExclusiveGenAI && directGeminiAI) {
+        console.log('ℹ️ Using Direct Google Gen AI SDK for floor plan analysis');
 
-      // ---------------------------------------------------------
-      // DEEP METADATA EXTRACTION PROMPT FOR ARCHITECTURAL PLANS
-      // This prompt identifies construction specifications from visual cues
-      // ---------------------------------------------------------
-      const defaultPrompt = `
+        const defaultPrompt = `
         Act as an expert Draughtsman and Quantity Surveyor. Analyze this floor plan for detailed construction specifications.
         
         The image contains specific text labels for Room Names (e.g., "Bedroom 1", "Kitchen") and Area measurements (e.g., "137 sq ft", "10'5"").
@@ -295,9 +291,10 @@ export const analyzeFloorPlan = async (
            - THIN LINES (regular/light): These are Partition walls. Mark with HIGH partitionWallRatio (0.5-0.8).
            - Most rooms will have a MIX: mainWallRatio + partitionWallRatio should sum to ~1.0 for a realistic structure.
            - Example: A bedroom with 2 thick external walls and 2 thin partition walls = mainWallRatio: 0.6, partitionWallRatio: 0.4.
-        4. OPENING PERCENTAGE (DOORS & WINDOWS):
-           - Count visible windows and doors (include sliding doors, balcony doors, French doors).
-           - Calculate: openingPercentage = (Total opening width / Perimeter) * 100.
+        4. OPENING COUNT (DOORS & WINDOWS):
+           - Count visible DOORS in each room (include main doors, internal doors, sliding doors, balcony doors, French doors).
+           - Count visible WINDOWS in each room (include all window types).
+           - Also calculate: openingPercentage = (Total opening width / Perimeter) * 100.
            - Typical ranges: 15% (minimal), 25% (standard), 35% (open plan).
            - Living rooms and bedrooms often have 20-30% openings; bathrooms 5-15%.
         5. ROOM TYPE CLASSIFICATION:
@@ -333,6 +330,108 @@ export const analyzeFloorPlan = async (
                 "mainWallRatio": "Number 0.0-1.0 (proportion of Load-Bearing walls, e.g., 0.7)",
                 "partitionWallRatio": "Number 0.0-1.0 (proportion of Partition walls, e.g., 0.3)"
               },
+              "doorCount": "Number (total count of doors detected in this room, e.g., 2)",
+              "windowCount": "Number (total count of windows detected in this room, e.g., 2)",
+              "openingPercentage": "Number 0-100 (percentage of perimeter with windows/doors, e.g., 25)",
+              "features": ["String (e.g., Walk-in Closet, En-suite, Sliding Door)"]
+            }
+          ]
+        }
+      `;
+
+        const prompt = analysisPrompt || defaultPrompt;
+
+        // Convert image URI to base64 if needed
+        const imageBase64 = imageData.startsWith('data:')
+          ? imageData.split(',')[1]
+          : imageData;
+
+        const model = GEMINI_MODELS[currentModelIndex];
+        
+        // Use Direct Google Gen AI SDK with image support
+        const result = await directGeminiAI.models.generateContent({
+          model: model,
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                {
+                  inlineData: {
+                    mimeType: 'image/jpeg',
+                    data: imageBase64,
+                  },
+                },
+                { text: prompt },
+              ],
+            },
+          ],
+        } as any);
+
+        return result.text;
+      }
+
+      // Firebase backend path
+      if (!currentModel) {
+        throw new Error('Gemini model not initialized. Check Firebase configuration.');
+      }
+
+      const defaultPrompt = `
+        Act as an expert Draughtsman and Quantity Surveyor. Analyze this floor plan for detailed construction specifications.
+        
+        The image contains specific text labels for Room Names (e.g., "Bedroom 1", "Kitchen") and Area measurements (e.g., "137 sq ft", "10'5"").
+        
+        Your expert tasks:
+        1. OCR EXTRACTION: Identify every text label inside a room. Extract the Room Name and the explicit Area labeled (if present).
+        2. DIMENSION ESTIMATION: 
+           - If dimensions are written on the walls (e.g. 12' x 10'), use them.
+           - If area is written (e.g., "100 sq ft"), estimate a logical Length and Width that equals that area (e.g., L=10, W=10).
+           - If no text exists, visually estimate dimensions assuming standard door width is 3 feet.
+        3. WALL CLASS DETECTION (CRITICAL): 
+           - THICK LINES (bold/prominent): These are Load-Bearing walls. Mark these rooms with HIGH mainWallRatio (0.7-0.9).
+           - THIN LINES (regular/light): These are Partition walls. Mark with HIGH partitionWallRatio (0.5-0.8).
+           - Most rooms will have a MIX: mainWallRatio + partitionWallRatio should sum to ~1.0 for a realistic structure.
+           - Example: A bedroom with 2 thick external walls and 2 thin partition walls = mainWallRatio: 0.6, partitionWallRatio: 0.4.
+        4. OPENING COUNT (DOORS & WINDOWS):
+           - Count visible DOORS in each room (include main doors, internal doors, sliding doors, balcony doors, French doors).
+           - Count visible WINDOWS in each room (include all window types).
+           - Also calculate: openingPercentage = (Total opening width / Perimeter) * 100.
+           - Typical ranges: 15% (minimal), 25% (standard), 35% (open plan).
+           - Living rooms and bedrooms often have 20-30% openings; bathrooms 5-15%.
+        5. ROOM TYPE CLASSIFICATION:
+           - "standard": Normal enclosed room (Bedroom, Living, Kitchen, etc.)
+           - "balcony": Outdoor space with parapet. Use 3.5 ft height for calculations.
+           - "wash_area": Bathroom, Toilet, Laundry (small, utility spaces).
+        6. UNIT CONVERSION: Convert all dimensions to DECIMAL FEET (e.g., 10'6" becomes 10.5).
+        7. OVERALL WALL COMPOSITION: After analyzing all rooms, calculate the overall percentages:
+           - Average load-bearing wall percentage across the entire floor plan
+           - Average partition wall percentage
+           - Average opening percentage
+
+        RETURN DATA STRUCTURE (Strict JSON, no markdown):
+        {
+          "summary": "Brief architectural summary (e.g., 3 Bedroom, 2 Bath with balcony, modern open-plan)",
+          "totalArea": "Number (Sum of all room areas in sq ft)",
+          "wallComposition": {
+            "loadBearingPercentage": "Number 0-100 (overall % of load-bearing walls)",
+            "partitionPercentage": "Number 0-100 (overall % of partition walls)",
+            "openingPercentage": "Number 0-100 (overall % of wall area with openings)",
+            "averageWallThickness": "Number in inches (weighted average, typically 6-9 inches)",
+            "confidence": "Number 0-100 (confidence in analysis)"
+          },
+          "rooms": [
+            {
+              "id": "unique_room_id",
+              "name": "String (e.g., Master Bedroom)",
+              "length": "Number (Decimal Feet, e.g., 12.5)",
+              "width": "Number (Decimal Feet, e.g., 10.0)",
+              "area": "Number (Square Feet)",
+              "roomType": "standard | balcony | wash_area",
+              "wallMetadata": {
+                "mainWallRatio": "Number 0.0-1.0 (proportion of Load-Bearing walls, e.g., 0.7)",
+                "partitionWallRatio": "Number 0.0-1.0 (proportion of Partition walls, e.g., 0.3)"
+              },
+              "doorCount": "Number (total count of doors detected in this room, e.g., 2)",
+              "windowCount": "Number (total count of windows detected in this room, e.g., 2)",
               "openingPercentage": "Number 0-100 (percentage of perimeter with windows/doors, e.g., 25)",
               "features": ["String (e.g., Walk-in Closet, En-suite, Sliding Door)"]
             }
@@ -386,6 +485,21 @@ export const chat = async (
 ): Promise<string> => {
   return retryWithBackoff(async () => {
     try {
+      // Support for exclusive GenAI mode
+      if (isExclusiveGenAI && directGeminiAI) {
+        const model = GEMINI_MODELS[currentModelIndex];
+        const result = await directGeminiAI.models.generateContent({
+          model: model,
+          contents: messages.map(msg => ({
+            role: msg.role === 'user' ? 'user' : 'model',
+            parts: [{ text: msg.content }],
+          })),
+        } as any);
+
+        return (result as any).text;
+      }
+
+      // Firebase backend
       if (!currentModel) {
         throw new Error('Gemini model not initialized. Check Firebase configuration.');
       }
@@ -457,7 +571,42 @@ export const extractStructuredData = async (
 ): Promise<string> => {
   return retryWithBackoff(async () => {
     try {
-      if (!geminiModel) {
+      // Support for exclusive GenAI mode
+      if (isExclusiveGenAI && directGeminiAI) {
+        const prompt = `Extract the following information from the provided content and return it as JSON:
+
+Schema: ${schema}
+
+Content:
+${content}
+
+IMPORTANT: Return ONLY valid JSON with no markdown code blocks, no formatting, and no extra text.`;
+
+        const model = GEMINI_MODELS[currentModelIndex];
+        const result = await directGeminiAI.models.generateContent({
+          model: model,
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        } as any);
+
+        let jsonText = (result as any).text;
+        jsonText = jsonText.trim();
+
+        // Step 1: Remove markdown code blocks if present
+        if (jsonText.startsWith('```')) {
+          jsonText = jsonText.replace(/^```json\n?/, '').replace(/^```\n?/, '').replace(/\n?```$/, '');
+        }
+
+        // Step 2: Extract JSON using regex
+        const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          jsonText = jsonMatch[0];
+        }
+
+        return jsonText;
+      }
+
+      // Firebase backend
+      if (!currentModel) {
         throw new Error('Gemini model not initialized. Check Firebase configuration.');
       }
 
@@ -613,6 +762,28 @@ Return ONLY valid JSON (no markdown, no explanatory text). CRITICAL: The "id" fi
 }
       `;
 
+      // Support for exclusive GenAI mode
+      if (isExclusiveGenAI && directGeminiAI) {
+        const model = GEMINI_MODELS[currentModelIndex];
+        const result = await directGeminiAI.models.generateContent({
+          model: model,
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        } as any);
+
+        let jsonText = (result as any).text.trim();
+        if (jsonText.startsWith('```')) {
+          jsonText = jsonText.replace(/^```json\n?/, '').replace(/^```\n?/, '').replace(/\n?```$/, '');
+        }
+        const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          jsonText = jsonMatch[0];
+        }
+
+        const parsedResult = JSON.parse(jsonText);
+        return parsedResult;
+      }
+
+      // Firebase backend
       const result = await currentModel.generateContent({
         contents: [
           {
@@ -771,8 +942,8 @@ Return ONLY valid JSON (no markdown, no explanation):
       const result = await (isExclusiveGenAI && directGeminiAI
         ? directGeminiAI.models.generateContent({
           model: GEMINI_MODELS[currentModelIndex],
-          contents: prompt,
-        })
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        } as any)
         : currentModel!.generateContent({
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
         }));
@@ -1070,8 +1241,8 @@ Return ONLY valid JSON (no markdown fences):
       const result = await (isExclusiveGenAI && directGeminiAI
         ? directGeminiAI.models.generateContent({
           model: GEMINI_MODELS[currentModelIndex],
-          contents: prompt,
-        })
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        } as any)
         : currentModel!.generateContent({ contents: [{ role: 'user', parts: [{ text: prompt }] }] }));
 
       let jsonText = isExclusiveGenAI && directGeminiAI

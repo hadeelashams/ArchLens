@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  View, Text, StyleSheet, TouchableOpacity, ScrollView, 
-  Dimensions, Platform, TextInput, ActivityIndicator, Image, Switch 
+import {
+  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  Dimensions, Platform, TextInput, ActivityIndicator, Image, Switch
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons'; 
+import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { db, getComponentRecommendation, getFoundationPerspectives } from '@archlens/shared';
 import type { FoundationPerspective } from '@archlens/shared';
@@ -35,7 +35,7 @@ const AGGREGATE_OPTIONS: Record<string, string[]> = {
   'PCC Base': ['20 mm', '40 mm'],
   'RCC Footing': ['20 mm', '10 mm'],
   'Plinth Beam': ['20 mm', '10 mm'],
-  'Stone Masonry': [] 
+  'Stone Masonry': []
 };
 
 const ALL_LAYER_MAPS = {
@@ -50,23 +50,23 @@ export default function FoundationSelection({ route, navigation }: any) {
 
   const [loading, setLoading] = useState(true);
   const [materials, setMaterials] = useState<any[]>([]);
-  
+
   // AI Perspective State
-  const [aiPerspectives, setAiPerspectives]         = useState<FoundationPerspective[]>([]);
+  const [aiPerspectives, setAiPerspectives] = useState<FoundationPerspective[]>([]);
   const [selectedPerspectiveId, setSelectedPerspectiveId] = useState<string | null>(null);
-  const [isPerspectiveLoading, setIsPerspectiveLoading]   = useState(false);
-  
+  const [isPerspectiveLoading, setIsPerspectiveLoading] = useState(false);
+
   const [foundationType, setFoundationType] = useState<FoundationType>('RCC');
   const [hasPCC, setHasPCC] = useState(true);
   const [includePlinth, setIncludePlinth] = useState(false);
 
   // Inputs
-  const [footingCount, setFootingCount] = useState(''); 
-  const [footingLength, setFootingLength] = useState('4'); 
+  const [footingCount, setFootingCount] = useState('');
+  const [footingLength, setFootingLength] = useState('4');
   const [footingWidth, setFootingWidth] = useState('4');
   const [pccThickness, setPccThickness] = useState('0.33');
   const [rccExcavationDepth, setRccExcavationDepth] = useState('5');
-  
+
   const [wallPerimeter, setWallPerimeter] = useState('');
   const [trenchWidth, setTrenchWidth] = useState('2');
   const [masonryExcavationDepth, setMasonryExcavationDepth] = useState('3');
@@ -94,15 +94,15 @@ export default function FoundationSelection({ route, navigation }: any) {
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
       setMaterials(data);
       const initialSelections: Record<string, any> = {};
-      
+
       Object.keys(ALL_LAYER_MAPS).forEach(layer => {
         ALL_LAYER_MAPS[layer as keyof typeof ALL_LAYER_MAPS].forEach(type => {
           let typeItems = data.filter(m => m.type === type);
           typeItems.sort((a, b) => (parseFloat(a.pricePerUnit) || 0) - (parseFloat(b.pricePerUnit) || 0));
           if (typeItems.length > 0) {
-             if (tier === 'Economy') initialSelections[`${layer}_${type}`] = typeItems[0];
-             else if (tier === 'Luxury') initialSelections[`${layer}_${type}`] = typeItems[typeItems.length - 1];
-             else initialSelections[`${layer}_${type}`] = typeItems[Math.floor(typeItems.length / 2)];
+            if (tier === 'Economy') initialSelections[`${layer}_${type}`] = typeItems[0];
+            else if (tier === 'Luxury') initialSelections[`${layer}_${type}`] = typeItems[typeItems.length - 1];
+            else initialSelections[`${layer}_${type}`] = typeItems[Math.floor(typeItems.length / 2)];
           }
         });
       });
@@ -132,7 +132,7 @@ export default function FoundationSelection({ route, navigation }: any) {
     const oneThird = Math.ceil(total / 3);
     if (tier === 'Economy') return typeItems.slice(0, oneThird);
     else if (tier === 'Luxury') return typeItems.slice(total - oneThird, total);
-    return typeItems.slice(oneThird, total - oneThird); 
+    return typeItems.slice(oneThird, total - oneThird);
   };
 
   // Auto-apply AI recommendations from route params after materials load
@@ -182,14 +182,14 @@ export default function FoundationSelection({ route, navigation }: any) {
 
   const applyFoundationPerspective = (p: FoundationPerspective) => {
     const cement = materials.find(m => m.id === p.cementId);
-    const steel  = materials.find(m => m.id === p.steelId);
-    const sand   = materials.find(m => m.id === p.sandId);
+    const steel = materials.find(m => m.id === p.steelId);
+    const sand = materials.find(m => m.id === p.sandId);
     const updated: Record<string, any> = { ...selections };
     Object.keys(ALL_LAYER_MAPS).forEach(layer => {
       (ALL_LAYER_MAPS as any)[layer].forEach((type: string) => {
-        if (type === 'Cement' && cement)           updated[`${layer}_${type}`] = cement;
+        if (type === 'Cement' && cement) updated[`${layer}_${type}`] = cement;
         if ((type === 'Steel (TMT Bar)' || type === 'Steel' || type === 'TMT Bar') && steel) updated[`${layer}_${type}`] = steel;
-        if (type === 'Sand' && sand)               updated[`${layer}_${type}`] = sand;
+        if (type === 'Sand' && sand) updated[`${layer}_${type}`] = sand;
       });
     });
     setSelections(updated);
@@ -218,7 +218,7 @@ export default function FoundationSelection({ route, navigation }: any) {
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.roundBtn}><Ionicons name="arrow-back" size={20} color="#1e293b" /></TouchableOpacity>
           <Text style={styles.headerTitle}>Foundation System</Text>
-          <View style={[styles.tierBadge, tier === 'Economy' ? {backgroundColor: '#10b981'} : tier === 'Luxury' ? {backgroundColor: '#8b5cf6'} : {backgroundColor: '#3b82f6'}]}>
+          <View style={[styles.tierBadge, tier === 'Economy' ? { backgroundColor: '#10b981' } : tier === 'Luxury' ? { backgroundColor: '#8b5cf6' } : { backgroundColor: '#3b82f6' }]}>
             <Text style={styles.tierText}>{tier}</Text>
           </View>
         </View>
@@ -285,8 +285,8 @@ export default function FoundationSelection({ route, navigation }: any) {
                         </Text>
                       </View>
                       <View style={styles.perspectiveMaterials}>
-                        {cMat  && <Text style={styles.perspectiveMaterialItem}>Cement: {cMat.name}  ₹{cMat.pricePerUnit}/{cMat.unit}</Text>}
-                        {sMat  && <Text style={styles.perspectiveMaterialItem}>Steel: {sMat.name}  ₹{sMat.pricePerUnit}/{sMat.unit}</Text>}
+                        {cMat && <Text style={styles.perspectiveMaterialItem}>Cement: {cMat.name}  ₹{cMat.pricePerUnit}/{cMat.unit}</Text>}
+                        {sMat && <Text style={styles.perspectiveMaterialItem}>Steel: {sMat.name}  ₹{sMat.pricePerUnit}/{sMat.unit}</Text>}
                         {saMat && <Text style={styles.perspectiveMaterialItem}>Sand: {saMat.name}  ₹{saMat.pricePerUnit}/{saMat.unit}</Text>}
                       </View>
                       <View style={styles.perspectiveTags}>
@@ -343,7 +343,7 @@ export default function FoundationSelection({ route, navigation }: any) {
                     <TextInput style={styles.textInput} value={masonryThickness} onChangeText={setMasonryThickness} keyboardType="numeric" />
                   </View>
                 </View>
-                <View style={{flex: 1}} /> 
+                <View style={{ flex: 1 }} />
               </View>
             </View>
           )}
@@ -365,7 +365,7 @@ export default function FoundationSelection({ route, navigation }: any) {
           {activeLayers.map((layerName) => (
             <View key={layerName} style={styles.layerContainer}>
               <View style={styles.layerTitleRow}><View style={styles.layerTitleDot} /><Text style={styles.layerTitle}>{layerName}</Text></View>
-              { (ALL_LAYER_MAPS[layerName as keyof typeof ALL_LAYER_MAPS] || []).map(type => {
+              {(ALL_LAYER_MAPS[layerName as keyof typeof ALL_LAYER_MAPS] || []).map(type => {
                 const filteredList = filterMaterialsForLayer(layerName, type, materials);
                 const selectionKey = `${layerName}_${type}`;
                 const selectedId = selections[selectionKey]?.id;
@@ -373,9 +373,9 @@ export default function FoundationSelection({ route, navigation }: any) {
                   <View key={type} style={styles.materialRow}>
                     <Text style={styles.materialTypeLabel}>{type}</Text>
                     {filteredList.length === 0 ? (<View style={styles.emptyStateBox}><Text style={styles.noMaterialText}>No {tier} options</Text></View>) : (
-                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{paddingRight: 20, paddingBottom: 10}}>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 20, paddingBottom: 10 }}>
                         {filteredList.map(item => (
-                          <TouchableOpacity key={item.id} style={[styles.materialCard, selectedId === item.id && styles.materialCardActive]} onPress={() => setSelections({...selections, [selectionKey]: item})}>
+                          <TouchableOpacity key={item.id} style={[styles.materialCard, selectedId === item.id && styles.materialCardActive]} onPress={() => setSelections({ ...selections, [selectionKey]: item })}>
                             {selectedId === item.id && <View style={styles.checkBadge}><Ionicons name="checkmark" size={12} color="#fff" /></View>}
                             <View style={styles.cardImageWrapper}>{item.imageUrl ? <Image source={{ uri: item.imageUrl }} style={styles.cardImage} /> : <View style={styles.placeholderImg}><Ionicons name="cube-outline" size={24} color="#94a3b8" /></View>}</View>
                             <View style={styles.cardContent}>
@@ -404,7 +404,7 @@ export default function FoundationSelection({ route, navigation }: any) {
               )}
             </View>
           ))}
-          <View style={{height: 100}} />
+          <View style={{ height: 100 }} />
         </ScrollView>
         <TouchableOpacity style={styles.mainBtn} onPress={handleNext}><Text style={styles.mainBtnText}>Calculate Cost</Text><Ionicons name="calculator" size={20} color="#fff" /></TouchableOpacity>
       </SafeAreaView>
@@ -438,30 +438,30 @@ const styles = StyleSheet.create({
   methodTextActive: { color: '#fff' },
   aiChipButton: { backgroundColor: '#e0f2fe', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 20, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 5, borderWidth: 1, borderColor: '#315b76' },
   aiChipText: { color: '#315b76', fontSize: 10, fontWeight: '700', letterSpacing: 0.3 },
-  perspectivesSection:       { marginBottom: 18 },
-  perspectivesHeader:        { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  regenerateBtn:             { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#e0f2fe', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1, borderColor: '#bae6fd' },
-  regenerateBtnText:         { fontSize: 11, color: '#315b76', fontWeight: '700' },
-  perspectiveLoadingCard:    { backgroundColor: '#f8fafc', borderRadius: 14, padding: 24, alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#e2e8f0' },
-  perspectiveLoadingText:    { fontSize: 12, color: '#64748b', fontWeight: '600', textAlign: 'center' },
-  perspectiveCard:           { width: 300, backgroundColor: '#fff', borderRadius: 14, padding: 14, borderWidth: 1.5, borderColor: '#e2e8f0' },
-  perspectiveCardSelected:   { borderColor: '#315b76', backgroundColor: '#f0f9ff', borderWidth: 2 },
-  perspectiveCardHeader:     { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  optionBadge:               { backgroundColor: '#f1f5f9', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0', minWidth: 64, alignItems: 'center' },
-  optionBadgeSelected:       { backgroundColor: '#315b76', borderColor: '#315b76' },
-  optionBadgeText:           { fontSize: 10, fontWeight: '800', color: '#64748b' },
-  optionBadgeTextSelected:   { color: '#fff' },
-  perspectiveTitle:          { fontSize: 13, fontWeight: '700', color: '#1e293b' },
-  perspectiveSubtitle:       { fontSize: 10, color: '#64748b', marginTop: 1 },
-  perspectiveFocusRow:       { flexDirection: 'row', alignItems: 'flex-start', gap: 4, marginBottom: 8 },
-  perspectiveFocusText:      { fontSize: 11, color: '#475569', fontWeight: '500', flex: 1, lineHeight: 15 },
-  perspectiveMaterials:      { backgroundColor: '#f8fafc', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 8, gap: 3 },
-  perspectiveMaterialItem:   { fontSize: 10, color: '#315b76', fontWeight: '600' },
-  perspectiveTags:           { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  perspectiveTagChip:        { backgroundColor: '#f1f5f9', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: '#e2e8f0' },
-  perspectiveTagText:        { fontSize: 9, color: '#64748b', fontWeight: '700' },
-  loadPerspectivesBtn:       { backgroundColor: '#e0f2fe', borderRadius: 12, padding: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1.5, borderColor: '#315b76' },
-  loadPerspectivesBtnText:   { fontSize: 13, color: '#315b76', fontWeight: '700' },
+  perspectivesSection: { marginBottom: 18 },
+  perspectivesHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  regenerateBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#e0f2fe', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1, borderColor: '#bae6fd' },
+  regenerateBtnText: { fontSize: 11, color: '#315b76', fontWeight: '700' },
+  perspectiveLoadingCard: { backgroundColor: '#f8fafc', borderRadius: 14, padding: 24, alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#e2e8f0' },
+  perspectiveLoadingText: { fontSize: 12, color: '#64748b', fontWeight: '600', textAlign: 'center' },
+  perspectiveCard: { width: 300, backgroundColor: '#fff', borderRadius: 14, padding: 14, borderWidth: 1.5, borderColor: '#e2e8f0' },
+  perspectiveCardSelected: { borderColor: '#315b76', backgroundColor: '#f0f9ff', borderWidth: 2 },
+  perspectiveCardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  optionBadge: { backgroundColor: '#f1f5f9', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0', minWidth: 64, alignItems: 'center' },
+  optionBadgeSelected: { backgroundColor: '#315b76', borderColor: '#315b76' },
+  optionBadgeText: { fontSize: 10, fontWeight: '800', color: '#64748b' },
+  optionBadgeTextSelected: { color: '#fff' },
+  perspectiveTitle: { fontSize: 13, fontWeight: '700', color: '#1e293b' },
+  perspectiveSubtitle: { fontSize: 10, color: '#64748b', marginTop: 1 },
+  perspectiveFocusRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 4, marginBottom: 8 },
+  perspectiveFocusText: { fontSize: 11, color: '#475569', fontWeight: '500', flex: 1, lineHeight: 15 },
+  perspectiveMaterials: { backgroundColor: '#f8fafc', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 8, gap: 3 },
+  perspectiveMaterialItem: { fontSize: 10, color: '#315b76', fontWeight: '600' },
+  perspectiveTags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  perspectiveTagChip: { backgroundColor: '#f1f5f9', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: '#e2e8f0' },
+  perspectiveTagText: { fontSize: 9, color: '#64748b', fontWeight: '700' },
+  loadPerspectivesBtn: { backgroundColor: '#e0f2fe', borderRadius: 12, padding: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1.5, borderColor: '#315b76' },
+  loadPerspectivesBtnText: { fontSize: 13, color: '#315b76', fontWeight: '700' },
   adviceBox: { marginBottom: 15, backgroundColor: '#e0f2fe', borderLeftWidth: 4, borderLeftColor: '#315b76', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8 },
   adviceBoxCompact: { marginBottom: 15, backgroundColor: '#e0f2fe', borderLeftWidth: 3, borderLeftColor: '#315b76', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 6 },
   adviceText: { fontSize: 12, color: '#064e78', fontWeight: '500', lineHeight: 18 },
@@ -474,18 +474,18 @@ const styles = StyleSheet.create({
   layerTitle: { fontSize: 14, fontWeight: '800', color: '#315b76' },
   materialRow: { marginBottom: 16 },
   materialTypeLabel: { fontSize: 12, color: '#64748b', fontWeight: '600', marginBottom: 8, marginLeft: 4 },
-  materialCard: { width: 150, backgroundColor: '#fff', borderRadius: 16, marginRight: 12, padding: 10, borderWidth: 1, borderColor: '#f1f5f9', elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 3 },
-  materialCardActive: { borderColor: '#315b76', backgroundColor: '#eff6ff', borderWidth: 2 },
-  checkBadge: { position: 'absolute', top: 8, right: 8, width: 20, height: 20, borderRadius: 10, backgroundColor: '#315b76', justifyContent: 'center', alignItems: 'center', zIndex: 10, borderWidth: 2, borderColor: '#fff' },
-  cardImageWrapper: { width: '100%', height: 90, borderRadius: 12, overflow: 'hidden', marginBottom: 10 },
+  materialCard: { width: 120, backgroundColor: '#fff', borderRadius: 12, marginRight: 10, padding: 8, borderWidth: 1, borderColor: '#f1f5f9', elevation: 1, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 2 },
+  materialCardActive: { borderColor: '#315b76', backgroundColor: '#eff6ff', borderWidth: 1.5 },
+  checkBadge: { position: 'absolute', top: 6, right: 6, width: 18, height: 18, borderRadius: 9, backgroundColor: '#315b76', justifyContent: 'center', alignItems: 'center', zIndex: 10, borderWidth: 1.5, borderColor: '#fff' },
+  cardImageWrapper: { width: '100%', height: 65, borderRadius: 10, overflow: 'hidden', marginBottom: 8 },
   cardImage: { width: '100%', height: '100%', resizeMode: 'cover' },
   placeholderImg: { flex: 1, backgroundColor: '#f8fafc', justifyContent: 'center', alignItems: 'center' },
-  cardContent: { gap: 2 },
-  cardTitle: { fontSize: 13, fontWeight: '700', color: '#1e293b', minHeight: 32 },
-  cardMeta: { flexDirection: 'row', alignItems: 'baseline', marginTop: 4 },
-  cardPrice: { fontSize: 14, fontWeight: '800', color: '#315b76' },
-  cardUnit: { fontSize: 10, color: '#94a3b8' },
-  cardGrade: { fontSize: 10, color: '#64748b', marginTop: 2, backgroundColor: '#f1f5f9', alignSelf: 'flex-start', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  cardContent: { gap: 1 },
+  cardTitle: { fontSize: 11, fontWeight: '700', color: '#1e293b', minHeight: 28 },
+  cardMeta: { flexDirection: 'row', alignItems: 'baseline', marginTop: 2 },
+  cardPrice: { fontSize: 12, fontWeight: '800', color: '#315b76' },
+  cardUnit: { fontSize: 9, color: '#94a3b8' },
+  cardGrade: { fontSize: 8.5, color: '#64748b', marginTop: 2, backgroundColor: '#f1f5f9', alignSelf: 'flex-start', paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4 },
   emptyStateBox: { padding: 15, backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', borderStyle: 'dashed' },
   noMaterialText: { fontSize: 12, color: '#94a3b8', fontStyle: 'italic' },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

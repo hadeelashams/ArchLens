@@ -28,9 +28,10 @@ export default function WallScreen({ route, navigation }: any) {
     finishPreference, setFinishPreference,
     aiPerspectives, selectedPerspectiveId,
     isPerspectiveLoading, loadAIPerspectives, applyPerspective,
+    isRecommendationFromSaved,
     materialSelectionMode,
     calculation, systemCosts, budgetViolations,
-  } = useWallCalculations({ totalArea, rooms, tier, wallComposition });
+  } = useWallCalculations({ totalArea, rooms, tier, wallComposition, projectId });
 
   //  Pure UI state (never drives calculations) 
   const [wallThicknessError, setWallThicknessError] = useState<string | null>(null);
@@ -91,7 +92,15 @@ export default function WallScreen({ route, navigation }: any) {
           {/*  AI Generated Options  */}
           <View style={styles.perspectivesSection}>
             <View style={styles.perspectivesHeader}>
-              <Text style={styles.sectionLabel}>AI GENERATED OPTIONS</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.sectionLabel}>AI GENERATED OPTIONS</Text>
+                {isRecommendationFromSaved && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 }}>
+                    <Ionicons name="download-outline" size={12} color="#10b981" />
+                    <Text style={{ fontSize: 11, color: '#10b981', fontWeight: '600' }}>Previously Saved Recommendation</Text>
+                  </View>
+                )}
+              </View>
               <TouchableOpacity
                 style={[styles.regenerateBtn, isPerspectiveLoading && { opacity: 0.6 }]}
                 onPress={loadAIPerspectives}
@@ -119,7 +128,7 @@ export default function WallScreen({ route, navigation }: any) {
                     <TouchableOpacity
                       key={p.id}
                       style={[styles.perspectiveCard, styles.perspectiveCardHorizontal, isSelected && styles.perspectiveCardSelected]}
-                      onPress={() => applyPerspective(p)}
+                      onPress={() => { applyPerspective(p).catch(err => console.error('Error applying perspective:', err)); }}
                       activeOpacity={0.8}
                     >
                       <View style={styles.perspectiveCardHeader}>

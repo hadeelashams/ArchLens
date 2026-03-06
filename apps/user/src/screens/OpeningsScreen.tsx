@@ -6,7 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useOpeningsCalculations } from '../hooks/useOpeningsCalculations';
-import { db, auth } from '@archlens/shared';
+import { db, auth, generateText, extractStructuredData } from '@archlens/shared';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 export default function OpeningsScreen({ route, navigation }: any) {
@@ -22,9 +22,215 @@ export default function OpeningsScreen({ route, navigation }: any) {
             windowCount: room.windowCount || 0,
             doorMaterial: null,
             windowMaterial: null,
+            isRecommended: false,
+            aiConfidence: 0,
+            aiReasoning: ''
         }))
     );
-    const [saving, setSaving] = useState(false);
+    const [aiApplied, setAiApplied] = useState(false);
+    const [aiLoading, setAiLoading] = useState(false);
+
+    // Auto-select materials based on tier when materials are loaded
+    React.useEffect(() => {
+        if (!loading && materials.length > 0 && Array.isArray(roomsData)) {
+            const hasSelections = roomsData.some(r => r.doorMaterial || r.windowMaterial);
+            if (!hasSelections) {
+                const doorsList = materials.filter(m => m.subCategory === 'Doors');
+                const windowsList = materials.filter(m => m.subCategory === 'Windows');
+
+                if (doorsList.length > 0 && windowsList.length > 0) {
+                    const sortedDoors = [...doorsList].sort((a, b) => (a.pricePerUnit || 0) - (b.pricePerUnit || 0));
+                    const sortedWindows = [...windowsList].sort((a, b) => (a.pricePerUnit || 0) - (b.pricePerUnit || 0));
+
+                    const getMatByTier = (list: any[], budgetTier: string) => {
+                        const total = list.length;
+                        if (budgetTier === 'Economy') return list[0];
+                        if (budgetTier === 'Luxury') return list[total - 1];
+                        return list[Math.floor(total / 2)];
+                    };
+
+                    const pvcDoors = sortedDoors.filter(m => m.type?.includes('PVC') || m.name?.includes('PVC'));
+                    const upvcWindows = sortedWindows.filter(m => m.type?.includes('UPVC') || m.name?.includes('UPVC'));
+
+                    setRoomsData(prev => prev.map(room => {
+                        const isWetArea = room.name.toLowerCase().includes('bath') ||
+                            room.name.toLowerCase().includes('toilet') ||
+                            room.name.toLowerCase().includes('wc');
+
+                        let door = getMatByTier(sortedDoors, tier);
+                        let window = getMatByTier(sortedWindows, tier);
+
+                        if (isWetArea) {
+                            if (pvcDoors.length > 0) door = pvcDoors[0];
+                            if (upvcWindows.length > 0) window = upvcWindows[0];
+                        }
+
+                        return {
+                            ...room,
+                            doorMaterial: room.doorCount > 0 ? door : null,
+                            windowMaterial: room.windowCount > 0 ? window : null
+                        };
+                    }));
+                }
+            }
+        }
+    }, [loading, materials.length, tier]);
+
+
+    // AI-Powered Recommendation System with Batch Processing
+    const getBatchAIRecommendations = async (roomsToProcess: any[], budgetTier: string, mats: any[]) => {
+        try {
+            const doorsList = mats.filter(m => m.subCategory === 'Doors');
+            const windowsList = mats.filter(m => m.subCategory === 'Windows');
+
+            const doorCatalog = doorsList.map(m => `ID:${m.id} | ${m.name} | ${m.type} | Grade:${m.grade} | ₹${m.pricePerUnit}/${m.unit}`).join('\n');
+            const windowCatalog = windowsList.map(m => `ID:${m.id} | ${m.name} | ${m.type} | Grade:${m.grade} | ₹${m.pricePerUnit}/${m.unit}`).join('\n');
+
+            const roomsDescription = roomsToProcess.map(r => `- ${r.name} (ID: ${r.id}): ${r.doorCount} doors, ${r.windowCount} windows`).join('\n');
+
+            const prompt = `
+You are a Senior Civil Engineer specializing in Indian residential construction.
+Analyze these rooms and recommend the best door and window materials from the catalog provided.
+
+BUDGET TIER: ${budgetTier}
+PROJECT AREA: ${totalArea} sq ft
+
+ROOMS TO ANALYZE:
+${roomsDescription}
+
+AVAILABLE DOORS:
+${doorCatalog}
+
+AVAILABLE WINDOWS:
+${windowCatalog}
+
+For each room, consider its usage (e.g., Bathroom needs moisture-proof UPVC/PVC, Main Entrance needs security, Bedrooms need ventilation/aesthetics). 
+Stay within the ${budgetTier} tier.
+
+Return ONLY a JSON object in this exact format:
+{
+  "recommendations": [
+    {
+      "roomId": "room_id_here",
+      "doorMaterialId": "actual_door_id_from_catalog",
+      "windowMaterialId": "actual_window_id_from_catalog",
+      "confidence": 85,
+      "reasoning": "Brief engineering explanation for this specific room"
+    }
+  ],
+  "overallAnalysis": "Brief overall selection strategy"
+}`;
+
+            const aiResponse = await generateText(prompt, {
+                temperature: 0.4,
+                maxOutputTokens: 1500
+            });
+
+            // Clean response to handle potential markdown or preamble
+            let jsonText = aiResponse.trim();
+            if (jsonText.includes('```json')) {
+                jsonText = jsonText.split('```json')[1].split('```')[0].trim();
+            } else if (jsonText.includes('```')) {
+                jsonText = jsonText.split('```')[1].split('```')[0].trim();
+            }
+
+            // Fallback: use extractStructuredData if initial parse fails, but try to avoid it
+            let parsed;
+            try {
+                parsed = JSON.parse(jsonText);
+            } catch (e) {
+                console.log('Direct parse failed, trying structured extraction...');
+                const structuredData = await extractStructuredData(aiResponse, `{
+                    "recommendations": [{"roomId": "string", "doorMaterialId": "string", "windowMaterialId": "string", "confidence": "number", "reasoning": "string"}],
+                    "overallAnalysis": "string"
+                }`);
+                parsed = JSON.parse(structuredData);
+            }
+
+            return parsed.recommendations;
+        } catch (error) {
+            console.warn('Batch AI recommendation failed:', error);
+            return null;
+        }
+    };
+
+    // Fallback rule-based recommendation (backup for AI failures)
+    const getFallbackRecommendation = (roomName: string, budgetTier: string, mats: any[]) => {
+        const doorsList = mats.filter(m => m.subCategory === 'Doors');
+        const windowsList = mats.filter(m => m.subCategory === 'Windows');
+        const lowerRoom = roomName.toLowerCase();
+
+        const isBath = lowerRoom.includes('bath') || lowerRoom.includes('toilet');
+        const isMain = lowerRoom.includes('living') || lowerRoom.includes('main');
+
+        const door = isBath
+            ? doorsList.find(m => m.type?.includes('PVC') || m.type?.includes('UPVC')) || doorsList[0]
+            : isMain
+                ? doorsList.find(m => m.type?.includes('Main')) || doorsList[0]
+                : doorsList[0];
+
+        const window = windowsList[0];
+
+        return {
+            door, window,
+            doorConfidence: 70, windowConfidence: 70,
+            doorReasoning: 'Rule-based selection for room type',
+            windowReasoning: 'Standard selection for budget tier',
+            contextAnalysis: 'Basic recommendation based on room category'
+        };
+    };
+
+    const applyRecommendations = async () => {
+        if (!materials || materials.length === 0) return;
+
+        setAiLoading(true);
+
+        try {
+            const validRooms = roomsData.filter((r: any) => r.doorCount > 0 || r.windowCount > 0);
+            const batchResults = await getBatchAIRecommendations(validRooms, tier, materials);
+
+            if (!batchResults) {
+                throw new Error('No recommendations returned from AI');
+            }
+
+            const doorsList = materials.filter((m: any) => m.subCategory === 'Doors');
+            const windowsList = materials.filter((m: any) => m.subCategory === 'Windows');
+
+            const updatedRooms = roomsData.map((room: any) => {
+                const recommendation = (batchResults as any[]).find(res => res.roomId === room.id);
+
+                if (recommendation) {
+                    return {
+                        ...room,
+                        doorMaterial: doorsList.find(m => m.id === recommendation.doorMaterialId) || room.doorMaterial || doorsList[0],
+                        windowMaterial: windowsList.find(m => m.id === recommendation.windowMaterialId) || room.windowMaterial || windowsList[0],
+                        isRecommended: true,
+                        aiConfidence: recommendation.confidence || 80,
+                        aiReasoning: recommendation.reasoning || 'AI-optimized selection'
+                    };
+                }
+                return room;
+            });
+
+            setRoomsData(updatedRooms);
+            setAiApplied(true);
+
+            Alert.alert(
+                '🤖 AI Recommendations Applied',
+                `Smart material selection completed in a single batch for ${validRooms.length} rooms.`,
+                [{ text: 'Review Selections', style: 'default' }]
+            );
+        } catch (error) {
+            console.error('AI recommendation error:', error);
+            Alert.alert(
+                'AI Recommendation Error',
+                'Unable to get AI recommendations. Please select materials manually or try again later.',
+                [{ text: 'OK' }]
+            );
+        } finally {
+            setAiLoading(false);
+        }
+    };
 
     const currentRoom = roomsData.find((r: any) => r.id === selectedRoomId);
     const doorsList = materials.filter((m: any) => m.subCategory === 'Doors');
@@ -52,50 +258,18 @@ export default function OpeningsScreen({ route, navigation }: any) {
         });
     };
 
-    const handleSave = async () => {
-        if (!auth.currentUser) return Alert.alert('Error', 'User not authenticated.');
+    const handleContinue = () => {
         if (!allComplete) return Alert.alert('Incomplete', 'Please complete all room selections.');
 
-        setSaving(true);
-        try {
-            const roomSelections = Object.fromEntries(
-                roomsData.map((r: any) => [r.id, {
-                    doorCount: r.doorCount,
-                    windowCount: r.windowCount,
-                    doorId: r.doorMaterial?.id,
-                    windowId: r.windowMaterial?.id,
-                }])
-            );
-
-            const lineItems = roomsData.flatMap((room: any) => [
-                ...(room.doorMaterial && room.doorCount > 0 ? [{
-                    roomId: room.id, roomName: room.name, type: 'door',
-                    materialName: room.doorMaterial.name, quantity: room.doorCount,
-                    unitPrice: room.doorMaterial.pricePerUnit,
-                    total: room.doorMaterial.pricePerUnit * room.doorCount,
-                }] : []),
-                ...(room.windowMaterial && room.windowCount > 0 ? [{
-                    roomId: room.id, roomName: room.name, type: 'window',
-                    materialName: room.windowMaterial.name, quantity: room.windowCount,
-                    unitPrice: room.windowMaterial.pricePerUnit,
-                    total: room.windowMaterial.pricePerUnit * room.windowCount,
-                }] : []),
-            ]);
-
-            await addDoc(collection(db, 'estimates'), {
-                projectId, userId: auth.currentUser.uid,
-                itemName: 'Doors & Windows', category: 'Openings',
-                totalCost, lineItems, roomSelections,
-                area: totalArea, tier, createdAt: serverTimestamp(),
-            });
-            Alert.alert('Saved!', 'Openings estimate saved successfully.');
-            navigation.navigate('ProjectSummary', { projectId });
-        } catch (e: any) {
-            Alert.alert('Error', e.message);
-        } finally {
-            setSaving(false);
-        }
+        navigation.navigate('OpeningsCostEstimation', {
+            projectId,
+            totalArea,
+            tier,
+            roomsData,
+            totalCost
+        });
     };
+
 
     if (loading) {
         return (
@@ -109,7 +283,8 @@ export default function OpeningsScreen({ route, navigation }: any) {
         list: any[],
         selected: any,
         field: 'doorMaterial' | 'windowMaterial',
-        accentColor: string
+        accentColor: string,
+        recommendedId?: string
     ) => (
         <ScrollView
             horizontal
@@ -123,9 +298,20 @@ export default function OpeningsScreen({ route, navigation }: any) {
                     style={[
                         styles.materialCardCompact,
                         selected?.id === material.id && { backgroundColor: '#eef2f7', borderColor: accentColor, borderWidth: 2 },
+                        material.id === recommendedId && { borderColor: '#0ea5e9', borderWidth: 1 }
                     ]}
                     onPress={() => updateRoomData(field, material)}
                 >
+                    {material.id === recommendedId && (
+                        <View style={styles.recommendedBadge}>
+                            <Ionicons name="sparkles" size={8} color="#fff" />
+                        </View>
+                    )}
+                    {material.id === recommendedId && currentRoom?.aiConfidence > 0 && (
+                        <View style={styles.confidenceBadge}>
+                            <Text style={styles.confidenceText}>{currentRoom.aiConfidence}%</Text>
+                        </View>
+                    )}
                     <Image source={{ uri: material.imageUrl }} style={styles.materialImageCompact} />
                     <Text style={styles.materialNameCompact} numberOfLines={2}>{material.name}</Text>
                     <Text style={styles.materialPriceCompact}>Rs.{material.pricePerUnit}</Text>
@@ -153,83 +339,183 @@ export default function OpeningsScreen({ route, navigation }: any) {
 
                 <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
+                    {/* No Rooms Warning */}
+                    {roomsData.length === 0 && (
+                        <View style={styles.noRoomsWarning}>
+                            <Ionicons name="information-circle-outline" size={24} color="#d97706" />
+                            <Text style={styles.noRoomsTitle}>No Room Data Available</Text>
+                            <Text style={styles.noRoomsText}>
+                                Please complete the floor plan upload and wall configuration to see door and window counts for each room.
+                            </Text>
+                            <TouchableOpacity style={styles.goBackBtn} onPress={() => navigation.goBack()}>
+                                <Text style={styles.goBackText}>Go Back</Text>
+                            </TouchableOpacity>
+                        </View>
+                    )}
+
                     {/* Summary Card */}
-                    <View style={styles.summaryCard}>
-                        <View style={styles.statItem}>
-                            <MaterialCommunityIcons name="door" size={22} color="#f59e0b" />
-                            <Text style={styles.statLabel}>Doors</Text>
-                            <Text style={styles.statValue}>{totalDoors} Nos</Text>
-                        </View>
-                        <View style={styles.statDivider} />
-                        <View style={styles.statItem}>
-                            <MaterialCommunityIcons name="window-open-variant" size={22} color="#3b82f6" />
-                            <Text style={styles.statLabel}>Windows</Text>
-                            <Text style={styles.statValue}>{totalWindows} Nos</Text>
-                        </View>
-                    </View>
-
-                    {/* Room Selection Pills */}
-                    <Text style={styles.roomsLabel}>SELECT ROOM</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.roomPillsScroll}>
-                        {roomsData.map((room: any) => {
-                            const isComplete = (room.doorCount === 0 || !!room.doorMaterial) && (room.windowCount === 0 || !!room.windowMaterial);
-                            const isSelected = room.id === selectedRoomId;
-                            return (
-                                <TouchableOpacity
-                                    key={room.id}
-                                    style={[styles.roomPill, isSelected && styles.roomPillSelected, isComplete && styles.roomPillComplete]}
-                                    onPress={() => setSelectedRoomId(room.id)}
-                                >
-                                    <Text style={[styles.roomPillText, isSelected && styles.roomPillTextSelected]}>{room.name}</Text>
-                                    {isComplete && <Ionicons name="checkmark-circle" size={14} color="#059669" />}
-                                </TouchableOpacity>
-                            );
-                        })}
-                    </ScrollView>
-
-                    {/* Selected Room Details */}
-                    {currentRoom && (
-                        <View>
-                            {/* Doors */}
-                            <View style={styles.detailSection}>
-                                <View style={styles.sectionRow}>
-                                    <View style={styles.detailLabel}>
-                                        <MaterialCommunityIcons name="door" size={16} color="#ef4444" />
-                                        <Text style={styles.detailLabelText}>Doors</Text>
-                                    </View>
-                                    <View style={styles.counterRow}>
-                                        <TouchableOpacity style={styles.counterBtn} onPress={() => updateRoomData('doorCount', Math.max(0, currentRoom.doorCount - 1))}>
-                                            <Text style={styles.counterBtnText}>{'-'}</Text>
-                                        </TouchableOpacity>
-                                        <Text style={styles.counterValue}>{currentRoom.doorCount}</Text>
-                                        <TouchableOpacity style={styles.counterBtn} onPress={() => updateRoomData('doorCount', currentRoom.doorCount + 1)}>
-                                            <Text style={styles.counterBtnText}>+</Text>
-                                        </TouchableOpacity>
-                                    </View>
+                    {roomsData.length > 0 && (
+                        <>
+                            <View style={styles.summaryCard}>
+                                <View style={styles.statItem}>
+                                    <MaterialCommunityIcons name="door" size={22} color="#f59e0b" />
+                                    <Text style={styles.statLabel}>Doors</Text>
+                                    <Text style={styles.statValue}>{totalDoors} Nos</Text>
                                 </View>
-                                {currentRoom.doorCount > 0 && renderMaterialScroll(doorsList, currentRoom.doorMaterial, 'doorMaterial', '#315b76')}
+                                <View style={styles.statDivider} />
+                                <View style={styles.statItem}>
+                                    <MaterialCommunityIcons name="window-open-variant" size={22} color="#3b82f6" />
+                                    <Text style={styles.statLabel}>Windows</Text>
+                                    <Text style={styles.statValue}>{totalWindows} Nos</Text>
+                                </View>
                             </View>
 
-                            {/* Windows */}
-                            <View style={styles.detailSection}>
-                                <View style={styles.sectionRow}>
-                                    <View style={styles.detailLabel}>
-                                        <MaterialCommunityIcons name="window-open-variant" size={16} color="#3b82f6" />
-                                        <Text style={styles.detailLabelText}>Windows</Text>
+                            {/* AI Recommendation Banner */}
+                            <TouchableOpacity
+                                style={[styles.aiBanner, aiApplied && styles.aiBannerApplied]}
+                                onPress={applyRecommendations}
+                                activeOpacity={0.8}
+                                disabled={aiLoading}
+                            >
+                                <View style={styles.aiIconContainer}>
+                                    {aiLoading ? (
+                                        <ActivityIndicator size={24} color="#315b76" />
+                                    ) : (
+                                        <MaterialCommunityIcons
+                                            name={aiApplied ? "robot-happy" : "robot"}
+                                            size={24}
+                                            color={aiApplied ? "#059669" : "#315b76"}
+                                        />
+                                    )}
+                                </View>
+                                <View style={styles.aiContent}>
+                                    <Text style={[styles.aiTitle, aiApplied && styles.aiTitleApplied]}>
+                                        {aiLoading
+                                            ? "AI Analyzing..."
+                                            : aiApplied
+                                                ? "AI Recommendation Applied"
+                                                : "AI Recommendation"
+                                        }
+                                    </Text>
+                                    <Text style={styles.aiDesc}>
+                                        {aiLoading
+                                            ? "Processing..."
+                                            : aiApplied
+                                                ? "Recommendations applied to your selections"
+                                                : `Get smart suggestions for your ${tier} plan`}
+                                    </Text>
+                                </View>
+                                {!aiApplied && (
+                                    <View style={styles.applyBadge}>
+                                        <Text style={styles.applyBadgeText}>APPLY</Text>
+                                        <Ionicons name="sparkles" size={12} color="#fff" />
                                     </View>
-                                    <View style={styles.counterRow}>
-                                        <TouchableOpacity style={styles.counterBtn} onPress={() => updateRoomData('windowCount', Math.max(0, currentRoom.windowCount - 1))}>
-                                            <Text style={styles.counterBtnText}>{'-'}</Text>
+                                )}
+                                {aiApplied && (
+                                    <Ionicons name="checkmark-circle" size={20} color="#059669" />
+                                )}
+                            </TouchableOpacity>
+
+                            {/* Room Selection Pills */}
+                            <Text style={styles.roomsLabel}>SELECT ROOM</Text>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.roomPillsScroll}>
+                                {roomsData.map((room: any) => {
+                                    const isComplete = (room.doorCount === 0 || !!room.doorMaterial) && (room.windowCount === 0 || !!room.windowMaterial);
+                                    const isSelected = room.id === selectedRoomId;
+                                    return (
+                                        <TouchableOpacity
+                                            key={room.id}
+                                            style={[styles.roomPill, isSelected && styles.roomPillSelected, isComplete && styles.roomPillComplete]}
+                                            onPress={() => setSelectedRoomId(room.id)}
+                                        >
+                                            <Text style={[styles.roomPillText, isSelected && styles.roomPillTextSelected]}>{room.name}</Text>
+                                            {isComplete && <Ionicons name="checkmark-circle" size={14} color="#059669" />}
                                         </TouchableOpacity>
-                                        <Text style={styles.counterValue}>{currentRoom.windowCount}</Text>
-                                        <TouchableOpacity style={styles.counterBtn} onPress={() => updateRoomData('windowCount', currentRoom.windowCount + 1)}>
-                                            <Text style={styles.counterBtnText}>+</Text>
-                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </ScrollView>
+
+                            {/* Selected Room Details */}
+                            {currentRoom && (
+                                <View>
+                                    {/* Doors */}
+                                    <View style={styles.detailSection}>
+                                        <View style={styles.sectionRow}>
+                                            <View style={styles.detailLabel}>
+                                                <MaterialCommunityIcons name="door" size={16} color="#ef4444" />
+                                                <Text style={styles.detailLabelText}>Doors</Text>
+                                            </View>
+                                            <View style={styles.counterRow}>
+                                                <TouchableOpacity style={styles.counterBtn} onPress={() => updateRoomData('doorCount', Math.max(0, currentRoom.doorCount - 1))}>
+                                                    <Text style={styles.counterBtnText}>{'-'}</Text>
+                                                </TouchableOpacity>
+                                                <Text style={styles.counterValue}>{currentRoom.doorCount}</Text>
+                                                <TouchableOpacity style={styles.counterBtn} onPress={() => updateRoomData('doorCount', currentRoom.doorCount + 1)}>
+                                                    <Text style={styles.counterBtnText}>+</Text>
+                                                </TouchableOpacity>
+                                            </View>
+                                        </View>
+                                        {currentRoom.doorCount > 0 && renderMaterialScroll(
+                                            doorsList,
+                                            currentRoom.doorMaterial,
+                                            'doorMaterial',
+                                            '#315b76',
+                                            currentRoom.doorMaterial?.id
+                                        )}
+                                        {currentRoom.doorCount > 0 && currentRoom.isRecommended && currentRoom.aiReasoning && currentRoom.aiReasoning.trim() !== '' && currentRoom.aiConfidence > 0 && (
+                                            <>
+                                                <View style={styles.aiReasoningCard}>
+                                                    <View style={styles.aiReasoningHeader}>
+                                                        <Text style={styles.aiReasoningTitle}>AI Recommendations</Text>
+                                                        <Text style={styles.aiReasoningConfidence}>{currentRoom.aiConfidence}%</Text>
+                                                    </View>
+                                                    <Text style={styles.aiReasoningText}>{currentRoom.aiReasoning}</Text>
+                                                </View>
+                                                <Text style={styles.aiApplyText}>AI recommendation applied</Text>
+                                            </>
+                                        )}
+                                    </View>
+
+                                    {/* Windows */}
+                                    <View style={styles.detailSection}>
+                                        <View style={styles.sectionRow}>
+                                            <View style={styles.detailLabel}>
+                                                <MaterialCommunityIcons name="window-open-variant" size={16} color="#3b82f6" />
+                                                <Text style={styles.detailLabelText}>Windows</Text>
+                                            </View>
+                                            <View style={styles.counterRow}>
+                                                <TouchableOpacity style={styles.counterBtn} onPress={() => updateRoomData('windowCount', Math.max(0, currentRoom.windowCount - 1))}>
+                                                    <Text style={styles.counterBtnText}>{'-'}</Text>
+                                                </TouchableOpacity>
+                                                <Text style={styles.counterValue}>{currentRoom.windowCount}</Text>
+                                                <TouchableOpacity style={styles.counterBtn} onPress={() => updateRoomData('windowCount', currentRoom.windowCount + 1)}>
+                                                    <Text style={styles.counterBtnText}>+</Text>
+                                                </TouchableOpacity>
+                                            </View>
+                                        </View>
+                                        {currentRoom.windowCount > 0 && renderMaterialScroll(
+                                            windowsList,
+                                            currentRoom.windowMaterial,
+                                            'windowMaterial',
+                                            '#3b82f6',
+                                            currentRoom.windowMaterial?.id
+                                        )}
+                                        {currentRoom.windowCount > 0 && currentRoom.isRecommended && currentRoom.aiReasoning && currentRoom.aiReasoning.trim() !== '' && currentRoom.aiConfidence > 0 && (
+                                            <>
+                                                <View style={styles.aiReasoningCard}>
+                                                    <View style={styles.aiReasoningHeader}>
+                                                        <Text style={styles.aiReasoningTitle}>AI Recommendations</Text>
+                                                        <Text style={styles.aiReasoningConfidence}>{currentRoom.aiConfidence}%</Text>
+                                                    </View>
+                                                    <Text style={styles.aiReasoningText}>{currentRoom.aiReasoning}</Text>
+                                                </View>
+                                                <Text style={styles.aiApplyText}>AI recommendation applied</Text>
+                                            </>
+                                        )}
                                     </View>
                                 </View>
-                                {currentRoom.windowCount > 0 && renderMaterialScroll(windowsList, currentRoom.windowMaterial, 'windowMaterial', '#3b82f6')}
-                            </View>
-                        </View>
+                            )}
+                        </>
                     )}
                 </ScrollView>
 
@@ -241,16 +527,13 @@ export default function OpeningsScreen({ route, navigation }: any) {
                     </View>
                     <TouchableOpacity
                         style={[styles.saveBtn, !allComplete && styles.saveBtnDisabled]}
-                        onPress={handleSave}
-                        disabled={saving || !allComplete}
+                        onPress={handleContinue}
+                        disabled={!allComplete}
                     >
-                        {saving ? <ActivityIndicator color="#fff" /> : (
-                            <>
-                                <Text style={styles.saveBtnText}>Save</Text>
-                                <Ionicons name="checkmark" size={18} color="#fff" />
-                            </>
-                        )}
+                        <Text style={styles.saveBtnText}>View Estimation</Text>
+                        <Ionicons name="arrow-forward" size={18} color="#fff" />
                     </TouchableOpacity>
+
                 </View>
             </SafeAreaView>
         </View>
@@ -333,6 +616,13 @@ const styles = StyleSheet.create({
     costLabel: { fontSize: 11, fontWeight: '700', color: '#94a3b8', letterSpacing: 0.8, textTransform: 'uppercase' },
     costTotal: { fontSize: 20, fontWeight: '900', color: '#1e293b' },
 
+    /* No Rooms Warning */
+    noRoomsWarning: { alignItems: 'center', justifyContent: 'center', paddingVertical: 40, gap: 12, marginTop: 40 },
+    noRoomsTitle: { fontSize: 16, fontWeight: '700', color: '#1e293b', textAlign: 'center' },
+    noRoomsText: { fontSize: 13, color: '#64748b', textAlign: 'center', lineHeight: 18, paddingHorizontal: 20 },
+    goBackBtn: { backgroundColor: '#315b76', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 10, marginTop: 12 },
+    goBackText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+
     /* Save Button */
     saveBtn: {
         backgroundColor: '#315b76', padding: 16, borderRadius: 14,
@@ -340,4 +630,145 @@ const styles = StyleSheet.create({
     },
     saveBtnDisabled: { opacity: 0.6 },
     saveBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+
+    /* AI Recommendation Banner */
+    aiBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#f0f9ff',
+        borderRadius: 16,
+        padding: 12,
+        marginBottom: 15,
+        borderWidth: 1,
+        borderColor: '#bae6fd',
+        gap: 12,
+    },
+    aiBannerApplied: {
+        backgroundColor: '#f0fdf4',
+        borderColor: '#bbf7d0',
+    },
+    aiIconContainer: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#fff',
+        justifyContent: 'center',
+        alignItems: 'center',
+        elevation: 1,
+        shadowColor: '#000',
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+    },
+    aiContent: {
+        flex: 1,
+    },
+    aiTitle: {
+        fontSize: 14,
+        fontWeight: '800',
+        color: '#0c4a6e',
+    },
+    aiTitleApplied: {
+        color: '#065f46',
+    },
+    aiDesc: {
+        fontSize: 11,
+        color: '#0369a1',
+        fontWeight: '500',
+    },
+    applyBadge: {
+        backgroundColor: '#315b76',
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 20,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    applyBadgeText: {
+        color: '#fff',
+        fontSize: 10,
+        fontWeight: '800',
+    },
+    recommendedBadge: {
+        position: 'absolute',
+        top: -4,
+        right: -4,
+        backgroundColor: '#0ea5e9',
+        width: 18,
+        height: 18,
+        borderRadius: 9,
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 10,
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOpacity: 0.15,
+        shadowRadius: 3,
+        shadowOffset: { width: 0, height: 1 },
+    },
+    recommendedBadgeText: {
+        color: '#fff',
+        fontSize: 8,
+        fontWeight: '900',
+    },
+
+    /* AI Enhancement Styles */
+    confidenceBadge: {
+        position: 'absolute',
+        top: -4,
+        left: -4,
+        backgroundColor: '#6366f1',
+        paddingHorizontal: 4,
+        paddingVertical: 2,
+        borderRadius: 8,
+        zIndex: 10,
+        elevation: 2,
+    },
+    confidenceText: {
+        color: '#fff',
+        fontSize: 7,
+        fontWeight: '800',
+    },
+    aiReasoningCard: {
+        backgroundColor: '#f8fafc',
+        borderRadius: 12,
+        padding: 12,
+        marginTop: 8,
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+    },
+    aiReasoningHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        marginBottom: 6,
+    },
+    aiReasoningTitle: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: '#6366f1',
+        flex: 1,
+    },
+    aiReasoningConfidence: {
+        fontSize: 9,
+        fontWeight: '600',
+        color: '#10b981',
+        backgroundColor: '#dcfce7',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 6,
+    },
+    aiReasoningText: {
+        fontSize: 11,
+        color: '#475569',
+        lineHeight: 16,
+        fontWeight: '500',
+    },
+    aiApplyText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#6366f1',
+        marginTop: 8,
+        textAlign: 'center',
+    },
 });
