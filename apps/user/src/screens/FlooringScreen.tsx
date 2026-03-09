@@ -19,8 +19,13 @@ import { getProjectById } from '../services/projectService';
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // --- ENGINEERING CONSTANTS ---
-const SQ_FT_TO_SQ_M = 0.092903;
 const TILE_WASTE_FACTOR = 0.05; // 5% waste
+const formatUnit = (unit?: string) => {
+  if (!unit) return 'sq.ft';
+  const lowUnit = unit.toLowerCase();
+  if (lowUnit.includes('square') || lowUnit.includes('sqft') || lowUnit.includes('sq.ft')) return 'sq.ft';
+  return unit;
+};
 
 export default function FlooringScreen({ route, navigation }: any) {
   const { projectId, tier = 'Standard' } = route.params || {};
@@ -45,6 +50,7 @@ export default function FlooringScreen({ route, navigation }: any) {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiApplied, setAiApplied] = useState(false);
   const [selectedMaterialFilter, setSelectedMaterialFilter] = useState<string | null>(null);
+  const [selectedSubMaterialFilter, setSelectedSubMaterialFilter] = useState<string | null>(null);
 
   // Fetch project and AI-detected rooms from Firebase
   useEffect(() => {
@@ -150,16 +156,22 @@ export default function FlooringScreen({ route, navigation }: any) {
           );
           const premiumMats = sorted.filter(m =>
             m.name?.toLowerCase().includes('marble') ||
-            m.name?.toLowerCase().includes('granite') ||
-            m.name?.toLowerCase().includes('wooden')
+            m.name?.toLowerCase().includes('granite')
+          );
+          const woodenMats = sorted.filter(m =>
+            m.name?.toLowerCase().includes('wooden') ||
+            m.name?.toLowerCase().includes('bamboo') ||
+            m.name?.toLowerCase().includes('parquet')
           );
 
           setRoomsData(prev => prev.map(room => {
             const lowerName = room.name.toLowerCase();
-            const isWetArea = lowerName.includes('bath') || lowerName.includes('toilet') || lowerName.includes('wc') || lowerName.includes('powder');
-            const isKitchen = lowerName.includes('kitchen') || lowerName.includes('pantry') || lowerName.includes('utility') || lowerName.includes('store');
-            const isLiving = lowerName.includes('living') || lowerName.includes('hall') || lowerName.includes('drawing') || lowerName.includes('great');
-            const isBed = lowerName.includes('bed') || lowerName.includes('master') || lowerName.includes('guest');
+            const isWetArea = lowerName.includes('bath') || lowerName.includes('toilet') || lowerName.includes('wc') ||
+              lowerName.includes('powder') || lowerName.includes('wash') || lowerName.includes('utility') ||
+              lowerName.includes('sit out') || lowerName.includes('balcony');
+            const isKitchen = lowerName.includes('kitchen') || lowerName.includes('pantry') || lowerName.includes('store');
+            const isLiving = lowerName.includes('living') || lowerName.includes('hall') || lowerName.includes('drawing') || lowerName.includes('great') || lowerName.includes('foyer');
+            const isBed = lowerName.includes('bed') || lowerName.includes('master') || lowerName.includes('guest') || lowerName.includes('study');
 
             let finalMat = getMatByTier(sorted, tier);
 
@@ -169,10 +181,14 @@ export default function FlooringScreen({ route, navigation }: any) {
               finalMat = kitchenTiles[Math.floor(kitchenTiles.length / 2)] || kitchenTiles[0];
             } else if (isLiving && premiumMats.length > 0 && tier !== 'Economy') {
               finalMat = premiumMats[premiumMats.length - 1]; // Top premium for the tier
-            } else if (isBed && sorted.length > 2) {
-              // Pick a different index for beds compared to the default tier mat
-              const tierIdx = Math.floor(sorted.length / 2);
-              finalMat = sorted[tierIdx + 1] || sorted[tierIdx - 1] || sorted[tierIdx];
+            } else if (isBed) {
+              if (tier === 'Luxury' && premiumMats.length > 0) {
+                // Prioritize Italian Marble for Luxury Bedrooms
+                finalMat = premiumMats.find(m => m.name.toLowerCase().includes('italian')) || premiumMats[0];
+              } else if (sorted.length > 2) {
+                const tierIdx = Math.floor(sorted.length / 2);
+                finalMat = sorted[tierIdx + 1] || sorted[tierIdx - 1] || sorted[tierIdx];
+              }
             }
 
             return {
@@ -190,8 +206,9 @@ export default function FlooringScreen({ route, navigation }: any) {
     if (selectedRoomId && roomsData.length > 0) {
       const selectedRoom = roomsData.find((r: any) => r.id === selectedRoomId);
       if (selectedRoom) {
-        const materialTypes = getMaterialTypesForRoom(getRoomType(selectedRoom.name));
-        setSelectedMaterialFilter(materialTypes[0] || null);
+        const categories = getMaterialTypesForRoom(getRoomType(selectedRoom.name));
+        setSelectedMaterialFilter(categories[0] || null);
+        setSelectedSubMaterialFilter(null);
       }
     }
   }, [selectedRoomId, roomsData]);
@@ -211,9 +228,8 @@ export default function FlooringScreen({ route, navigation }: any) {
 
   const totalCost = roomsData.reduce((sum: number, room: any) => {
     if (room.flooringMaterial && room.area > 0) {
-      const area_sqm = room.area * SQ_FT_TO_SQ_M;
-      const tilesNeeded = Math.ceil(area_sqm * (1 + TILE_WASTE_FACTOR));
-      return sum + (room.flooringMaterial.pricePerUnit * tilesNeeded);
+      const qtyNeeded = Math.ceil(room.area * (1 + TILE_WASTE_FACTOR));
+      return sum + (room.flooringMaterial.pricePerUnit * qtyNeeded);
     }
     return sum;
   }, 0);
@@ -224,13 +240,11 @@ export default function FlooringScreen({ route, navigation }: any) {
     roomsData.forEach(room => {
       if (room.flooringMaterial && room.area > 0) {
         const mat = room.flooringMaterial;
-        const area_sqm = room.area * SQ_FT_TO_SQ_M;
-        const qty = Math.ceil(area_sqm * (1 + TILE_WASTE_FACTOR));
+        const qty = Math.ceil(room.area * (1 + TILE_WASTE_FACTOR));
         const cost = qty * mat.pricePerUnit;
 
         if (!breakdown[mat.id]) {
-          const rawUnit = mat.unit || 'Nos';
-          const displayUnit = rawUnit.toLowerCase().includes('square') ? 'sq.ft' : rawUnit;
+          const displayUnit = formatUnit(mat.unit);
 
           breakdown[mat.id] = {
             name: mat.name ? mat.name.charAt(0).toUpperCase() + mat.name.slice(1).toLowerCase() : 'Unknown Material',
@@ -271,18 +285,40 @@ export default function FlooringScreen({ route, navigation }: any) {
     return 'Living/Dining'; // Default
   };
 
-  // Get material types for current room
+  // Get material categories for current room
   const getMaterialTypesForRoom = (roomType: string): string[] => {
-    const flooringConfig = (CONSTRUCTION_HIERARCHY as any)?.Flooring?.subCategories;
-    return flooringConfig?.[roomType] || [];
+    const flooringConfig = (CONSTRUCTION_HIERARCHY as any)?.Flooring;
+    return flooringConfig?.roomRecommendations?.[roomType] || [];
   };
 
-  // Filter materials by type
-  const getFilteredMaterialsByType = (materialType: string) => {
+  // Get sub-types for a selected category
+  const getMaterialSubTypes = (category: string): string[] => {
+    const flooringConfig = (CONSTRUCTION_HIERARCHY as any)?.Flooring?.subCategories;
+    const categoryData = flooringConfig?.[category];
+    if (categoryData && typeof categoryData === 'object' && !Array.isArray(categoryData)) {
+      return Object.keys(categoryData);
+    }
+    return [];
+  };
+
+  // Filter materials by category and optional sub-type
+  const getFilteredMaterialsByType = (category: string, subType: string | null) => {
     return flooringMaterials.filter(m => {
-      const materialName = m.name || '';
-      const materialType_field = m.type || m.subCategory || '';
-      return materialName.includes(materialType) || materialType_field.includes(materialType);
+      const materialName = (m.name || '').toLowerCase();
+      const materialType = (m.type || '').toLowerCase();
+      const materialSubCategory = (m.subCategory || '').toLowerCase();
+
+      const categoryMatch = materialName.includes(category.toLowerCase()) ||
+        materialType.includes(category.toLowerCase()) ||
+        materialSubCategory.includes(category.toLowerCase());
+
+      if (!subType) return categoryMatch;
+
+      const subTypeMatch = materialName.includes(subType.toLowerCase()) ||
+        materialType.includes(subType.toLowerCase()) ||
+        materialSubCategory.includes(subType.toLowerCase());
+
+      return categoryMatch && subTypeMatch;
     });
   };
 
@@ -306,8 +342,11 @@ ${roomsDescription}
 AVAILABLE FLOORING MATERIALS:
 ${catalog}
 
-For each room, consider its usage (e.g., Bathroom needs anti-skid, Bedrooms need aesthetics, Living needs durability). 
-Stay within the ${budgetTier} tier.
+ENGINEERING RULES:
+1. SAFETY FIRST (WET AREAS): For Toilets, Bathrooms, Wash Areas, Utilities, and Sit-outs, you MUST ONLY recommend materials that are explicitly "Anti-skid", "Anti-slip", "Matte", or "Rustico". NEVER recommend polished Granite, Marble, or Glossy Tiles for these areas.
+2. LUXURY BEDROOMS: If the tier is "Luxury", prioritize "Italian Marble", "Premium Marble" or high-end "Onyx Marble" for Bedrooms. Only use wooden flooring if explicitly requested in a different context.
+3. KITCHENS: Recommend durable, easy-to-clean materials like "Vitrified Tiles" or "Polished Granite" (only for platforms/dry areas).
+4. STAY IN TIER: Recommendations must strictly align with the ${budgetTier} tier pricing and quality.
 
 Return ONLY a JSON object in this exact format:
 {
@@ -416,9 +455,9 @@ Return ONLY a JSON object in this exact format:
         materialName: room.flooringMaterial.name,
         name: room.flooringMaterial.name,
         desc: `Flooring for ${room.name} (${room.area} sq.ft)`,
-        qty: Math.ceil(room.area * SQ_FT_TO_SQ_M * (1 + TILE_WASTE_FACTOR)),
-        unit: 'Nos',
-        total: Math.ceil(room.area * SQ_FT_TO_SQ_M * (1 + TILE_WASTE_FACTOR)) * room.flooringMaterial.pricePerUnit,
+        qty: Math.ceil(room.area * (1 + TILE_WASTE_FACTOR)),
+        unit: formatUnit(room.flooringMaterial.unit),
+        total: Math.ceil(room.area * (1 + TILE_WASTE_FACTOR)) * room.flooringMaterial.pricePerUnit,
         rate: room.flooringMaterial.pricePerUnit
       }));
 
@@ -611,39 +650,78 @@ Return ONLY a JSON object in this exact format:
                   )}
                   <View style={styles.roomInfoItem}>
                     <Ionicons name="cube-outline" size={16} color="#315b76" />
-                    <Text style={styles.roomInfoText}>Tiles: {Math.ceil(currentRoom.area * SQ_FT_TO_SQ_M * (1 + TILE_WASTE_FACTOR))} Nos</Text>
+                    <Text style={styles.roomInfoText}>Qty: {Math.ceil(currentRoom.area * (1 + TILE_WASTE_FACTOR))} {formatUnit(currentRoom.flooringMaterial?.unit)}</Text>
                   </View>
                 </View>
               </View>
 
-              {/* Material Type Filter - Outside Card */}
+              {/* Material Category Filter */}
               <View style={styles.filterSection}>
-                <Text style={styles.filterLabel}>SELECT MATERIAL TYPE</Text>
+                <Text style={styles.filterLabel}>SELECT CATEGORY</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
-                  {getMaterialTypesForRoom(getRoomType(currentRoom.name)).map((materialType: string) => (
+                  {getMaterialTypesForRoom(getRoomType(currentRoom.name)).map((category: string) => (
                     <TouchableOpacity
-                      key={materialType}
+                      key={category}
                       style={[
                         styles.filterPill,
-                        selectedMaterialFilter === materialType && styles.filterPillSelected
+                        selectedMaterialFilter === category && styles.filterPillSelected
                       ]}
-                      onPress={() => setSelectedMaterialFilter(materialType)}
+                      onPress={() => {
+                        setSelectedMaterialFilter(category);
+                        setSelectedSubMaterialFilter(null);
+                      }}
                     >
-                      <Text style={[styles.filterPillText, selectedMaterialFilter === materialType && styles.filterPillTextSelected]}>
-                        {materialType}
+                      <Text style={[styles.filterPillText, selectedMaterialFilter === category && styles.filterPillTextSelected]}>
+                        {category}
                       </Text>
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
               </View>
 
+              {/* Sub-Category Filter (Nested Hierarchy) */}
+              {selectedMaterialFilter && getMaterialSubTypes(selectedMaterialFilter).length > 0 && (
+                <View style={[styles.filterSection, { marginTop: -10 }]}>
+                  <Text style={styles.filterLabel}>SELECT TYPE</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
+                    <TouchableOpacity
+                      style={[
+                        styles.filterPill,
+                        selectedSubMaterialFilter === null && styles.filterPillSelected
+                      ]}
+                      onPress={() => setSelectedSubMaterialFilter(null)}
+                    >
+                      <Text style={[styles.filterPillText, selectedSubMaterialFilter === null && styles.filterPillTextSelected]}>
+                        All {selectedMaterialFilter}
+                      </Text>
+                    </TouchableOpacity>
+                    {getMaterialSubTypes(selectedMaterialFilter).map((subType: string) => (
+                      <TouchableOpacity
+                        key={subType}
+                        style={[
+                          styles.filterPill,
+                          selectedSubMaterialFilter === subType && styles.filterPillSelected
+                        ]}
+                        onPress={() => setSelectedSubMaterialFilter(subType)}
+                      >
+                        <Text style={[styles.filterPillText, selectedSubMaterialFilter === subType && styles.filterPillTextSelected]}>
+                          {subType}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+
               {/* Material Cards - Horizontal Scrollable - Outside Card */}
               {selectedMaterialFilter && (
                 <View style={styles.materialCardSection}>
-                  <Text style={styles.materialListLabel}>Available {selectedMaterialFilter}</Text>
-                  {getFilteredMaterialsByType(selectedMaterialFilter).length > 0 ? (
+                  <Text style={styles.materialListLabel}>
+                    {selectedSubMaterialFilter ? `${selectedSubMaterialFilter} ${selectedMaterialFilter}` : `${selectedMaterialFilter} Products`}
+                  </Text>
+                  {getFilteredMaterialsByType(selectedMaterialFilter, selectedSubMaterialFilter).length > 0 ? (
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.materialCardsScroll}>
-                      {getFilteredMaterialsByType(selectedMaterialFilter).map(material => (
+                      {getFilteredMaterialsByType(selectedMaterialFilter, selectedSubMaterialFilter).map(material => (
                         <TouchableOpacity
                           key={material.id}
                           style={[
@@ -660,9 +738,9 @@ Return ONLY a JSON object in this exact format:
                             )}
                           </View>
                           <Text style={styles.materialName} numberOfLines={2}>{material.name}</Text>
-                          <Text style={styles.materialPrice}>₹{material.pricePerUnit || 0}/{material.unit || 'Nos'}</Text>
+                          <Text style={styles.materialPrice}>₹{material.pricePerUnit || 0}/{formatUnit(material.unit)}</Text>
                           <Text style={styles.materialCost} numberOfLines={1}>
-                            ₹{((material.pricePerUnit || 0) * Math.ceil(currentRoom.area * SQ_FT_TO_SQ_M * (1 + TILE_WASTE_FACTOR))).toLocaleString()}
+                            ₹{((material.pricePerUnit || 0) * Math.ceil(currentRoom.area * (1 + TILE_WASTE_FACTOR))).toLocaleString()}
                           </Text>
                           {currentRoom.flooringMaterial?.id === material.id && (
                             <View style={styles.materialCheckmark}>

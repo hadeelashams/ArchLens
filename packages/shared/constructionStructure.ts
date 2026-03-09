@@ -99,11 +99,21 @@ export const CONSTRUCTION_HIERARCHY = {
   'Flooring': {
     label: "Flooring",
     subCategories: {
-      'Living/Dining': ["Vitrified Tile", "Italian Marble", "Granite", "Teak Wood", "Engineered Wood"],
-      'Bedroom': ["Vitrified Tile", "Wooden Laminate", "Vinyl Flooring"],
-      'Kitchen': ["Anti-skid Ceramic Tile", "Vitrified Tile", "Quartz", "Granite"],
-      'Bathroom': ["Anti-skid Ceramic Tile", "Porcelain Tile", "Epoxy Grout"],
-      'Outdoor/Balcony': ["Natural Stone", "Terracotta Tile", "WPC Decking", "Grass Pavers"],
+      'Tile': {
+        'Ceramic': ["Ceramic Tile"],
+        'Vitrified': ["Vitrified Tile"],
+        'Porcelain': ["Porcelain Tile"],
+      },
+      'Marble': ["Marble"],
+      'Granite': ["Granite"],
+      'Wood': ["Wood", "Wooden Laminate", "Vinyl Flooring"],
+    },
+    roomRecommendations: {
+      'Living/Dining': ["Tile", "Marble", "Granite", "Wood"],
+      'Bedroom': ["Tile", "Marble", "Granite", "Wood"],
+      'Kitchen': ["Tile", "Granite"],
+      'Bathroom': ["Tile"],
+      'Outdoor/Balcony': ["Tile", "Granite"],
     },
   },
   'Wall Finishing': {

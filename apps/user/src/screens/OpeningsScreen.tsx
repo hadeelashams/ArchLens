@@ -53,9 +53,9 @@ export default function OpeningsScreen({ route, navigation }: any) {
                     const upvcWindows = sortedWindows.filter(m => m.type?.includes('UPVC') || m.name?.includes('UPVC'));
 
                     setRoomsData(prev => prev.map(room => {
-                        const isWetArea = room.name.toLowerCase().includes('bath') ||
-                            room.name.toLowerCase().includes('toilet') ||
-                            room.name.toLowerCase().includes('wc');
+                        const lowerName = room.name.toLowerCase();
+                        const isWetArea = lowerName.includes('bath') || lowerName.includes('toilet') || lowerName.includes('wc');
+                        const isTeakTarget = lowerName.includes('main') || lowerName.includes('bed') || lowerName.includes('dress');
 
                         let door = getMatByTier(sortedDoors, tier);
                         let window = getMatByTier(sortedWindows, tier);
@@ -63,6 +63,9 @@ export default function OpeningsScreen({ route, navigation }: any) {
                         if (isWetArea) {
                             if (pvcDoors.length > 0) door = pvcDoors[0];
                             if (upvcWindows.length > 0) window = upvcWindows[0];
+                        } else if (tier === 'Luxury' && isTeakTarget) {
+                            const teakDoor = sortedDoors.find(m => m.name?.toLowerCase().includes('teak') || m.type?.toLowerCase().includes('teak'));
+                            if (teakDoor) door = teakDoor;
                         }
 
                         return {
@@ -105,6 +108,7 @@ AVAILABLE WINDOWS:
 ${windowCatalog}
 
 For each room, consider its usage (e.g., Bathroom needs moisture-proof UPVC/PVC, Main Entrance needs security, Bedrooms need ventilation/aesthetics). 
+For LUXURY tier, ALWAYS prioritize "Teak Wood" or equivalent premium wood for Main Entrance, Bedrooms, and Dressing Area doors.
 Stay within the ${budgetTier} tier.
 
 Return ONLY a JSON object in this exact format:
@@ -460,7 +464,7 @@ Return ONLY a JSON object in this exact format:
                                             currentRoom.doorMaterial,
                                             'doorMaterial',
                                             '#315b76',
-                                            currentRoom.doorMaterial?.id
+                                            (aiApplied && currentRoom.isRecommended) ? currentRoom.doorMaterial?.id : undefined
                                         )}
                                         {currentRoom.doorCount > 0 && currentRoom.isRecommended && currentRoom.aiReasoning && currentRoom.aiReasoning.trim() !== '' && currentRoom.aiConfidence > 0 && (
                                             <>
@@ -498,7 +502,7 @@ Return ONLY a JSON object in this exact format:
                                             currentRoom.windowMaterial,
                                             'windowMaterial',
                                             '#3b82f6',
-                                            currentRoom.windowMaterial?.id
+                                            (aiApplied && currentRoom.isRecommended) ? currentRoom.windowMaterial?.id : undefined
                                         )}
                                         {currentRoom.windowCount > 0 && currentRoom.isRecommended && currentRoom.aiReasoning && currentRoom.aiReasoning.trim() !== '' && currentRoom.aiConfidence > 0 && (
                                             <>

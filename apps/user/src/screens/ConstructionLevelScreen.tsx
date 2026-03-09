@@ -224,11 +224,8 @@ export default function ConstructionLevelScreen({ route, navigation }: any) {
           </TouchableOpacity>
         </View>
 
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-
+        {/* --- FIXED TOP SECTION --- */}
+        <View style={styles.fixedHeader}>
           {/* --- COMPACT AREA CARD --- */}
           {totalArea > 0 && (
             <View style={styles.miniSummaryCard}>
@@ -279,9 +276,14 @@ export default function ConstructionLevelScreen({ route, navigation }: any) {
               onChangeText={setSearchText}
             />
           </View>
+        </View>
 
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
           {/* --- STEP 2: COMPONENT CARDS --- */}
-          <View style={styles.sectionHeader}>
+          <View style={[styles.sectionHeader, { marginTop: 0 }]}>
             <Text style={styles.sectionTitle}>2. Select Component</Text>
           </View>
 
@@ -355,6 +357,11 @@ const styles = StyleSheet.create({
   scrollContent: { paddingHorizontal: 20 },
 
   // Header
+  fixedHeader: {
+    paddingHorizontal: 20,
+    backgroundColor: '#F8FAFC',
+    paddingBottom: 5,
+  },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 20, paddingVertical: 15

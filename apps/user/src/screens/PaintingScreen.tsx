@@ -5,13 +5,15 @@ import {
   Platform, Modal, FlatList, Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   db,
-  CONSTRUCTION_HIERARCHY,
   auth,
   createDocument,
+  generateText,
+  extractStructuredData,
+  CONSTRUCTION_HIERARCHY,
 } from '@archlens/shared';
 import { collection, query, onSnapshot, serverTimestamp, doc, getDoc } from 'firebase/firestore';
 import { getProjectById } from '../services/projectService';
@@ -19,7 +21,12 @@ import { getProjectById } from '../services/projectService';
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // --- ENGINEERING CONSTANTS ---
-const PAINT_COVERAGE_PER_LITER = 350; // sq.ft per liter
+const PAINT_COVERAGE_PER_LITER = 120; // sq.ft per liter per coat (standard emulsion)
+const EXTERIOR_WALL_FACTOR = 0.9; // External wall area is typically 0.8 - 1.0 of floor area
+const WALL_HEIGHT_FT = 10;
+const DOOR_AREA_SQFT = 21; // Standard door 3' x 7'
+const WINDOW_AREA_SQFT = 16; // Standard window 4' x 4'
+const MATERIAL_WASTE_FACTOR = 0.10; // 10% wastage for all materials
 
 export default function PaintingScreen({ route, navigation }: any) {
   const { totalArea, projectId, tier, rooms = [] } = route.params || {};
@@ -33,10 +40,12 @@ export default function PaintingScreen({ route, navigation }: any) {
   const [paintType, setPaintType] = useState<'Interior' | 'Exterior'>('Interior');
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [roomsData, setRoomsData] = useState<any[]>([]);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiApplied, setAiApplied] = useState(false);
 
   // --- SELECTION STATE ---
   const [exteriorSelection, setExteriorSelection] = useState({
-    area: String(Math.round((totalArea || 1000) * 0.4)), // Estimated 40% of floor area for exterior walls
+    area: String(Math.round((totalArea || 1000) * EXTERIOR_WALL_FACTOR)),
     filter: 'Paint',
     material: null as any,
     coats: '2'
@@ -68,14 +77,30 @@ export default function PaintingScreen({ route, navigation }: any) {
   }, [rooms, projectId]);
 
   const initRoomsData = (roomsToInit: any[]) => {
-    setRoomsData(roomsToInit.map((room: any) => ({
-      id: room.id,
-      name: room.name,
-      area: String(room.area || 300),
-      filter: 'Paint',
-      material: null as any,
-      coats: '2'
-    })));
+    setRoomsData(roomsToInit.map((room: any) => {
+      // Correct engineering method: (Perimeter * Height) - Openings
+      const length = parseFloat(String(room.length || room.dimensions?.length || 10));
+      const width = parseFloat(String(room.width || room.dimensions?.width || 10));
+
+      // Calculate Gross Wall Area
+      const perimeter = 2 * (length + width);
+      const grossWallArea = perimeter * WALL_HEIGHT_FT;
+
+      // Subtract approximate openings (Doors and Windows)
+      const doorDeduction = (room.doorCount || 1) * DOOR_AREA_SQFT;
+      const windowDeduction = (room.windowCount || 1) * WINDOW_AREA_SQFT;
+      const netWallArea = Math.max(0, grossWallArea - (doorDeduction + windowDeduction));
+
+      return {
+        id: room.id,
+        name: room.name,
+        area: String(Math.round(netWallArea)),
+        filter: 'Paint',
+        material: null as any,
+        coats: '2',
+        originalData: room // Store for reference
+      };
+    }));
     if (!selectedRoomId && roomsToInit.length > 0) {
       setSelectedRoomId(roomsToInit[0].id);
     }
@@ -93,33 +118,135 @@ export default function PaintingScreen({ route, navigation }: any) {
     return unsub;
   }, []);
 
-  // 2. Default Selections (Tier-based)
+  // 2. Default Selections (Tier-based + Room-type aware)
   useEffect(() => {
-    if (materials.length > 0 && loading === false) {
-      const getBestMaterial = (filter: string) => {
-        const filtered = materials.filter(m => m.subCategory === filter);
-        if (filtered.length === 0) return null;
-        return [...filtered].sort((a, b) =>
-          tier === 'Economy'
-            ? (parseFloat(a.pricePerUnit) - parseFloat(b.pricePerUnit))
-            : (parseFloat(b.pricePerUnit) - parseFloat(a.pricePerUnit))
-        )[0];
+    if (materials.length > 0 && loading === false && roomsData.length > 0) {
+      const hasSelections = roomsData.some(r => r.material !== null);
+      if (hasSelections) return;
+
+      const getMatByTier = (list: any[], budgetTier: string) => {
+        const sortedList = [...list].sort((a, b) => (parseFloat(a.pricePerUnit) - parseFloat(b.pricePerUnit)));
+        const total = sortedList.length;
+        if (budgetTier === 'Economy') return sortedList[0];
+        if (budgetTier === 'Luxury') return sortedList[total - 1];
+        return sortedList[Math.floor(total / 2)];
       };
 
-      // Set defaults for exterior if not set
+      const paintMats = materials.filter(m => m.subCategory === 'Paint');
+      const claddingMats = materials.filter(m => m.subCategory === 'Cladding');
+      const wallpaperMats = materials.filter(m => m.subCategory === 'Wallpaper');
+
+      if (paintMats.length === 0) return;
+
+      // Exterior Default
       if (!exteriorSelection.material) {
-        setExteriorSelection(prev => ({ ...prev, material: getBestMaterial('Paint') }));
+        const extPaints = paintMats.filter(m => m.name.toLowerCase().includes('exterior') || m.type.toLowerCase().includes('exterior'));
+        setExteriorSelection(prev => ({
+          ...prev,
+          material: extPaints.length > 0 ? getMatByTier(extPaints, tier) : getMatByTier(paintMats, tier)
+        }));
       }
 
-      // Set defaults for rooms
+      // Interior Defaults per room
       setRoomsData(prev => prev.map(room => {
-        if (!room.material) {
-          return { ...room, material: getBestMaterial('Paint') };
+        const lowerName = room.name.toLowerCase();
+        const isWetArea = lowerName.includes('bath') || lowerName.includes('toilet') || lowerName.includes('wc');
+        const isLiving = lowerName.includes('living') || lowerName.includes('hall') || lowerName.includes('drawing');
+        const isPremium = lowerName.includes('master') || lowerName.includes('living');
+
+        let mat = getMatByTier(paintMats, tier);
+
+        if (isWetArea && claddingMats.length > 0) {
+          // Default to Cladding/Tiles for Bathrooms
+          return { ...room, filter: 'Cladding', material: claddingMats[0] };
         }
-        return room;
+
+        if (isLiving && tier === 'Luxury' && wallpaperMats.length > 0) {
+          // Feature wall concept: Apply high-end wallpaper or luxury paint
+          mat = getMatByTier(paintMats, 'Luxury');
+        }
+
+        return { ...room, material: mat };
       }));
     }
-  }, [materials, loading, tier]);
+  }, [materials, loading, tier, roomsData.length]);
+
+  // AI Recommendation Logic
+  const getBatchAIRecommendations = async (roomsToProcess: any[], budgetTier: string, allMats: any[]) => {
+    try {
+      const catalog = allMats.map(m => `ID:${m.id} | ${m.name} | ${m.subCategory} | Grade:${m.grade} | ₹${m.pricePerUnit}/${m.unit}`).join('\n');
+      const roomsDescription = roomsToProcess.map(r => {
+        const d = r.originalData || {};
+        return `- ${r.name}: ${d.length || '?'}' x ${d.width || '?'}' (Net Wall Area: ${r.area} sq ft)`;
+      }).join('\n');
+
+      const prompt = `
+You are a Senior Architect and Home Decor Expert.
+Analyze these rooms and recommend the best wall finishes (Paint, Wallpaper, or Cladding) from the catalog provided.
+
+BUDGET TIER: ${budgetTier}
+
+ROOMS TO ANALYZE:
+${roomsDescription}
+
+AVAILABLE MATERIALS:
+${catalog}
+
+ENGINEERING & DESIGN RULES:
+1. BATHROOMS/WET AREAS: Recommend "Cladding" (Tiles/Stone) - NEVER recommend standard interior paint or wallpaper for wet walls.
+2. LUXURY SPACES (Living/Master Bed): If tier is "Luxury", recommend high-end "Interior Emulsion" or premium "Wallpaper" for feature walls.
+3. DURABILITY: High traffic areas like Halls should have washable emulsion paints.
+4. EXTERIOR: I will provide rooms only, but for exterior, ensure it's "Exterior Emulsion".
+
+Return ONLY a JSON object:
+{
+  "recommendations": [
+    {
+      "roomName": "room_name_here",
+      "materialId": "actual_material_id_from_catalog",
+      "filter": "Paint/Wallpaper/Cladding",
+      "reasoning": "Brief design explanation"
+    }
+  ]
+}`;
+
+      const aiResponse = await generateText(prompt, { temperature: 0.4 });
+      let jsonText = aiResponse.trim();
+      if (jsonText.includes('```json')) jsonText = jsonText.split('```json')[1].split('```')[0].trim();
+
+      const parsed = JSON.parse(jsonText);
+      return parsed.recommendations;
+    } catch (error) {
+      console.warn('AI recommendation failed:', error);
+      return null;
+    }
+  };
+
+  const applyRecommendations = async () => {
+    setAiLoading(true);
+    try {
+      const recs = await getBatchAIRecommendations(roomsData, tier, materials);
+      if (recs) {
+        setRoomsData(prev => prev.map(room => {
+          const rec = recs.find((r: any) => r.roomName === room.name);
+          if (rec) {
+            const mat = materials.find(m => m.id === rec.materialId);
+            return {
+              ...room,
+              filter: rec.filter,
+              material: mat || room.material,
+              isRecommended: true
+            };
+          }
+          return room;
+        }));
+        setAiApplied(true);
+        Alert.alert('AI Applied', 'Recommendations tailored to your rooms have been applied.');
+      }
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   // 3. Calculation Engine
   const calculateSpecs = (item: any) => {
@@ -130,11 +257,13 @@ export default function PaintingScreen({ route, navigation }: any) {
 
     if (item.filter === 'Paint') {
       const numCoats = parseFloat(item.coats) || 2;
-      const liters = Math.ceil((area / PAINT_COVERAGE_PER_LITER) * numCoats);
+      // Coverage per liter applied per coat, including wastage
+      const liters = Math.ceil(((area / PAINT_COVERAGE_PER_LITER) * numCoats) * (1 + MATERIAL_WASTE_FACTOR));
       return { cost: liters * price, qty: liters, unit: 'Litre' };
     } else {
-      // Cladding/Wallpaper usually per sq.ft
-      return { cost: area * price, qty: area, unit: 'sq.ft' };
+      // Cladding/Wallpaper/Paneling area including wastage
+      const qtyWithWaste = Math.ceil(area * (1 + MATERIAL_WASTE_FACTOR));
+      return { cost: qtyWithWaste * price, qty: qtyWithWaste, unit: 'sq.ft' };
     }
   };
 
@@ -294,6 +423,36 @@ export default function PaintingScreen({ route, navigation }: any) {
         </View>
 
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+
+          {/* AI Recommendations Banner */}
+          <LinearGradient
+            colors={['#f0f9ff', '#e0f2fe']}
+            style={styles.aiBanner}
+          >
+            <View style={styles.aiBannerLeft}>
+              <View style={styles.aiIconCircle}>
+                <MaterialCommunityIcons name="robot-outline" size={24} color="#0284c7" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.aiBannerTitle}>AI Material Expert</Text>
+                <Text style={styles.aiBannerDesc}>Smart recommendations based on room usage and {tier} tier standards.</Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={[styles.aiBtn, aiLoading && styles.aiBtnDisabled]}
+              onPress={applyRecommendations}
+              disabled={aiLoading}
+            >
+              {aiLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <>
+                  <Ionicons name="sparkles" size={14} color="#fff" />
+                  <Text style={styles.aiBtnText}>{aiApplied ? 'Re-Optimize' : 'Optimize All'}</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </LinearGradient>
 
           {/* 1. Type Toggle */}
           <View style={styles.typeTabContainer}>
@@ -461,6 +620,15 @@ export default function PaintingScreen({ route, navigation }: any) {
           })}
 
           <View style={styles.resultCard}>
+            <View style={styles.resRow}>
+              <Text style={styles.resLabel}>Interior Total</Text>
+              <Text style={styles.resVal}>₹{totals.interior.toLocaleString()}</Text>
+            </View>
+            <View style={styles.resRow}>
+              <Text style={styles.resLabel}>Exterior Total</Text>
+              <Text style={styles.resVal}>₹{totals.exterior.toLocaleString()}</Text>
+            </View>
+            <View style={styles.divider} />
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>Grand Total</Text>
               <Text style={styles.totalVal}>₹{totals.total.toLocaleString()}</Text>
@@ -593,4 +761,27 @@ const styles = StyleSheet.create({
   roomBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
   roomDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: '#94a3b8' },
   roomInfoText: { fontSize: 11, color: '#64748b', fontWeight: '500' },
+
+  /* AI Banner Styles */
+  aiBanner: {
+    padding: 18,
+    borderRadius: 20,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 15,
+    elevation: 2,
+    shadowColor: '#0ea5e9',
+    shadowOpacity: 0.1,
+    shadowRadius: 10
+  },
+  aiBannerLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  aiIconCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', elevation: 2 },
+  aiBannerTitle: { fontSize: 15, fontWeight: '800', color: '#0c4a6e', marginBottom: 2 },
+  aiBannerDesc: { fontSize: 11, color: '#315b76', opacity: 0.8, fontWeight: '500' },
+  aiBtn: { backgroundColor: '#315b76', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 6, elevation: 3 },
+  aiBtnDisabled: { opacity: 0.7 },
+  aiBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
 });
