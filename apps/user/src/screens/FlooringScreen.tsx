@@ -201,25 +201,73 @@ export default function FlooringScreen({ route, navigation }: any) {
     }
   }, [loading, materials.length, roomsData.length, tier]);
 
-  // Reset filter when selected room changes
+  // Helper: Find which category a material belongs to
+  const findMaterialCategory = (material: any, availableCategories: string[]): string | null => {
+    if (!material) return null;
+
+    const materialName = (material.name || '').toLowerCase();
+    const materialType = (material.type || '').toLowerCase();
+    const materialSubCategory = (material.subCategory || '').toLowerCase();
+
+    for (const category of availableCategories) {
+      const categoryLower = category.toLowerCase();
+      if (materialName.includes(categoryLower) ||
+        materialType.includes(categoryLower) ||
+        materialSubCategory.includes(categoryLower)) {
+        return category;
+      }
+    }
+
+    return availableCategories[0] || null;
+  };
+
+  // Helper function to get filtered materials by type
+  const flooringMaterials = useMemo(() => materials.filter(m =>
+    m.category === 'Flooring' || m.type === 'Tile' || m.subCategory === 'Flooring'
+  ), [materials]);
+
+  // Sync filter when selected room changes - show category of auto-selected material
+  // Using a ref to track room changes to avoid overriding user's manual filter selection on every roomsData update
+  const lastSelectedRoomIdRef = React.useRef<string | null>(null);
+
   useEffect(() => {
     if (selectedRoomId && roomsData.length > 0) {
       const selectedRoom = roomsData.find((r: any) => r.id === selectedRoomId);
-      if (selectedRoom) {
-        const categories = getMaterialTypesForRoom(getRoomType(selectedRoom.name));
-        setSelectedMaterialFilter(categories[0] || null);
+
+      // We only want to force-sync the filter if:
+      // 1. The room has actually changed (user clicked a different room)
+      // 2. OR if it's the first time we're loading this room's data
+      const hasRoomChanged = selectedRoomId !== lastSelectedRoomIdRef.current;
+
+      if (selectedRoom && hasRoomChanged) {
+        const allCategories = (() => {
+          const categories = new Set<string>();
+          flooringMaterials.forEach(m => {
+            if (m.type) categories.add(m.type);
+            if (m.subCategory) categories.add(m.subCategory);
+          });
+          return Array.from(categories).sort();
+        })();
+
+        // If room has a selected material, sync to its category; otherwise pick the first available category
+        if (selectedRoom.flooringMaterial) {
+          const materialCategory = findMaterialCategory(selectedRoom.flooringMaterial, allCategories);
+          setSelectedMaterialFilter(materialCategory || allCategories[0] || null);
+        } else {
+          const roomType = getRoomType(selectedRoom.name);
+          const roomCategories = getMaterialTypesForRoom(roomType);
+          setSelectedMaterialFilter(roomCategories[0] || allCategories[0] || null);
+        }
         setSelectedSubMaterialFilter(null);
+
+        // Update the ref to the current room
+        lastSelectedRoomIdRef.current = selectedRoomId;
       }
     }
-  }, [selectedRoomId, roomsData]);
-
-  // Helper function to get filtered materials by type
-  const flooringMaterials = materials.filter(m =>
-    m.category === 'Flooring' || m.type === 'Tile' || m.subCategory === 'Flooring'
-  );
+  }, [selectedRoomId, roomsData, flooringMaterials]);
 
   const currentRoom = roomsData.find((r: any) => r.id === selectedRoomId);
-  const allComplete = roomsData.every((r: any) => r.flooringMaterial !== null);
+  const hasAtLeastOneMaterial = roomsData.some((r: any) => r.flooringMaterial !== null);
 
   // Total area and cost calculations
   const totalSelectedArea = roomsData.reduce((sum: number, room: any) =>
@@ -299,6 +347,16 @@ export default function FlooringScreen({ route, navigation }: any) {
       return Object.keys(categoryData);
     }
     return [];
+  };
+
+  // Get all unique material categories from flooring materials
+  const getAllMaterialCategories = (): string[] => {
+    const categories = new Set<string>();
+    flooringMaterials.forEach(m => {
+      if (m.type) categories.add(m.type);
+      if (m.subCategory) categories.add(m.subCategory);
+    });
+    return Array.from(categories).sort();
   };
 
   // Filter materials by category and optional sub-type
@@ -494,9 +552,7 @@ Return ONLY a JSON object in this exact format:
 
   const materialTypeOptions = ['All', 'Tile'];
 
-  const filteredMaterials = materials.filter(m => {
-    return m.category === 'Flooring' || m.type === 'Tile' || m.subCategory === 'Flooring';
-  });
+  const filteredMaterials = flooringMaterials;
 
   // Debug logging for render
   console.log('FlooringScreen - Render state:', {
@@ -545,7 +601,7 @@ Return ONLY a JSON object in this exact format:
             <Ionicons name="arrow-back" size={20} color="#315b76" />
           </TouchableOpacity>
           <View style={styles.headerCenter}>
-            <Text style={styles.headerTitle}>{projectName}</Text>
+            <Text style={styles.headerTitle}>Flooring</Text>
             <Text style={styles.headerSubtitle}>{roomsData.length} AI-detected rooms • {Math.round(totalArea)} sq.ft</Text>
           </View>
           <View style={styles.tierBadge}><Text style={styles.tierText}>{tier}</Text></View>
@@ -721,34 +777,44 @@ Return ONLY a JSON object in this exact format:
                   </Text>
                   {getFilteredMaterialsByType(selectedMaterialFilter, selectedSubMaterialFilter).length > 0 ? (
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.materialCardsScroll}>
-                      {getFilteredMaterialsByType(selectedMaterialFilter, selectedSubMaterialFilter).map(material => (
-                        <TouchableOpacity
-                          key={material.id}
-                          style={[
-                            styles.materialCard,
-                            currentRoom.flooringMaterial?.id === material.id && styles.selectedMaterialCard
-                          ]}
-                          onPress={() => updateRoomData('flooringMaterial', material)}
-                        >
-                          <View style={styles.materialImageContainer}>
-                            {material.imageUrl ? (
-                              <Image source={{ uri: material.imageUrl }} style={styles.materialImage} />
-                            ) : (
-                              <Ionicons name="cube-outline" size={32} color="#cbd5e1" />
-                            )}
-                          </View>
-                          <Text style={styles.materialName} numberOfLines={2}>{material.name}</Text>
-                          <Text style={styles.materialPrice}>₹{material.pricePerUnit || 0}/{formatUnit(material.unit)}</Text>
-                          <Text style={styles.materialCost} numberOfLines={1}>
-                            ₹{((material.pricePerUnit || 0) * Math.ceil(currentRoom.area * (1 + TILE_WASTE_FACTOR))).toLocaleString()}
-                          </Text>
-                          {currentRoom.flooringMaterial?.id === material.id && (
-                            <View style={styles.materialCheckmark}>
-                              <Ionicons name="checkmark-circle" size={20} color="#315b76" />
+                      {getFilteredMaterialsByType(selectedMaterialFilter, selectedSubMaterialFilter).map(material => {
+                        const isSelected = currentRoom.flooringMaterial?.id === material.id;
+                        return (
+                          <TouchableOpacity
+                            key={material.id}
+                            style={[
+                              styles.materialCard,
+                              isSelected && styles.selectedMaterialCard
+                            ]}
+                            onPress={() => {
+                              // Toggle: if already selected, deselect (set to null), otherwise select
+                              if (isSelected) {
+                                updateRoomData('flooringMaterial', null);
+                              } else {
+                                updateRoomData('flooringMaterial', material);
+                              }
+                            }}
+                          >
+                            <View style={styles.materialImageContainer}>
+                              {material.imageUrl ? (
+                                <Image source={{ uri: material.imageUrl }} style={styles.materialImage} />
+                              ) : (
+                                <Ionicons name="cube-outline" size={32} color="#cbd5e1" />
+                              )}
                             </View>
-                          )}
-                        </TouchableOpacity>
-                      ))}
+                            <Text style={styles.materialName} numberOfLines={2}>{material.name}</Text>
+                            <Text style={styles.materialPrice}>₹{material.pricePerUnit || 0}/{formatUnit(material.unit)}</Text>
+                            <Text style={styles.materialCost} numberOfLines={1}>
+                              ₹{((material.pricePerUnit || 0) * Math.ceil(currentRoom.area * (1 + TILE_WASTE_FACTOR))).toLocaleString()}
+                            </Text>
+                            {isSelected && (
+                              <View style={styles.materialCheckmark}>
+                                <Ionicons name="checkmark-circle" size={20} color="#315b76" />
+                              </View>
+                            )}
+                          </TouchableOpacity>
+                        );
+                      })}
                     </ScrollView>
                   ) : (
                     <Text style={styles.emptyText}>No materials found for {selectedMaterialFilter}.</Text>
@@ -810,16 +876,16 @@ Return ONLY a JSON object in this exact format:
 
         {/* Floating Action Button */}
         <TouchableOpacity
-          style={[styles.mainBtn, (!allComplete || totalCost === 0) && styles.disabledBtn]}
+          style={[styles.mainBtn, (!hasAtLeastOneMaterial || totalCost === 0) && styles.disabledBtn]}
           onPress={handleSaveFlooringEstimate}
-          disabled={saving || !allComplete || totalCost === 0}
+          disabled={saving || !hasAtLeastOneMaterial || totalCost === 0}
         >
           {saving ? (
             <ActivityIndicator color="#fff" size="small" />
           ) : (
             <>
               <Text style={styles.mainBtnText}>
-                {allComplete ? 'Save Flooring Estimate' : `Complete ${roomsData.length - roomsData.filter((r: any) => r.flooringMaterial).length} More Room(s)`}
+                Save Flooring Estimate
               </Text>
               <Ionicons name="arrow-forward" size={18} color="#fff" />
             </>

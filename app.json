@@ -1,5 +1,10 @@
 {
   "android": {
     "package": "com.anonymous.archlens"
+  },
+  "extra": {
+    "eas": {
+      "projectId": "6cdf7996-421d-4088-ae83-ca03bd958c48"
+    }
   }
 }

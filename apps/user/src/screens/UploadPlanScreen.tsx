@@ -17,7 +17,8 @@ import { StatusBar } from 'expo-status-bar';
 
 const { width } = Dimensions.get('window');
 
-export default function UploadPlanScreen({ navigation }: any) {
+export default function UploadPlanScreen({ navigation, route }: any) {
+  const { planName, location, description, projectType } = route?.params || {};
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -74,7 +75,13 @@ export default function UploadPlanScreen({ navigation }: any) {
       Alert.alert("No Image", "Please upload a floor plan to proceed.");
       return;
     }
-    navigation.navigate('PlanVerification', { planImage: imageUri });
+    navigation.navigate('PlanVerification', { 
+      planImage: imageUri,
+      planName,
+      location,
+      description,
+      projectType
+    });
   };
 
   return (

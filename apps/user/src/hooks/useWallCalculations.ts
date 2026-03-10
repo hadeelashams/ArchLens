@@ -39,23 +39,23 @@ import {
 
 export interface WallCalculationResult {
   loadBearingQty: number;
-  partitionQty:   number;
-  cementQty:      number;
-  sandQty:        number;
+  partitionQty: number;
+  cementQty: number;
+  sandQty: number;
 }
 
-export interface SystemCosts  { loadBearing: number; partition: number }
+export interface SystemCosts { loadBearing: number; partition: number }
 export interface BudgetViolation { violated: boolean; difference: number }
 export interface BudgetViolations { loadBearing: BudgetViolation; partition: BudgetViolation }
 
 // ─── Hook input ───────────────────────────────────────────────────────────────
 
 interface UseWallCalculationsParams {
-  totalArea:       number;
-  rooms:           any[];
-  tier:            string;
+  totalArea: number;
+  rooms: any[];
+  tier: string;
   wallComposition: any;
-  projectId?:      string;
+  projectId?: string;
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
@@ -69,62 +69,62 @@ export function useWallCalculations({
 }: UseWallCalculationsParams) {
 
   // ── Data & loading ──────────────────────────────────────────────────────────
-  const [loading,    setLoading]    = useState(true);
-  const [materials,  setMaterials]  = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [materials, setMaterials] = useState<any[]>([]);
   const [selections, setSelections] = useState<Record<string, any>>({});
 
   // ── Material selections ─────────────────────────────────────────────────────
-  const [loadBearingBrick,    setLoadBearingBrick]    = useState<any>(null);
-  const [partitionBrick,      setPartitionBrick]      = useState<any>(null);
+  const [loadBearingBrick, setLoadBearingBrick] = useState<any>(null);
+  const [partitionBrick, setPartitionBrick] = useState<any>(null);
 
   // ── Dimension inputs ────────────────────────────────────────────────────────
-  const [height,               setHeight]               = useState('10.5');
-  const [wallThickness,        setWallThickness]        = useState('');
-  const [jointThickness,       setJointThickness]       = useState('0.375');
-  const [openingDeduction,     setOpeningDeduction]     = useState('');
+  const [height, setHeight] = useState('10.5');
+  const [wallThickness, setWallThickness] = useState('');
+  const [jointThickness, setJointThickness] = useState('0.375');
+  const [openingDeduction, setOpeningDeduction] = useState('');
   const [partitionWallThickness, setPartitionWallThickness] = useState(4.5);
 
   // ── Wall composition metadata (from AI) ────────────────────────────────────
-  const [avgOpeningPercentage,  setAvgOpeningPercentage]  = useState(0);
-  const [avgMainWallRatio,      setAvgMainWallRatio]      = useState(0);
+  const [avgOpeningPercentage, setAvgOpeningPercentage] = useState(0);
+  const [avgMainWallRatio, setAvgMainWallRatio] = useState(0);
   const [avgPartitionWallRatio, setAvgPartitionWallRatio] = useState(0);
   const [isDetectingComposition, setIsDetectingComposition] = useState(false);
-  const [compositionDetected,    setCompositionDetected]    = useState(false);
+  const [compositionDetected, setCompositionDetected] = useState(false);
 
   // ── AI recommendation metadata ──────────────────────────────────────────────
-  const [aiAdvice,          setAiAdvice]          = useState('');
+  const [aiAdvice, setAiAdvice] = useState('');
   const [aiRecommendations, setAiRecommendations] = useState<Record<string, string | null>>({
     loadBearingBrick: null,
-    partitionBrick:   null,
-    cement:           null,
-    sand:             null,
+    partitionBrick: null,
+    cement: null,
+    sand: null,
   });
   const [aiInsights, setAiInsights] = useState<{
     costSavingsPercent?: number;
-    reason?:             string;
-    materialChoice?:     string;
+    reason?: string;
+    materialChoice?: string;
   } | null>(null);
 
   // ── Finish preference ───────────────────────────────────────────────────────
   const [finishPreference, setFinishPreference] = useState<'Plastered' | 'Exposed' | null>(null);
 
   // ── AI perspectives ─────────────────────────────────────────────────────────
-  const [aiPerspectives,     setAiPerspectives]     = useState<WallPerspective[]>([]);
+  const [aiPerspectives, setAiPerspectives] = useState<WallPerspective[]>([]);
   const [selectedPerspectiveId, setSelectedPerspectiveId] = useState<string | null>(null);
-  const [isPerspectiveLoading,  setIsPerspectiveLoading]  = useState(false);
+  const [isPerspectiveLoading, setIsPerspectiveLoading] = useState(false);
   const [isRecommendationFromSaved, setIsRecommendationFromSaved] = useState(false);
 
   // ── Selection-mode tracking ─────────────────────────────────────────────────
   const [materialSelectionMode, setMaterialSelectionMode] = useState<Record<string, 'ai' | 'manual'>>({
     loadBearing: 'manual',
-    partition:   'manual',
+    partition: 'manual',
   });
 
   // ── Derived costs / violations ──────────────────────────────────────────────
   const [systemCosts, setSystemCosts] = useState<SystemCosts>({ loadBearing: 0, partition: 0 });
   const [budgetViolations, setBudgetViolations] = useState<BudgetViolations>({
     loadBearing: { violated: false, difference: 0 },
-    partition:   { violated: false, difference: 0 },
+    partition: { violated: false, difference: 0 },
   });
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -141,14 +141,14 @@ export function useWallCalculations({
   }, []);
 
   // ════════════════════════════════════════════════════════════════════════════
-  // 1.5  Detect / apply wall composition
+  // 1.5  Process wall composition (Manual or Prop-based)
   // ════════════════════════════════════════════════════════════════════════════
   useEffect(() => {
-    // ── Case A: pre-computed composition passed in from floor-plan analysis ──
+    // ── ONLY Case A: pre-computed composition passed in from floor-plan analysis ──
     if (wallComposition && typeof wallComposition === 'object') {
-      const lb  = Math.round(parseFloat(wallComposition.loadBearingPercentage));
-      const pt  = Math.round(parseFloat(wallComposition.partitionPercentage));
-      const op  = Math.round(parseFloat(wallComposition.openingPercentage));
+      const lb = Math.round(parseFloat(wallComposition.loadBearingPercentage));
+      const pt = Math.round(parseFloat(wallComposition.partitionPercentage));
+      const op = Math.round(parseFloat(wallComposition.openingPercentage));
       const tck = parseFloat(wallComposition.averageWallThickness);
 
       if (!isNaN(lb) && !isNaN(pt) && !isNaN(op) && lb >= 0 && pt >= 0) {
@@ -163,43 +163,44 @@ export function useWallCalculations({
         );
         setOpeningDeduction(op.toString());
       }
-      return; // skip AI call
     }
+  }, [wallComposition]);
 
-    // ── Case B: detect from room data via AI ───────────────────────────────
+  const runCompositionDetection = async () => {
     if (rooms?.length > 0 && totalArea > 0) {
       setIsDetectingComposition(true);
-      detectWallComposition(rooms, totalArea)
-        .then((composition: any) => {
-          const lb = Math.round(parseFloat(composition.loadBearingPercentage));
-          const pt = Math.round(parseFloat(composition.partitionPercentage));
-          const op = Math.round(parseFloat(composition.openingPercentage));
+      try {
+        const composition = await detectWallComposition(rooms, totalArea);
+        const lb = Math.round(parseFloat(composition.loadBearingPercentage));
+        const pt = Math.round(parseFloat(composition.partitionPercentage));
+        const op = Math.round(parseFloat(composition.openingPercentage));
 
-          if (isNaN(lb) || isNaN(pt) || isNaN(op))
-            throw new Error('AI returned invalid numeric values');
-          if (lb < 0 || lb > 100 || pt < 0 || pt > 100)
-            throw new Error('AI returned out-of-range percentages');
-          if (lb + pt === 0)
-            throw new Error('AI returned zero total wall percentage');
+        if (isNaN(lb) || isNaN(pt) || isNaN(op))
+          throw new Error('AI returned invalid numeric values');
+        if (lb < 0 || lb > 100 || pt < 0 || pt > 100)
+          throw new Error('AI returned out-of-range percentages');
 
-          setAvgMainWallRatio(lb / 100);
-          setAvgPartitionWallRatio(pt / 100);
-          setAvgOpeningPercentage(op);
-          setCompositionDetected(true);
-          setWallThickness(((lb / 100 * 9) + ((100 - lb) / 100 * 4.5)).toFixed(2));
-          setOpeningDeduction(op.toString());
-        })
-        .catch((error: any) => {
-          setCompositionDetected(false);
-          Alert.alert(
-            'AI Analysis Required',
-            `Wall composition detection failed: ${error?.message || 'Unknown error'}. Please try again.`,
-            [{ text: 'OK' }],
-          );
-        })
-        .finally(() => setIsDetectingComposition(false));
+        setAvgMainWallRatio(lb / 100);
+        setAvgPartitionWallRatio(pt / 100);
+        setAvgOpeningPercentage(op);
+        setCompositionDetected(true);
+        setWallThickness(((lb / 100 * 9) + ((100 - lb) / 100 * 4.5)).toFixed(2));
+        setOpeningDeduction(op.toString());
+        return true;
+      } catch (error: any) {
+        setCompositionDetected(false);
+        Alert.alert(
+          'AI Analysis Failed',
+          `Wall composition detection failed: ${error?.message || 'Unknown error'}.`,
+          [{ text: 'OK' }],
+        );
+        return false;
+      } finally {
+        setIsDetectingComposition(false);
+      }
     }
-  }, [rooms, totalArea, wallComposition]);
+    return false;
+  };
 
   // ════════════════════════════════════════════════════════════════════════════
   // 1.6  Extract metadata averages from per-room AI analysis
@@ -210,7 +211,7 @@ export function useWallCalculations({
     let totalMain = 0, totalPartition = 0, totalOpening = 0, count = 0;
     rooms.forEach((room: any) => {
       if (room.wallMetadata) {
-        totalMain      += room.wallMetadata.mainWallRatio;
+        totalMain += room.wallMetadata.mainWallRatio;
         totalPartition += room.wallMetadata.partitionWallRatio;
         count++;
       }
@@ -218,9 +219,9 @@ export function useWallCalculations({
     });
 
     if (count > 0) {
-      const avgMain      = totalMain / count;
+      const avgMain = totalMain / count;
       const avgPartition = totalPartition / count;
-      const avgOpening   = Math.round(totalOpening / rooms.length);
+      const avgOpening = Math.round(totalOpening / rooms.length);
 
       setAvgMainWallRatio(avgMain);
       setAvgPartitionWallRatio(avgPartition);
@@ -274,9 +275,9 @@ export function useWallCalculations({
     setSelections(prev => ({
       ...prev,
       ...(!prev['Cement'] && { Cement: filteredByTier(materials.filter(m => m.type === 'Cement')) }),
-      ...(!prev['Sand']   && { Sand:   filteredByTier(materials.filter(m => m.type === 'Sand'))   }),
+      ...(!prev['Sand'] && { Sand: filteredByTier(materials.filter(m => m.type === 'Sand')) }),
     }));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [materials, tier]);
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -285,39 +286,40 @@ export function useWallCalculations({
   useEffect(() => {
     if (!loadBearingBrick || !partitionBrick || !height || !wallThickness) return;
 
-    const h_ft  = parseFloat(height);
+    const h_ft = parseFloat(height);
     const wt_in = parseFloat(wallThickness);
     if (h_ft <= 0 || wt_in <= 0) return;
 
     const runningLength_ft =
       rooms?.length > 0
         ? rooms.reduce((acc: number, r: any) =>
-            acc + 2 * (parseFloat(r.length || 0) + parseFloat(r.width || 0)), 0)
+          acc + 2 * (parseFloat(r.length || 0) + parseFloat(r.width || 0)), 0)
         : Math.max(200, 4 * Math.sqrt(totalArea || 1000));
 
-    const netArea   = runningLength_ft * h_ft * (1 - (parseFloat(openingDeduction) || 0) / 100);
-    const lbArea    = netArea * avgMainWallRatio;
-    const pbArea    = netArea * avgPartitionWallRatio;
+    const netArea = runningLength_ft * h_ft * (1 - (parseFloat(openingDeduction) || 0) / 100);
+    const lbArea = netArea * avgMainWallRatio;
+    const pbArea = netArea * avgPartitionWallRatio;
 
     const lbCost = _calcSystemCost(loadBearingBrick, lbArea, 'loadBearing', wt_in, partitionWallThickness, parseFloat(jointThickness), finishPreference, tier);
-    const pbCost = _calcSystemCost(partitionBrick,   pbArea, 'partition',   wt_in, partitionWallThickness, parseFloat(jointThickness), finishPreference, tier);
+    const pbCost = _calcSystemCost(partitionBrick, pbArea, 'partition', wt_in, partitionWallThickness, parseFloat(jointThickness), finishPreference, tier);
     setSystemCosts({ loadBearing: lbCost, partition: pbCost });
 
     const lbBudget = TIER_BUDGETS[tier]?.loadBearing ?? 10;
-    const pbBudget = TIER_BUDGETS[tier]?.partition   ?? 8;
+    const pbBudget = TIER_BUDGETS[tier]?.partition ?? 8;
     setBudgetViolations({
       loadBearing: { violated: parseFloat(loadBearingBrick.pricePerUnit) > lbBudget * 2, difference: Math.round((parseFloat(loadBearingBrick.pricePerUnit) - lbBudget) * 1000) },
-      partition:   { violated: parseFloat(partitionBrick.pricePerUnit)   > pbBudget * 2, difference: Math.round((parseFloat(partitionBrick.pricePerUnit)   - pbBudget) * 1000) },
+      partition: { violated: parseFloat(partitionBrick.pricePerUnit) > pbBudget * 2, difference: Math.round((parseFloat(partitionBrick.pricePerUnit) - pbBudget) * 1000) },
     });
   }, [loadBearingBrick, partitionBrick, finishPreference, height, wallThickness, openingDeduction, jointThickness, rooms, totalArea, avgMainWallRatio, avgPartitionWallRatio, partitionWallThickness, tier]);
 
   // ════════════════════════════════════════════════════════════════════════════
   // 3.  Quantity calculation engine  (memoised)
+  //     MUST match WallCostSummaryScreen's independent calculation exactly.
   // ════════════════════════════════════════════════════════════════════════════
   const calculation = useMemo((): WallCalculationResult => {
-    const h_ft  = parseFloat(height) || 0;
+    const h_ft = parseFloat(height) || 0;
     const wt_in = parseFloat(wallThickness) || 0;
-    const ded   = (parseFloat(openingDeduction) || 0) / 100;
+    const ded = (parseFloat(openingDeduction) || 0) / 100;
     const jt_in = parseFloat(jointThickness) || 0;
 
     if (h_ft <= 0 || wt_in <= 0 || (!loadBearingBrick && !partitionBrick))
@@ -326,24 +328,24 @@ export function useWallCalculations({
     const brickQty = (brick: any, faceArea: number, wallThick_in: number) => {
       if (!brick || faceArea <= 0) return 0;
       const [bL, bW, bH] = _parseDims(brick.dimensions);
-      const layers     = Math.max(1, Math.round(wallThick_in / bW));
-      const unitArea   = (bL + jt_in) * IN_TO_FT * (bH + jt_in) * IN_TO_FT;
+      const layers = Math.max(1, Math.round(wallThick_in / bW));
+      const unitArea = (bL + jt_in) * IN_TO_FT * (bH + jt_in) * IN_TO_FT;
       return Math.ceil((faceArea / unitArea) * layers * 1.05);
     };
 
-    const mortarQty = (brick: any, faceArea: number, wallThick_in: number) => {
-      if (!brick || faceArea <= 0) return { cementBags: 0, sandKg: 0 };
+    const mortarVol = (brick: any, faceArea: number, wallThick_in: number) => {
+      if (!brick || faceArea <= 0) return 0;
       const [bL, bW, bH] = _parseDims(brick.dimensions);
-      const jt     = jt_in || 0.375;
-      const layers = Math.max(1, Math.round(wallThick_in / bW));
-      const bVol   = (bL * IN_TO_FT) * (bW * IN_TO_FT) * (bH * IN_TO_FT);
-      const uVol   = ((bL + jt) * IN_TO_FT) * ((bW + jt) * IN_TO_FT) * ((bH + jt) * IN_TO_FT);
-      const wallVol_ft3 = faceArea * (wallThick_in * IN_TO_FT) * layers;
-      const mortarVol_m3 = wallVol_ft3 * ((uVol - bVol) / uVol) * DRY_VOL_MULTIPLIER * MORTAR_WASTAGE_FACTOR / CFT_PER_M3;
-      return {
-        cementBags: Math.ceil((mortarVol_m3 / 7) * CEMENT_BAGS_PER_M3),
-        sandKg:     Math.ceil((mortarVol_m3 * 6 / 7) * SAND_DENSITY_KG_M3),
-      };
+      const jt = jt_in || 0.375;
+      const bVol = (bL * IN_TO_FT) * (bW * IN_TO_FT) * (bH * IN_TO_FT);
+      const uVol = ((bL + jt) * IN_TO_FT) * ((bW + jt) * IN_TO_FT) * ((bH + jt) * IN_TO_FT);
+      // Wall volume = faceArea × thickness. Do NOT multiply by layers —
+      // wallThick_in already represents the total wall thickness.
+      const wallVol_ft3 = faceArea * (wallThick_in * IN_TO_FT);
+      const rawMortarVol_ft3 = wallVol_ft3 * ((uVol - bVol) / uVol);
+      // Convert ft³ → m³, apply wastage + dry volume multiplier
+      const FT3_TO_M3 = 1 / CFT_PER_M3;
+      return rawMortarVol_ft3 * FT3_TO_M3 * MORTAR_WASTAGE_FACTOR * DRY_VOL_MULTIPLIER;
     };
 
     const runningLen =
@@ -351,18 +353,28 @@ export function useWallCalculations({
         ? rooms.reduce((acc: number, r: any) => acc + 2 * (parseFloat(r.length || 0) + parseFloat(r.width || 0)), 0)
         : Math.max(200, 4 * Math.sqrt(totalArea || 1000));
 
-    const net    = runningLen * h_ft * (1 - ded);
+    const net = runningLen * h_ft * (1 - ded);
     const lbArea = net * avgMainWallRatio;
     const pbArea = net * avgPartitionWallRatio;
 
-    const lbM = mortarQty(loadBearingBrick, lbArea, wt_in);
-    const pbM = mortarQty(partitionBrick,   pbArea, partitionWallThickness);
+    // Mortar volumes (dry, in m³)
+    const lbMortar_m3 = mortarVol(loadBearingBrick, lbArea, wt_in);
+    const pbMortar_m3 = mortarVol(partitionBrick, pbArea, partitionWallThickness);
+
+    // Use WALL_TYPE_SPECS for proper mortar ratios:
+    //   Load Bearing  = 1:6 → cement fraction = 1/7
+    //   Partition Wall = 1:5 → cement fraction = 1/6
+    const lbCementFraction = 1 / 7;  // 1:(6) from WALL_TYPE_SPECS['Load Bearing']
+    const pbCementFraction = 1 / 6;  // 1:(5) from WALL_TYPE_SPECS['Partition Wall']
+
+    const totalCementVol_m3 = (lbMortar_m3 * lbCementFraction) + (pbMortar_m3 * pbCementFraction);
+    const totalSandVol_m3 = (lbMortar_m3 * (1 - lbCementFraction)) + (pbMortar_m3 * (1 - pbCementFraction));
 
     return {
       loadBearingQty: brickQty(loadBearingBrick, lbArea, wt_in),
-      partitionQty:   brickQty(partitionBrick,   pbArea, partitionWallThickness),
-      cementQty:      lbM.cementBags + pbM.cementBags,
-      sandQty:        lbM.sandKg     + pbM.sandKg,
+      partitionQty: brickQty(partitionBrick, pbArea, partitionWallThickness),
+      cementQty: Math.ceil(totalCementVol_m3 * CEMENT_BAGS_PER_M3),
+      sandQty: parseFloat((totalSandVol_m3 * CFT_PER_M3).toFixed(2)),  // in cft to match Summary
     };
   }, [height, wallThickness, jointThickness, openingDeduction, loadBearingBrick, partitionBrick, totalArea, rooms, avgMainWallRatio, avgPartitionWallRatio, partitionWallThickness]);
 
@@ -373,9 +385,9 @@ export function useWallCalculations({
   const applyPerspective = async (perspective: WallPerspective) => {
     setSelectedPerspectiveId(perspective.id);
 
-    const lb   = materials.find(m => m.id === perspective.loadBearingBrickId);
-    const pb   = materials.find(m => m.id === perspective.partitionBrickId);
-    const cem  = materials.find(m => m.id === perspective.cementId);
+    const lb = materials.find(m => m.id === perspective.loadBearingBrickId);
+    const pb = materials.find(m => m.id === perspective.partitionBrickId);
+    const cem = materials.find(m => m.id === perspective.cementId);
     const sand = materials.find(m => m.id === perspective.sandId);
 
     if (lb) { setLoadBearingBrick(lb); setMaterialSelectionMode(prev => ({ ...prev, loadBearing: 'ai' })); }
@@ -384,16 +396,16 @@ export function useWallCalculations({
       setMaterialSelectionMode(prev => ({ ...prev, partition: 'ai' }));
       if (pb.dimensions?.toLowerCase().includes('x3')) setPartitionWallThickness(3);
     }
-    if (cem)  setSelections(prev => ({ ...prev, Cement: cem }));
+    if (cem) setSelections(prev => ({ ...prev, Cement: cem }));
     if (sand) setSelections(prev => ({ ...prev, Sand: sand }));
 
     setFinishPreference(perspective.finishType);
     setAiAdvice(perspective.reasoning || '');
     setAiRecommendations({
       loadBearingBrick: perspective.loadBearingBrickId,
-      partitionBrick:   perspective.partitionBrickId,
-      cement:           perspective.cementId,
-      sand:             perspective.sandId,
+      partitionBrick: perspective.partitionBrickId,
+      cement: perspective.cementId,
+      sand: perspective.sandId,
     });
     setIsRecommendationFromSaved(false);
 
@@ -472,19 +484,7 @@ export function useWallCalculations({
     }
   };
 
-  // Auto-trigger once materials are ready - Load saved recommendation or generate AI perspectives
-  useEffect(() => {
-    if (materials.length > 0 && aiPerspectives.length === 0 && !isPerspectiveLoading) {
-      // First, try to load saved recommendation
-      loadSavedRecommendation().then(() => {
-        // If no saved recommendation, load AI perspectives
-        if (!isRecommendationFromSaved) {
-          loadAIPerspectives();
-        }
-      });
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [materials]);
+  // No automatic triggers. All AI generation/loading should be manual.
 
   // ════════════════════════════════════════════════════════════════════════════
   // Helpers exposed to UI
@@ -528,7 +528,7 @@ export function useWallCalculations({
     loading, materials, selections, setSelections,
     // material selections
     loadBearingBrick, setLoadBearingBrick, setLoadBearingBrickManual,
-    partitionBrick,   setPartitionBrick,   setPartitionBrickManual,
+    partitionBrick, setPartitionBrick, setPartitionBrickManual,
     // dimension inputs
     height, setHeight,
     wallThickness, setWallThickness,
@@ -544,7 +544,8 @@ export function useWallCalculations({
     // perspectives
     aiPerspectives, selectedPerspectiveId,
     isPerspectiveLoading, loadAIPerspectives, applyPerspective,
-    isRecommendationFromSaved,
+    isRecommendationFromSaved, loadSavedRecommendation,
+    runCompositionDetection,
     // selection mode
     materialSelectionMode,
     // calculated outputs
@@ -562,24 +563,24 @@ function _parseDims(dimensions: string | undefined): [number, number, number] {
 }
 
 function _calcSystemCost(
-  material:       any,
-  faceArea_sqft:  number,
-  wallTypeKey:    'loadBearing' | 'partition',
-  wallThick_in:   number,
-  partThick_in:   number,
-  jt_in:          number,
-  finishPref:     'Plastered' | 'Exposed' | null,
-  tier:           string,
+  material: any,
+  faceArea_sqft: number,
+  wallTypeKey: 'loadBearing' | 'partition',
+  wallThick_in: number,
+  partThick_in: number,
+  jt_in: number,
+  finishPref: 'Plastered' | 'Exposed' | null,
+  tier: string,
 ): number {
   if (!material) return 0;
 
   const unitPrice = parseFloat(material.pricePerUnit) || 0;
-  const [bL,, bH] = _parseDims(material.dimensions);
-  const [, bW]    = _parseDims(material.dimensions);
+  const [bL, , bH] = _parseDims(material.dimensions);
+  const [, bW] = _parseDims(material.dimensions);
   const targetThick = wallTypeKey === 'loadBearing' ? wallThick_in : partThick_in;
-  const layers      = Math.max(1, Math.round(targetThick / bW));
-  const unitArea    = (bL + jt_in) * IN_TO_FT * (bH + jt_in) * IN_TO_FT;
-  const qty         = Math.ceil((faceArea_sqft / unitArea) * layers * 1.05);
+  const layers = Math.max(1, Math.round(targetThick / bW));
+  const unitArea = (bL + jt_in) * IN_TO_FT * (bH + jt_in) * IN_TO_FT;
+  const qty = Math.ceil((faceArea_sqft / unitArea) * layers * 1.05);
   const materialCost = unitPrice * qty;
 
   let finishingCost = 0;

@@ -30,54 +30,7 @@ export default function OpeningsScreen({ route, navigation }: any) {
     const [aiApplied, setAiApplied] = useState(false);
     const [aiLoading, setAiLoading] = useState(false);
 
-    // Auto-select materials based on tier when materials are loaded
-    React.useEffect(() => {
-        if (!loading && materials.length > 0 && Array.isArray(roomsData)) {
-            const hasSelections = roomsData.some(r => r.doorMaterial || r.windowMaterial);
-            if (!hasSelections) {
-                const doorsList = materials.filter(m => m.subCategory === 'Doors');
-                const windowsList = materials.filter(m => m.subCategory === 'Windows');
 
-                if (doorsList.length > 0 && windowsList.length > 0) {
-                    const sortedDoors = [...doorsList].sort((a, b) => (a.pricePerUnit || 0) - (b.pricePerUnit || 0));
-                    const sortedWindows = [...windowsList].sort((a, b) => (a.pricePerUnit || 0) - (b.pricePerUnit || 0));
-
-                    const getMatByTier = (list: any[], budgetTier: string) => {
-                        const total = list.length;
-                        if (budgetTier === 'Economy') return list[0];
-                        if (budgetTier === 'Luxury') return list[total - 1];
-                        return list[Math.floor(total / 2)];
-                    };
-
-                    const pvcDoors = sortedDoors.filter(m => m.type?.includes('PVC') || m.name?.includes('PVC'));
-                    const upvcWindows = sortedWindows.filter(m => m.type?.includes('UPVC') || m.name?.includes('UPVC'));
-
-                    setRoomsData(prev => prev.map(room => {
-                        const lowerName = room.name.toLowerCase();
-                        const isWetArea = lowerName.includes('bath') || lowerName.includes('toilet') || lowerName.includes('wc');
-                        const isTeakTarget = lowerName.includes('main') || lowerName.includes('bed') || lowerName.includes('dress');
-
-                        let door = getMatByTier(sortedDoors, tier);
-                        let window = getMatByTier(sortedWindows, tier);
-
-                        if (isWetArea) {
-                            if (pvcDoors.length > 0) door = pvcDoors[0];
-                            if (upvcWindows.length > 0) window = upvcWindows[0];
-                        } else if (tier === 'Luxury' && isTeakTarget) {
-                            const teakDoor = sortedDoors.find(m => m.name?.toLowerCase().includes('teak') || m.type?.toLowerCase().includes('teak'));
-                            if (teakDoor) door = teakDoor;
-                        }
-
-                        return {
-                            ...room,
-                            doorMaterial: room.doorCount > 0 ? door : null,
-                            windowMaterial: room.windowCount > 0 ? window : null
-                        };
-                    }));
-                }
-            }
-        }
-    }, [loading, materials.length, tier]);
 
 
     // AI-Powered Recommendation System with Batch Processing
@@ -243,6 +196,7 @@ Return ONLY a JSON object in this exact format:
         (r.doorCount > 0 ? !!r.doorMaterial : true) &&
         (r.windowCount > 0 ? !!r.windowMaterial : true)
     );
+    const hasAnySelection = roomsData.some((r: any) => r.doorMaterial || r.windowMaterial);
 
     const totalDoors = roomsData.reduce((sum: number, r: any) => sum + r.doorCount, 0);
     const totalWindows = roomsData.reduce((sum: number, r: any) => sum + r.windowCount, 0);
@@ -263,13 +217,13 @@ Return ONLY a JSON object in this exact format:
     };
 
     const handleContinue = () => {
-        if (!allComplete) return Alert.alert('Incomplete', 'Please complete all room selections.');
+        if (!hasAnySelection) return Alert.alert('No Selection', 'Please select at least one door or window material.');
 
         navigation.navigate('OpeningsCostEstimation', {
             projectId,
             totalArea,
             tier,
-            roomsData,
+            roomsData: roomsData.filter((r: any) => r.doorMaterial || r.windowMaterial),
             totalCost
         });
     };
@@ -530,9 +484,9 @@ Return ONLY a JSON object in this exact format:
                         <Text style={styles.costTotal}>Rs.{totalCost.toLocaleString('en-IN')}</Text>
                     </View>
                     <TouchableOpacity
-                        style={[styles.saveBtn, !allComplete && styles.saveBtnDisabled]}
+                        style={[styles.saveBtn, !hasAnySelection && styles.saveBtnDisabled]}
                         onPress={handleContinue}
-                        disabled={!allComplete}
+                        disabled={!hasAnySelection}
                     >
                         <Text style={styles.saveBtnText}>View Estimation</Text>
                         <Ionicons name="arrow-forward" size={18} color="#fff" />

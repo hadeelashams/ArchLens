@@ -125,8 +125,8 @@ export default function HomeScreen({ navigation }: any) {
             <TouchableOpacity
               activeOpacity={0.95}
               style={styles.heroContainer}
-              // ADDED: Navigation to UploadPlanScreen
-              onPress={() => navigation.navigate('UploadPlan')}
+              // ADDED: Navigation to PlanDetailsScreen
+              onPress={() => navigation.navigate('PlanDetails')}
             >
               <ImageBackground
                 source={require('../../assets/dash.jpg')}
@@ -178,7 +178,7 @@ export default function HomeScreen({ navigation }: any) {
                 subtext="Calculate costs from floor plans"
                 iconName="calculator-variant"
                 gradientColors={['#315b76', '#4a7c9b']}
-                onPress={() => navigation.navigate('UploadPlan')}
+                onPress={() => navigation.navigate('PlanDetails')}
               />
 
               <DashboardCard

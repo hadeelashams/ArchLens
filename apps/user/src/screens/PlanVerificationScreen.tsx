@@ -30,7 +30,7 @@ interface RoomData {
 }
 
 export default function PlanVerificationScreen({ route, navigation }: any) {
-  const { planImage } = route.params;
+  const { planImage, planName, location, description, projectType } = route.params;
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [rooms, setRooms] = useState<RoomData[]>([]);
@@ -408,6 +408,12 @@ export default function PlanVerificationScreen({ route, navigation }: any) {
         rooms: rooms,
         planImageBase64: planBase64
       };
+
+      // Only add optional fields if they have values
+      if (planName && planName.trim()) projectData.planName = planName;
+      if (location && location.trim()) projectData.location = location;
+      if (description && description.trim()) projectData.description = description;
+      if (projectType) projectData.projectType = projectType;
 
       // Only include wallComposition if it was successfully analyzed
       if (wallComposition && typeof wallComposition === 'object') {

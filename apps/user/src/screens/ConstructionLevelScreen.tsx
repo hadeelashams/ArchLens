@@ -95,8 +95,8 @@ export default function ConstructionLevelScreen({ route, navigation }: any) {
   // Store AI recommendations for all tiers (computed at floor plan upload time)
   const [allTierRecommendations, setAllTierRecommendations] = useState(initialAllTierRecommendations);
 
-  // CHANGED: Initial state is NULL to force selection
-  const [activeTab, setActiveTab] = useState<string | null>(null);
+  // Default to 'Standard' tier
+  const [activeTab, setActiveTab] = useState<string | null>('Standard');
   const [searchText, setSearchText] = useState('');
 
   // Update rooms when route params change (when coming from existing projects or WallScreen)

@@ -5,7 +5,7 @@ import {
   Modal, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useWallCalculations } from '../hooks/useWallCalculations';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -28,7 +28,9 @@ export default function WallScreen({ route, navigation }: any) {
     finishPreference, setFinishPreference,
     aiPerspectives, selectedPerspectiveId,
     isPerspectiveLoading, loadAIPerspectives, applyPerspective,
-    isRecommendationFromSaved,
+    isRecommendationFromSaved, loadSavedRecommendation,
+    runCompositionDetection,
+    compositionDetected,
     materialSelectionMode,
     calculation, systemCosts, budgetViolations,
   } = useWallCalculations({ totalArea, rooms, tier, wallComposition, projectId });
@@ -68,25 +70,51 @@ export default function WallScreen({ route, navigation }: any) {
           <View style={[styles.metadataInfoCard, isDetectingComposition && { opacity: 0.8 }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
               <Text style={styles.metadataInfoTitle}> Wall Composition</Text>
-              {rooms?.length > 0 && (
+              {compositionDetected ? (
                 <View style={{ marginLeft: 8, backgroundColor: '#315b76', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4 }}>
-                  <Text style={{ color: '#fff', fontSize: 8, fontWeight: '700' }}>From Rooms</Text>
+                  <Text style={{ color: '#fff', fontSize: 8, fontWeight: '700' }}>AI Detected</Text>
+                </View>
+              ) : (
+                <View style={{ marginLeft: 8, backgroundColor: '#cbd5e1', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4 }}>
+                  <Text style={{ color: '#475569', fontSize: 8, fontWeight: '700' }}>Waiting for Analysis</Text>
                 </View>
               )}
             </View>
-            <View style={styles.metadataInfoRow}>
-              {[
-                { label: 'Load-Bearing', value: `${(avgMainWallRatio * 100).toFixed(0)}%`, color: '#ef4444' },
-                { label: 'Partition', value: `${(avgPartitionWallRatio * 100).toFixed(0)}%`, color: '#3b82f6' },
-                { label: 'Openings', value: `${avgOpeningPercentage}%`, color: '#f59e0b' },
-              ].map(({ label, value, color }) => (
-                <View key={label} style={styles.metadataInfoItem}>
-                  <Text style={styles.metadataInfoLabel}>{label}</Text>
-                  <Text style={styles.metadataInfoValue}>{value}</Text>
-                  <View style={{ height: 4, backgroundColor: color, borderRadius: 2, marginTop: 4, width: '100%' }} />
-                </View>
-              ))}
-            </View>
+
+            {!compositionDetected && !isDetectingComposition ? (
+              <View style={{ paddingVertical: 8, alignItems: 'center' }}>
+                <Text style={{ fontSize: 11, color: '#64748b', textAlign: 'center', marginBottom: 10 }}>
+                  Analyze your floor plan rooms to get accurate wall ratios
+                </Text>
+                <TouchableOpacity
+                  style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: '#315b76', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 20 }}
+                  onPress={runCompositionDetection}
+                >
+                  <Text style={{ fontSize: 11, color: '#315b76', fontWeight: '800' }}>Analyze Composition</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.metadataInfoRow}>
+                {[
+                  { label: 'Load-Bearing', value: `${(avgMainWallRatio * 100).toFixed(0)}%`, color: '#ef4444' },
+                  { label: 'Partition', value: `${(avgPartitionWallRatio * 100).toFixed(0)}%`, color: '#3b82f6' },
+                  { label: 'Openings', value: `${avgOpeningPercentage}%`, color: '#f59e0b' },
+                ].map(({ label, value, color }) => (
+                  <View key={label} style={styles.metadataInfoItem}>
+                    <Text style={styles.metadataInfoLabel}>{label}</Text>
+                    <Text style={styles.metadataInfoValue}>{value}</Text>
+                    <View style={{ height: 4, backgroundColor: color, borderRadius: 2, marginTop: 4, width: '100%' }} />
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {isDetectingComposition && (
+              <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.6)', justifyContent: 'center', alignItems: 'center', borderRadius: 12 }}>
+                <ActivityIndicator size="small" color="#315b76" />
+                <Text style={{ fontSize: 10, color: '#315b76', fontWeight: '700', marginTop: 4 }}>AI Analyzing rooms...</Text>
+              </View>
+            )}
           </View>
 
           {/*  AI Generated Options  */}
@@ -178,9 +206,51 @@ export default function WallScreen({ route, navigation }: any) {
                 })}
               </ScrollView>
             ) : (
-              <TouchableOpacity style={styles.loadPerspectivesBtn} onPress={loadAIPerspectives}>
-                <Ionicons name="sparkles" size={16} color="#315b76" />
-                <Text style={styles.loadPerspectivesBtnText}>Generate AI Options</Text>
+              <TouchableOpacity
+                style={[styles.aiBanner, (isRecommendationFromSaved || aiPerspectives.length > 0) && styles.aiBannerApplied]}
+                onPress={async () => {
+                  // Unified AI action: check for saved first, else detect + generate
+                  if (!isRecommendationFromSaved) {
+                    await loadSavedRecommendation();
+                    if (!isRecommendationFromSaved) {
+                      if (!compositionDetected) await runCompositionDetection();
+                      await loadAIPerspectives();
+                    }
+                  }
+                }}
+                activeOpacity={0.8}
+                disabled={isPerspectiveLoading || isDetectingComposition}
+              >
+                <View style={styles.aiIconContainer}>
+                  {isPerspectiveLoading || isDetectingComposition ? (
+                    <ActivityIndicator size="small" color="#315b76" />
+                  ) : (
+                    <MaterialCommunityIcons
+                      name={isRecommendationFromSaved ? "robot-happy" : "robot"}
+                      size={24}
+                      color={isRecommendationFromSaved ? "#059669" : "#315b76"}
+                    />
+                  )}
+                </View>
+                <View style={styles.aiContent}>
+                  <Text style={[styles.aiTitle, isRecommendationFromSaved && styles.aiTitleApplied]}>
+                    {isRecommendationFromSaved ? "AI Recommendation Applied" : "Smart Wall Recommendation"}
+                  </Text>
+                  <Text style={styles.aiDesc}>
+                    {isRecommendationFromSaved
+                      ? "Your previously saved recommendation is active"
+                      : `Get smart composition & material suggestions for your ${tier} plan`}
+                  </Text>
+                </View>
+                {!isRecommendationFromSaved && aiPerspectives.length === 0 && (
+                  <View style={styles.applyBadge}>
+                    <Text style={styles.applyBadgeText}>ANALYZE</Text>
+                    <Ionicons name="sparkles" size={12} color="#fff" />
+                  </View>
+                )}
+                {isRecommendationFromSaved && (
+                  <Ionicons name="checkmark-circle" size={20} color="#059669" />
+                )}
               </TouchableOpacity>
             )}
           </View>
@@ -413,7 +483,7 @@ export default function WallScreen({ route, navigation }: any) {
                   {selections['Sand']?.name || 'Choose sand type'}
                 </Text>
                 {selections['Sand'] && (
-                  <Text style={styles.mortarRowMeta}>₹{selections['Sand'].pricePerUnit}/{selections['Sand'].unit} · {calculation.sandQty > 0 ? `${calculation.sandQty} kg` : '—'}</Text>
+                  <Text style={styles.mortarRowMeta}>₹{selections['Sand'].pricePerUnit}/{selections['Sand'].unit} · {calculation.sandQty > 0 ? `${calculation.sandQty} ${selections['Sand']?.unit || 'cft'}` : '—'}</Text>
                 )}
               </View>
               <View style={[styles.mortarChevronPill, sandDropdownOpen && styles.mortarChevronPillActive]}>
@@ -606,4 +676,63 @@ const styles = StyleSheet.create({
   aiAppliedBadgeText: { fontSize: 11, color: '#315b76', fontWeight: '700' },
   customBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#f8fafc', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1, borderColor: '#e2e8f0' },
   customBadgeText: { fontSize: 11, color: '#64748b', fontWeight: '600' },
+
+  /* AI Recommendation Banner */
+  aiBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f0f9ff',
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 0,
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+    gap: 12,
+  },
+  aiBannerApplied: {
+    backgroundColor: '#f0fdf4',
+    borderColor: '#bbf7d0',
+  },
+  aiIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  aiContent: {
+    flex: 1,
+  },
+  aiTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#0c4a6e',
+  },
+  aiTitleApplied: {
+    color: '#065f46',
+  },
+  aiDesc: {
+    fontSize: 11,
+    color: '#0369a1',
+    fontWeight: '500',
+  },
+  applyBadge: {
+    backgroundColor: '#315b76',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  applyBadgeText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '800',
+  },
 });

@@ -1,29 +1,29 @@
 import React, { useMemo, useState } from 'react';
-import { 
-  View, Text, StyleSheet, TouchableOpacity, ScrollView, 
-  Dimensions, ActivityIndicator, Alert 
+import {
+  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  Dimensions, ActivityIndicator, Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { 
-  db, 
-  WALL_TYPE_SPECS, 
+import {
+  db,
+  WALL_TYPE_SPECS,
   auth
 } from '@archlens/shared';
 import { collection, serverTimestamp, addDoc } from 'firebase/firestore';
 
 const { width } = Dimensions.get('window');
 
-// --- ENGINEERING CONSTANTS ---
-const IN_TO_FT = 1 / 12;
-const FT_TO_M = 0.3048;           
-const CEMENT_BAGS_PER_M3 = 28.8;
-const DRY_VOL_MULTIPLIER = 1.33;
-const SAND_DENSITY_KG_M3 = 1600;
-const CFT_PER_M3 = 35.3147;
-const MORTAR_WASTAGE_FACTOR = 1.15;
-// ---
+import {
+  IN_TO_FT,
+  FT_TO_M,
+  CEMENT_BAGS_PER_M3,
+  DRY_VOL_MULTIPLIER,
+  SAND_DENSITY_KG_M3,
+  CFT_PER_M3,
+  MORTAR_WASTAGE_FACTOR
+} from '../constants/wallConstants';
 
 export default function WallCostSummaryScreen({ route, navigation }: any) {
   const {
@@ -47,7 +47,7 @@ export default function WallCostSummaryScreen({ route, navigation }: any) {
     finishPreference = null,
     materialSelectionMode = { loadBearing: 'manual', partition: 'manual' },
     systemCosts = { loadBearing: 0, partition: 0 },
-    budgetViolations = { loadBearing: {violated: false, difference: 0}, partition: {violated: false, difference: 0} }
+    budgetViolations = { loadBearing: { violated: false, difference: 0 }, partition: { violated: false, difference: 0 } }
   } = route.params || {};
 
   const [saving, setSaving] = useState(false);
@@ -80,9 +80,9 @@ export default function WallCostSummaryScreen({ route, navigation }: any) {
       if (!brick || faceArea_sqft <= 0) return { qty: 0, mortarVol_ft3: 0, layers: 0 };
 
       const dims = brick.dimensions?.toLowerCase().split('x').map((v: string) => parseFloat(v.trim())) || [9, 4, 3];
-      const bL_in = dims[0];
-      const bW_in = dims[1];
-      const bH_in = dims[2];
+      const bL_in = dims[0] || 9;
+      const bW_in = dims[1] || 4;
+      const bH_in = dims[2] || 3;
 
       const layers = Math.max(1, Math.round(targetWallThick_in / bW_in));
 
@@ -94,10 +94,10 @@ export default function WallCostSummaryScreen({ route, navigation }: any) {
       const qty = Math.ceil(baseQty * layers * 1.05);
 
       const totalWallVol_ft3 = faceArea_sqft * (targetWallThick_in * IN_TO_FT);
-      const singleBrickPhysVol_ft3 = (bL_in * bW_in * bH_in) * Math.pow(IN_TO_FT, 3);
-      const totalBrickPhysVol_ft3 = qty * singleBrickPhysVol_ft3;
+      const bVol = (bL_in * IN_TO_FT) * (bW_in * IN_TO_FT) * (bH_in * IN_TO_FT);
+      const uVol = ((bL_in + jt_in) * IN_TO_FT) * ((bW_in + jt_in) * IN_TO_FT) * ((bH_in + jt_in) * IN_TO_FT);
 
-      const mortarVol_ft3 = Math.max(0, totalWallVol_ft3 - totalBrickPhysVol_ft3);
+      const mortarVol_ft3 = totalWallVol_ft3 * ((uVol - bVol) / uVol);
 
       return { qty, mortarVol_ft3, layers };
     };
@@ -134,7 +134,7 @@ export default function WallCostSummaryScreen({ route, navigation }: any) {
     const pbDryMortar_m3 = pbMortarWithWastage_m3 * DRY_VOL_MULTIPLIER;
 
     const lbMortarSpec = WALL_TYPE_SPECS['Load Bearing'];
-    const pbMortarSpec = WALL_TYPE_SPECS['Partition'];
+    const pbMortarSpec = WALL_TYPE_SPECS['Partition Wall'];
 
     const lbCementVol = lbDryMortar_m3 * (lbMortarSpec.cementMortar / (lbMortarSpec.cementMortar + lbMortarSpec.sandMortar));
     const lbSandVol = lbDryMortar_m3 * (lbMortarSpec.sandMortar / (lbMortarSpec.cementMortar + lbMortarSpec.sandMortar));
@@ -317,7 +317,7 @@ export default function WallCostSummaryScreen({ route, navigation }: any) {
                 openingPercentage: avgOpeningPercentage,
                 averageWallThickness: parseFloat(wallThickness) || 0,
               };
-              navigation.navigate('ConstructionLevel', { totalArea, projectId, rooms, wallComposition: wallCompositionData });
+              navigation.navigate('WallDetails', { totalArea, projectId, rooms, wallComposition: wallCompositionData, tier });
             }}
             style={styles.roundBtn}
           >
@@ -362,23 +362,23 @@ export default function WallCostSummaryScreen({ route, navigation }: any) {
           <Text style={styles.sectionTitle}>MATERIAL BREAKDOWN</Text>
           <View style={styles.table}>
             <View style={styles.tableHeader}>
-              <Text style={[styles.th, {flex: 2}]}>Material</Text>
-              <Text style={[styles.th, {flex: 1, textAlign: 'center'}]}>Qty</Text>
-              <Text style={[styles.th, {flex: 1.2, textAlign: 'right'}]}>Cost</Text>
+              <Text style={[styles.th, { flex: 2 }]}>Material</Text>
+              <Text style={[styles.th, { flex: 1, textAlign: 'center' }]}>Qty</Text>
+              <Text style={[styles.th, { flex: 1.2, textAlign: 'right' }]}>Cost</Text>
             </View>
 
             {/* Load-Bearing Bricks */}
             {calculation.loadBearingQty > 0 && (
               <View style={styles.tableRow}>
-                <View style={{flex: 2}}>
+                <View style={{ flex: 2 }}>
                   <Text style={styles.categoryLabel}>Load-Bearing</Text>
                   <Text style={styles.itemName}>{calculation.loadBearingBrand}</Text>
                   <Text style={styles.itemDesc}>Main Wall Masonry</Text>
                 </View>
-                <View style={{flex: 1, alignItems: 'center'}}>
+                <View style={{ flex: 1, alignItems: 'center' }}>
                   <Text style={styles.itemQty}>{calculation.loadBearingQty} <Text style={styles.itemUnit}>Nos</Text></Text>
                 </View>
-                <View style={{flex: 1.2, alignItems: 'flex-end'}}>
+                <View style={{ flex: 1.2, alignItems: 'flex-end' }}>
                   <Text style={styles.itemPrice}>₹{Math.round((calculation.costBreakdown.bricks * (calculation.loadBearingQty / calculation.brickQty)) || 0).toLocaleString()}</Text>
                   <Text style={styles.itemRate}>@ ₹{loadBearingBrick?.pricePerUnit || 0}/Nos</Text>
                 </View>
@@ -388,15 +388,15 @@ export default function WallCostSummaryScreen({ route, navigation }: any) {
             {/* Partition Bricks */}
             {calculation.partitionQty > 0 && (
               <View style={styles.tableRow}>
-                <View style={{flex: 2}}>
+                <View style={{ flex: 2 }}>
                   <Text style={styles.categoryLabel}>Partition</Text>
                   <Text style={styles.itemName}>{calculation.partitionBrand}</Text>
                   <Text style={styles.itemDesc}>{partitionWallThickness.toFixed(1)}" Partition Wall</Text>
                 </View>
-                <View style={{flex: 1, alignItems: 'center'}}>
+                <View style={{ flex: 1, alignItems: 'center' }}>
                   <Text style={styles.itemQty}>{calculation.partitionQty} <Text style={styles.itemUnit}>Nos</Text></Text>
                 </View>
-                <View style={{flex: 1.2, alignItems: 'flex-end'}}>
+                <View style={{ flex: 1.2, alignItems: 'flex-end' }}>
                   <Text style={styles.itemPrice}>₹{Math.round((calculation.costBreakdown.bricks * (calculation.partitionQty / calculation.brickQty)) || 0).toLocaleString()}</Text>
                   <Text style={styles.itemRate}>@ ₹{partitionBrick?.pricePerUnit || 0}/Nos</Text>
                 </View>
@@ -405,15 +405,15 @@ export default function WallCostSummaryScreen({ route, navigation }: any) {
 
             {/* Cement */}
             <View style={styles.tableRow}>
-              <View style={{flex: 2}}>
+              <View style={{ flex: 2 }}>
                 <Text style={styles.categoryLabel}>Mortar</Text>
                 <Text style={styles.itemName}>{calculation.cementBrand}</Text>
                 <Text style={styles.itemDesc}>Cement {calculation.mortarMix}</Text>
               </View>
-              <View style={{flex: 1, alignItems: 'center'}}>
+              <View style={{ flex: 1, alignItems: 'center' }}>
                 <Text style={styles.itemQty}>{calculation.cementBags} <Text style={styles.itemUnit}>Bags</Text></Text>
               </View>
-              <View style={{flex: 1.2, alignItems: 'flex-end'}}>
+              <View style={{ flex: 1.2, alignItems: 'flex-end' }}>
                 <Text style={styles.itemPrice}>₹{calculation.costBreakdown.cement.toLocaleString()}</Text>
                 <Text style={styles.itemRate}>@ ₹{cement?.pricePerUnit || 0}/Bag</Text>
               </View>
@@ -421,15 +421,15 @@ export default function WallCostSummaryScreen({ route, navigation }: any) {
 
             {/* Sand */}
             <View style={styles.tableRow}>
-              <View style={{flex: 2}}>
+              <View style={{ flex: 2 }}>
                 <Text style={styles.categoryLabel}>Mortar</Text>
                 <Text style={styles.itemName}>{calculation.sandBrand}</Text>
                 <Text style={styles.itemDesc}>Mortar Sand {calculation.mortarMix}</Text>
               </View>
-              <View style={{flex: 1, alignItems: 'center'}}>
+              <View style={{ flex: 1, alignItems: 'center' }}>
                 <Text style={styles.itemQty}>{calculation.sandQty} <Text style={styles.itemUnit}>{calculation.sandUnit}</Text></Text>
               </View>
-              <View style={{flex: 1.2, alignItems: 'flex-end'}}>
+              <View style={{ flex: 1.2, alignItems: 'flex-end' }}>
                 <Text style={styles.itemPrice}>₹{calculation.costBreakdown.sand.toLocaleString()}</Text>
                 <Text style={styles.itemRate}>@ ₹{sand?.pricePerUnit || 0}/{calculation.sandUnit}</Text>
               </View>
@@ -440,11 +440,11 @@ export default function WallCostSummaryScreen({ route, navigation }: any) {
           {aiInsights && (
             <View style={styles.aiInsightContainer}>
               <View style={styles.aiInsightBadge}>
-                <View style={{flexDirection: 'row', alignItems: 'flex-start', gap: 10}}>
+                <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
                   <View style={styles.aiInsightIconBox}>
                     <Ionicons name="bulb-outline" size={18} color="#fff" />
                   </View>
-                  <View style={{flex: 1}}>
+                  <View style={{ flex: 1 }}>
                     <Text style={styles.aiInsightTitle}>✨ AI Material Recommendation</Text>
                     {aiInsights.costSavingsPercent > 0 && (
                       <Text style={styles.aiInsightSavings}>
@@ -466,7 +466,7 @@ export default function WallCostSummaryScreen({ route, navigation }: any) {
             </Text>
           </View>
 
-          <View style={{height: 100}} />
+          <View style={{ height: 100 }} />
         </ScrollView>
 
         {/* Save Button */}
@@ -490,263 +490,263 @@ export default function WallCostSummaryScreen({ route, navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: '#F8FAFC' 
+  container: {
+    flex: 1,
+    backgroundColor: '#F8FAFC'
   },
-  safeArea: { 
-    flex: 1 
+  safeArea: {
+    flex: 1
   },
-  
+
   // Header
-  header: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'space-between', 
-    padding: 20 
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 20
   },
-  headerTitle: { 
-    fontSize: 18, 
-    fontWeight: '700', 
-    color: '#1e293b' 
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1e293b'
   },
-  roundBtn: { 
-    width: 40, 
-    height: 40, 
-    borderRadius: 20, 
-    backgroundColor: '#fff', 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    elevation: 2 
+  roundBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 2
   },
-  tierBadge: { 
-    backgroundColor: '#315b76', 
-    paddingHorizontal: 12, 
-    paddingVertical: 6, 
-    borderRadius: 10 
+  tierBadge: {
+    backgroundColor: '#315b76',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10
   },
-  tierText: { 
-    color: '#fff', 
-    fontSize: 12, 
-    fontWeight: '800' 
+  tierText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '800'
   },
-  
+
   // Scroll Content
-  scroll: { 
-    padding: 20 
+  scroll: {
+    padding: 20
   },
-  
+
   // Summary Card - Dark Theme
-  summaryCard: { 
-    backgroundColor: '#1e293b', 
-    borderRadius: 24, 
-    padding: 25, 
-    marginBottom: 25, 
-    elevation: 8 
+  summaryCard: {
+    backgroundColor: '#1e293b',
+    borderRadius: 24,
+    padding: 25,
+    marginBottom: 25,
+    elevation: 8
   },
-  summaryHeader: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'flex-start' 
+  summaryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start'
   },
-  summaryLabel: { 
-    color: '#94a3b8', 
-    fontSize: 11, 
-    fontWeight: '700', 
-    letterSpacing: 1, 
+  summaryLabel: {
+    color: '#94a3b8',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1,
     marginBottom: 5,
     textTransform: 'uppercase'
   },
-  summaryTotal: { 
-    color: '#fff', 
-    fontSize: 28, 
-    fontWeight: '800' 
+  summaryTotal: {
+    color: '#fff',
+    fontSize: 28,
+    fontWeight: '800'
   },
-  methodBadge: { 
-    backgroundColor: '#315b76', 
-    paddingHorizontal: 10, 
-    paddingVertical: 5, 
-    borderRadius: 8 
+  methodBadge: {
+    backgroundColor: '#315b76',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8
   },
-  methodBadgeText: { 
-    color: '#fff', 
-    fontSize: 11, 
-    fontWeight: '700' 
+  methodBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700'
   },
-  divider: { 
-    height: 1, 
-    backgroundColor: 'rgba(255,255,255,0.1)', 
-    marginVertical: 15 
+  divider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    marginVertical: 15
   },
-  specRow: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between' 
+  specRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between'
   },
-  specItem: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: 6 
+  specItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6
   },
-  specText: { 
-    color: '#cbd5e1', 
-    fontSize: 13, 
-    fontWeight: '500' 
+  specText: {
+    color: '#cbd5e1',
+    fontSize: 13,
+    fontWeight: '500'
   },
-  
+
   // Section Title
-  sectionTitle: { 
-    fontSize: 12, 
-    fontWeight: '800', 
-    color: '#64748b', 
-    marginBottom: 15, 
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#64748b',
+    marginBottom: 15,
     letterSpacing: 0.5,
     textTransform: 'uppercase'
   },
-  
+
   // Table Layout
-  table: { 
-    backgroundColor: '#fff', 
-    borderRadius: 20, 
-    overflow: 'hidden', 
-    borderWidth: 1, 
-    borderColor: '#e2e8f0' 
+  table: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#e2e8f0'
   },
-  tableHeader: { 
-    flexDirection: 'row', 
-    backgroundColor: '#f1f5f9', 
-    padding: 15, 
-    borderBottomWidth: 1, 
-    borderBottomColor: '#e2e8f0' 
+  tableHeader: {
+    flexDirection: 'row',
+    backgroundColor: '#f1f5f9',
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0'
   },
-  th: { 
-    fontSize: 11, 
-    fontWeight: '700', 
-    color: '#64748b', 
-    textTransform: 'uppercase' 
+  th: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748b',
+    textTransform: 'uppercase'
   },
-  tableRow: { 
-    flexDirection: 'row', 
-    padding: 15, 
-    borderBottomWidth: 1, 
-    borderBottomColor: '#f1f5f9', 
-    alignItems: 'center' 
+  tableRow: {
+    flexDirection: 'row',
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+    alignItems: 'center'
   },
-  categoryLabel: { 
-    fontSize: 9, 
-    fontWeight: '800', 
-    color: '#315b76', 
-    textTransform: 'uppercase', 
-    marginBottom: 2 
+  categoryLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#315b76',
+    textTransform: 'uppercase',
+    marginBottom: 2
   },
-  itemName: { 
-    fontSize: 14, 
-    fontWeight: '700', 
-    color: '#334155' 
+  itemName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#334155'
   },
-  itemDesc: { 
-    fontSize: 11, 
-    color: '#94a3b8', 
-    marginTop: 1 
+  itemDesc: {
+    fontSize: 11,
+    color: '#94a3b8',
+    marginTop: 1
   },
-  itemQty: { 
-    fontSize: 14, 
-    fontWeight: '700', 
-    color: '#1e293b' 
+  itemQty: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1e293b'
   },
-  itemUnit: { 
-    fontSize: 10, 
-    color: '#94a3b8', 
-    fontWeight: '500' 
+  itemUnit: {
+    fontSize: 10,
+    color: '#94a3b8',
+    fontWeight: '500'
   },
-  itemPrice: { 
-    fontSize: 14, 
-    fontWeight: '700', 
-    color: '#10b981' 
+  itemPrice: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#10b981'
   },
-  itemRate: { 
-    fontSize: 10, 
-    color: '#94a3b8', 
-    marginTop: 1 
+  itemRate: {
+    fontSize: 10,
+    color: '#94a3b8',
+    marginTop: 1
   },
-  
+
   // AI Insight Badge
   aiInsightContainer: {
     marginTop: 20
   },
-  aiInsightBadge: { 
-    backgroundColor: '#f0fdf4', 
-    borderWidth: 1.5, 
-    borderColor: '#bbf7d0', 
-    borderRadius: 16, 
+  aiInsightBadge: {
+    backgroundColor: '#f0fdf4',
+    borderWidth: 1.5,
+    borderColor: '#bbf7d0',
+    borderRadius: 16,
     padding: 16,
     overflow: 'hidden'
   },
-  aiInsightIconBox: { 
-    width: 40, 
-    height: 40, 
-    backgroundColor: '#16a34a', 
-    borderRadius: 10, 
-    justifyContent: 'center', 
-    alignItems: 'center' 
+  aiInsightIconBox: {
+    width: 40,
+    height: 40,
+    backgroundColor: '#16a34a',
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center'
   },
-  aiInsightTitle: { 
-    fontSize: 13, 
-    fontWeight: '700', 
-    color: '#15803d', 
-    marginBottom: 6 
+  aiInsightTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#15803d',
+    marginBottom: 6
   },
-  aiInsightSavings: { 
-    fontSize: 13, 
-    fontWeight: '700', 
-    color: '#10b981', 
-    marginBottom: 4 
+  aiInsightSavings: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#10b981',
+    marginBottom: 4
   },
-  aiInsightReason: { 
-    fontSize: 11, 
-    color: '#22c55e', 
-    fontWeight: '500', 
-    lineHeight: 16 
+  aiInsightReason: {
+    fontSize: 11,
+    color: '#22c55e',
+    fontWeight: '500',
+    lineHeight: 16
   },
-  
+
   // Disclaimer Box
-  disclaimer: { 
-    flexDirection: 'row', 
-    gap: 10, 
-    backgroundColor: '#E0F2FE', 
-    padding: 15, 
-    borderRadius: 16, 
-    marginTop: 20, 
-    borderWidth: 1, 
-    borderColor: '#BAE6FD' 
+  disclaimer: {
+    flexDirection: 'row',
+    gap: 10,
+    backgroundColor: '#E0F2FE',
+    padding: 15,
+    borderRadius: 16,
+    marginTop: 20,
+    borderWidth: 1,
+    borderColor: '#BAE6FD'
   },
-  disclaimerText: { 
-    flex: 1, 
-    fontSize: 11, 
-    color: '#0369a1', 
-    lineHeight: 16 
+  disclaimerText: {
+    flex: 1,
+    fontSize: 11,
+    color: '#0369a1',
+    lineHeight: 16
   },
-  
+
   // Save Button
-  saveBtn: { 
-    position: 'absolute', 
-    bottom: 30, 
-    alignSelf: 'center', 
-    width: width * 0.85, 
-    backgroundColor: '#315b76', 
-    padding: 18, 
-    borderRadius: 20, 
-    flexDirection: 'row', 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    gap: 10, 
-    elevation: 5 
+  saveBtn: {
+    position: 'absolute',
+    bottom: 30,
+    alignSelf: 'center',
+    width: width * 0.85,
+    backgroundColor: '#315b76',
+    padding: 18,
+    borderRadius: 20,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 10,
+    elevation: 5
   },
   saveBtnDisabled: {
     opacity: 0.6
   },
-  saveBtnText: { 
-    color: '#fff', 
-    fontWeight: 'bold', 
-    fontSize: 16 
+  saveBtnText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16
   }
 });

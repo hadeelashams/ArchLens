@@ -14,6 +14,7 @@ import OnboardingScreen from './screens/OnboardingScreen';
 import LoginScreen from './screens/LoginScreen';
 import RegisterScreen from './screens/RegisterScreen';
 import HomeScreen from './screens/HomeScreen';
+import PlanDetailsScreen from './screens/PlanDetailsScreen';
 import UploadPlanScreen from './screens/UploadPlanScreen';
 import PlanVerificationScreen from './screens/PlanVerificationScreen';
 import ConstructionLevelScreen from './screens/ConstructionLevelScreen';
@@ -53,7 +54,18 @@ export type RootStackParamList = {
 
   // Main Flow
   Home: undefined;
-  UploadPlan: undefined;
+  PlanDetails: {
+    planName?: string;
+    location?: string;
+    description?: string;
+    projectType?: string;
+  };
+  UploadPlan: {
+    planName?: string;
+    location?: string;
+    description?: string;
+    projectType?: string;
+  };
   PlanVerification: { planImage: string };
   ConstructionLevel: { totalArea: number; projectId: string; rooms: any[] };
   ProjectSummary: { projectId: string };
@@ -159,6 +171,7 @@ function AppContent() {
         {user ? (
           <>
             <Stack.Screen name="Home" component={HomeScreen} />
+            <Stack.Screen name="PlanDetails" component={PlanDetailsScreen} />
             <Stack.Screen name="UploadPlan" component={UploadPlanScreen} />
             <Stack.Screen name="PlanVerification" component={PlanVerificationScreen} />
             <Stack.Screen name="ConstructionLevel" component={ConstructionLevelScreen} />

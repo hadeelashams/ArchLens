@@ -6,7 +6,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import {
   db,
   auth,
@@ -424,35 +423,51 @@ Return ONLY a JSON object:
 
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
-          {/* AI Recommendations Banner */}
-          <LinearGradient
-            colors={['#f0f9ff', '#e0f2fe']}
-            style={styles.aiBanner}
+          {/* AI Recommendation Banner */}
+          <TouchableOpacity
+            style={[styles.aiBanner, aiApplied && styles.aiBannerApplied]}
+            onPress={applyRecommendations}
+            activeOpacity={0.8}
+            disabled={aiLoading}
           >
-            <View style={styles.aiBannerLeft}>
-              <View style={styles.aiIconCircle}>
-                <MaterialCommunityIcons name="robot-outline" size={24} color="#0284c7" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.aiBannerTitle}>AI Material Expert</Text>
-                <Text style={styles.aiBannerDesc}>Smart recommendations based on room usage and {tier} tier standards.</Text>
-              </View>
-            </View>
-            <TouchableOpacity
-              style={[styles.aiBtn, aiLoading && styles.aiBtnDisabled]}
-              onPress={applyRecommendations}
-              disabled={aiLoading}
-            >
+            <View style={styles.aiIconContainer}>
               {aiLoading ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <ActivityIndicator size={24} color="#315b76" />
               ) : (
-                <>
-                  <Ionicons name="sparkles" size={14} color="#fff" />
-                  <Text style={styles.aiBtnText}>{aiApplied ? 'Re-Optimize' : 'Optimize All'}</Text>
-                </>
+                <MaterialCommunityIcons
+                  name={aiApplied ? "robot-happy" : "robot"}
+                  size={24}
+                  color={aiApplied ? "#059669" : "#315b76"}
+                />
               )}
-            </TouchableOpacity>
-          </LinearGradient>
+            </View>
+            <View style={styles.aiContent}>
+              <Text style={[styles.aiTitle, aiApplied && styles.aiTitleApplied]}>
+                {aiLoading
+                  ? "AI Analyzing..."
+                  : aiApplied
+                    ? "AI Recommendation Applied"
+                    : "AI Recommendation"
+                }
+              </Text>
+              <Text style={styles.aiDesc}>
+                {aiLoading
+                  ? "Processing..."
+                  : aiApplied
+                    ? "Recommendations applied to your selections"
+                    : `Get smart suggestions for your ${tier} plan`}
+              </Text>
+            </View>
+            {!aiApplied && (
+              <View style={styles.applyBadge}>
+                <Text style={styles.applyBadgeText}>APPLY</Text>
+                <Ionicons name="sparkles" size={12} color="#fff" />
+              </View>
+            )}
+            {aiApplied && (
+              <Ionicons name="checkmark-circle" size={20} color="#059669" />
+            )}
+          </TouchableOpacity>
 
           {/* 1. Type Toggle */}
           <View style={styles.typeTabContainer}>
@@ -554,22 +569,32 @@ Return ONLY a JSON object:
           <View style={styles.materialSection}>
             {filteredMaterials.length > 0 ? (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.materialScroll}>
-                {filteredMaterials.map(item => (
+                {filteredMaterials.map(item => {
+                  const isSelected = activeSelection?.material?.id === item.id;
+                  return (
                   <TouchableOpacity
                     key={item.id}
-                    style={[styles.materialCard, activeSelection?.material?.id === item.id && styles.materialCardActive]}
-                    onPress={() => paintType === 'Exterior' ? updateExterior('material', item) : updateRoom(activeSelection!.id, 'material', item)}
+                    style={[styles.materialCard, isSelected && styles.materialCardActive]}
+                    onPress={() => {
+                      // Toggle: if already selected, deselect (set to null), otherwise select
+                      if (paintType === 'Exterior') {
+                        updateExterior('material', isSelected ? null : item);
+                      } else {
+                        updateRoom(activeSelection!.id, 'material', isSelected ? null : item);
+                      }
+                    }}
                   >
                     <View style={styles.imagePlaceholder}>
                       {item.imageUrl ? <Image source={{ uri: item.imageUrl }} style={styles.materialImg} /> : <Ionicons name="color-palette-outline" size={24} color="#cbd5e1" />}
                     </View>
                     <Text style={styles.matName} numberOfLines={2}>{item.name}</Text>
                     <Text style={styles.matPrice}>₹{item.pricePerUnit}/{item.unit}</Text>
-                    {activeSelection?.material?.id === item.id && (
+                    {isSelected && (
                       <View style={styles.checkBadge}><Ionicons name="checkmark-circle" size={18} color="#315b76" /></View>
                     )}
                   </TouchableOpacity>
-                ))}
+                  );
+                })}
               </ScrollView>
             ) : (
               <Text style={styles.emptyText}>No materials found for {activeSelection?.filter}.</Text>
@@ -764,24 +789,60 @@ const styles = StyleSheet.create({
 
   /* AI Banner Styles */
   aiBanner: {
-    padding: 18,
-    borderRadius: 20,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#bae6fd',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 15,
-    elevation: 2,
-    shadowColor: '#0ea5e9',
-    shadowOpacity: 0.1,
-    shadowRadius: 10
+    backgroundColor: '#f0f9ff',
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+    gap: 12,
   },
-  aiBannerLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  aiIconCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', elevation: 2 },
-  aiBannerTitle: { fontSize: 15, fontWeight: '800', color: '#0c4a6e', marginBottom: 2 },
-  aiBannerDesc: { fontSize: 11, color: '#315b76', opacity: 0.8, fontWeight: '500' },
-  aiBtn: { backgroundColor: '#315b76', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 6, elevation: 3 },
-  aiBtnDisabled: { opacity: 0.7 },
-  aiBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  aiBannerApplied: {
+    backgroundColor: '#f0fdf4',
+    borderColor: '#bbf7d0',
+  },
+  aiIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  aiContent: {
+    flex: 1,
+  },
+  aiTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#0c4a6e',
+  },
+  aiTitleApplied: {
+    color: '#065f46',
+  },
+  aiDesc: {
+    fontSize: 11,
+    color: '#0369a1',
+    fontWeight: '500',
+  },
+  applyBadge: {
+    backgroundColor: '#315b76',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  applyBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '800',
+  },
 });

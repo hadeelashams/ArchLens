@@ -82,15 +82,16 @@ let directGeminiAI: GoogleGenAI | null = null;
 
 // Firebase models - only Gemini models, Gemma not supported by Firebase
 const FIREBASE_MODELS = [
+  'gemini-3.1-flash-lite-preview',
   'gemini-2.5-flash',          // Primary: Best balance of speed and quality
   'gemini-flash-latest',       // Fallback: Stable latest
   'gemini-3-flash-preview',    // Fallback: Latest with extended thinking
-  'gemini-2.5-flash-lite',     // Fallback: Lite version for higher rate limits
+  'gemini-2.5-flash-lite',    // Fallback: Lite version for higher rate limits
 ];
 
 // Direct Google Gen AI models - supports Gemini AND Gemma
 const GENAI_MODELS = [          // Fallback: Gemma model for variety
-  'gemini-2.5-flash',          // Primary: Best balance
+  'gemini-2.5-flash',          // Primarygemini-3.1-flash-lite-preview: Best balance
 ];
 
 // Use appropriate model list based on backend
@@ -98,11 +99,11 @@ const GEMINI_MODELS = AI_BACKEND === 'genai' ? GENAI_MODELS : FIREBASE_MODELS;
 
 // Map of model names to display names
 const MODEL_NAMES: Record<string, string> = {
+  'gemini-3.1-flash-lite-preview': 'Gemini 3.1 Flash Lite Preview',
   'gemini-2.5-flash': 'Gemini 2.5 Flash',
   'gemini-flash-latest': 'Gemini Flash Latest',
   'gemini-3-flash-preview': 'Gemini 3.0 Flash Preview',
-  'gemini-2.5-flash-lite': 'Gemini 2.5 Flash Lite',
-  'gemma-3-27b': 'Gemma 3 27B',
+  'gemini-2.5-flash-lite': 'Gemini 2.5 Flash Lite'
 };
 
 /**

@@ -238,7 +238,7 @@ export default function EstimateResultScreen({ route, navigation }: any) {
           <div class="header">
             <div>
               <div class="brand">ARCHLENS</div>
-              <div class="project-title">${activeProject.name || 'Untitled Project'}</div>
+              <div class="project-title">${activeProject.planName || activeProject.name || 'Untitled Project'}</div>
             </div>
             <div style="text-align: right; font-size: 14px; color: #94a3b8;">
               Estimated: ${new Date().toLocaleDateString()}
@@ -248,6 +248,10 @@ export default function EstimateResultScreen({ route, navigation }: any) {
           <div class="summary-box">
             <div class="section-label">ESTIMATED GRAND TOTAL</div>
             <div class="grand-total">₹${formatCurrency(grandTotal)}</div>
+            <div class="meta-row">
+              <div>Plan Name: <b>${activeProject.planName || 'N/A'}</b></div>
+              <div>Location: <b>${activeProject.location || 'N/A'}</b></div>
+            </div>
             <div class="meta-row">
               <div>Plan Area: <b>${activeProject.totalArea || 0} sq.ft</b></div>
               <div>Budget Tier: <b>${activeProject.tier || 'Standard'}</b></div>
@@ -527,7 +531,7 @@ export default function EstimateResultScreen({ route, navigation }: any) {
           >
             <Ionicons name="arrow-back" size={20} color="#315b76" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{viewMode === 'list' ? 'Select Project' : (activeProject?.name || 'Project Summary')}</Text>
+              <Text style={styles.headerTitle}>{viewMode === 'list' ? 'Select Project' : (activeProject?.planName || activeProject?.name || 'Project Summary')}</Text>
           <View style={{ width: 40 }} />
         </View>
 
@@ -565,11 +569,11 @@ export default function EstimateResultScreen({ route, navigation }: any) {
                         <MaterialCommunityIcons name="office-building" size={24} color="#315b76" />
                       </View>
                       <View style={styles.projectInfo}>
-                        <Text style={styles.projectName}>{proj.name || 'Untitled Project'}</Text>
+                        <Text style={styles.projectName}>{proj.planName || proj.name || 'Untitled Project'}</Text>
                         <Text style={styles.projectMeta}>
-                          {proj.createdAt?.toDate ? proj.createdAt.toDate().toLocaleDateString() : 'Recent'} • {proj.status || 'Active'}
+                          {proj.createdAt?.toDate ? proj.createdAt.toDate().toLocaleDateString() : 'Recent'}
                         </Text>
-                        {proj.totalArea && <Text style={styles.projectArea}>{proj.totalArea} sq.ft</Text>}
+                        <Text style={styles.projectArea}>{proj.totalArea || 0} sq.ft</Text>
                       </View>
                     </TouchableOpacity>
 
