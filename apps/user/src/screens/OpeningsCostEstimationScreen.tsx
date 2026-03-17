@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { db, auth } from '@archlens/shared';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, updateDoc, doc } from 'firebase/firestore';
 
 const { width } = Dimensions.get('window');
 
@@ -17,7 +17,8 @@ export default function OpeningsCostEstimationScreen({ route, navigation }: any)
         totalArea,
         tier,
         roomsData = [],
-        totalCost = 0
+        totalCost = 0,
+        editEstimateId
     } = route.params || {};
 
     const [saving, setSaving] = useState(false);
@@ -129,18 +130,26 @@ export default function OpeningsCostEstimationScreen({ route, navigation }: any)
 
             console.log('💾 Saving to Firestore...');
             
-            await addDoc(collection(db, 'estimates'), {
+            const estimatePayload = {
                 projectId, userId: auth.currentUser.uid,
                 itemName: 'Doors & Windows', category: 'Openings',
                 totalCost, lineItems, roomSelections,
-                area: totalArea, tier, createdAt: serverTimestamp(),
-            });
-            
-            console.log('✅ Successfully saved to Firestore');
-            Alert.alert('Saved!', 'Openings estimate saved successfully.');
-            
-            console.log('🧭 Navigating to ProjectSummary...');
-            navigation.navigate('ProjectSummary', { projectId });
+                area: totalArea, tier,
+            };
+
+            if (editEstimateId) {
+                await updateDoc(doc(db, 'estimates', editEstimateId), { ...estimatePayload, updatedAt: serverTimestamp() });
+                console.log('✅ Successfully updated in Firestore');
+                Alert.alert('Updated!', 'Openings estimate updated successfully.');
+                console.log('🧭 Navigating to EstimateResult...');
+                navigation.navigate('EstimateResult', { projectId });
+            } else {
+                await addDoc(collection(db, 'estimates'), { ...estimatePayload, createdAt: serverTimestamp() });
+                console.log('✅ Successfully saved to Firestore');
+                Alert.alert('Saved!', 'Openings estimate saved successfully.');
+                console.log('🧭 Navigating to ProjectSummary...');
+                navigation.navigate('ProjectSummary', { projectId });
+            }
         } catch (e: any) {
             console.error('❌ Save error:', e);
             Alert.alert('Error', e.message || 'Failed to save estimate. Please try again.');

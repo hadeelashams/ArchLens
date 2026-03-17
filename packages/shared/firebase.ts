@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
-import { 
+import {
   initializeAuth,
   getAuth,
   browserLocalPersistence
@@ -32,10 +32,14 @@ const firebaseConfig = {
 };
 
 // Validate Firebase config
-const isConfigValid = Object.values(firebaseConfig).every(val => val);
+const missingKeys = Object.entries(firebaseConfig)
+  .filter(([_, val]) => !val)
+  .map(([key]) => key);
 
-if (!isConfigValid) {
-  console.warn('⚠️ Firebase config is incomplete. Check your .env file.');
+if (missingKeys.length > 0) {
+  console.error(`❌ Firebase config is missing keys: ${missingKeys.join(', ')}. Check your .env file or EAS configuration.`);
+} else {
+  console.log('✅ Firebase configuration loaded successfully');
 }
 
 // 1. Initialize App
@@ -129,7 +133,7 @@ try {
   if (AI_BACKEND !== 'genai') {
     ai = getAI(app, { backend: new GoogleAIBackend() });
     geminiModel = createGeminiModel(ai, GEMINI_MODELS[0]);
-    
+
     const modeLabel = AI_BACKEND === 'firebase' ? 'EXCLUSIVE' : 'PRIMARY';
     console.log(`✓ Firebase Gemini AI initialized [${modeLabel}] with ${MODEL_NAMES[GEMINI_MODELS[0]]}`);
   }
@@ -146,7 +150,7 @@ try {
 try {
   if (AI_BACKEND !== 'firebase') {
     const genaiApiKey = process.env.EXPO_PUBLIC_GENAI_API_KEY;
-    
+
     if (genaiApiKey) {
       directGeminiAI = new GoogleGenAI({ apiKey: genaiApiKey });
       const modeLabel = AI_BACKEND === 'genai' ? 'EXCLUSIVE' : 'FALLBACK';

@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, ActivityIndicator, Alert, Modal, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { db, CONSTRUCTION_HIERARCHY, auth, createDocument, loadWallRecommendation } from '@archlens/shared';
-import { collection, query, onSnapshot, serverTimestamp, doc, getDoc } from 'firebase/firestore';
+import { collection, query, onSnapshot, serverTimestamp, doc, getDoc, updateDoc } from 'firebase/firestore';
 
 // ─── Engineering Constants ────────────────────────────────────────────────────
 const SQ_M_PER_SQ_FT = 0.092903;
@@ -67,7 +67,9 @@ const calcBags = (area: number, kgPerM2: number, bagKg: number) => Math.ceil((ar
 
 // ─── Main Component ──────────────────────────────────────────────────────────
 export default function PlasteringScreen({ route, navigation }: any) {
-  const { totalArea = 1000, projectId, tier = 'Standard', wallComposition } = route.params || {};
+  const { totalArea = 1000, projectId, tier = 'Standard', wallComposition, editEstimateId } = route.params || {};
+
+  const fetchedRef = useRef(false);
 
   const [loading, setLoading] = useState(true);
   const [materials, setMaterials] = useState<any[]>([]);
@@ -112,6 +114,29 @@ export default function PlasteringScreen({ route, navigation }: any) {
     }
     return unsub;
   }, [projectId]);
+
+  // Load existing estimate if editing
+  useEffect(() => {
+    const loadExistingEstimate = async () => {
+      if (editEstimateId && materials.length > 0 && !fetchedRef.current) {
+        fetchedRef.current = true;
+        try {
+          const docSnap = await getDoc(doc(db, 'estimates', editEstimateId));
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            if (data.specifications) {
+              const { intThickness, extThickness } = data.specifications;
+              if (intThickness) setIntThickness(String(intThickness));
+              if (extThickness) setExtThickness(String(extThickness));
+            }
+          }
+        } catch (e) {
+          console.error('Error loading existing plastering estimate:', e);
+        }
+      }
+    };
+    loadExistingEstimate();
+  }, [editEstimateId, materials.length]);
 
   // Method update on material change - set methods based on rule constraints
   useEffect(() => {
@@ -199,15 +224,21 @@ export default function PlasteringScreen({ route, navigation }: any) {
         total: (calc.breakdown as any)[i.key.toLowerCase()], rate: selections[i.key]?.pricePerUnit || 0
       }));
 
-      await createDocument('estimates', {
+      const estimatePayload = {
         projectId, userId: auth.currentUser.uid, itemName: 'Plastering', category: CONSTRUCTION_HIERARCHY['Plastering']?.category || 'Finishing',
         totalCost: calc.totalCost, lineItems: items, specifications: {
           loadBearing: { internalArea: lbInternalArea, externalArea: lbExternalArea, internalMethod: lbInternalMethod, externalMethod: lbExternalMethod },
           partition: { internalArea: pbInternalArea, externalArea: pbExternalArea, internalMethod: pbInternalMethod, externalMethod: pbExternalMethod },
           tier, intThickness, extThickness
-        }, createdAt: serverTimestamp(),
-      });
-      Alert.alert('Saved!', 'Successful.', [{ text: 'OK', onPress: () => navigation.goBack() }]);
+        },
+      };
+      if (editEstimateId) {
+        await updateDoc(doc(db, 'estimates', editEstimateId), { ...estimatePayload, updatedAt: serverTimestamp() });
+        Alert.alert('Updated!', 'Plastering estimate updated.', [{ text: 'OK', onPress: () => navigation.navigate('EstimateResult', { projectId }) }]);
+      } else {
+        await createDocument('estimates', { ...estimatePayload, createdAt: serverTimestamp() });
+        Alert.alert('Saved!', 'Successful.', [{ text: 'OK', onPress: () => navigation.goBack() }]);
+      }
     } catch (err: any) { Alert.alert('Error', err.message); } finally { setSaving(false); }
   };
 

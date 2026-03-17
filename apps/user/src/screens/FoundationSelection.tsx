@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   Dimensions, Platform, TextInput, ActivityIndicator, Image, Switch
@@ -8,7 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { db, getComponentRecommendation, getFoundationPerspectives } from '@archlens/shared';
 import type { FoundationPerspective } from '@archlens/shared';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, getDoc, doc } from 'firebase/firestore';
 
 const { width } = Dimensions.get('window');
 
@@ -46,7 +46,9 @@ const ALL_LAYER_MAPS = {
 };
 
 export default function FoundationSelection({ route, navigation }: any) {
-  const { totalArea: passedArea, projectId, tier = 'Standard', aiRecommendations: routeAiRecommendations, aiAdvice: routeAiAdvice } = route.params || {};
+  const { totalArea: passedArea, projectId, tier = 'Standard', aiRecommendations: routeAiRecommendations, aiAdvice: routeAiAdvice, editEstimateId } = route.params || {};
+
+  const fetchedRef = useRef(false);
 
   const [loading, setLoading] = useState(true);
   const [materials, setMaterials] = useState<any[]>([]);
@@ -111,6 +113,49 @@ export default function FoundationSelection({ route, navigation }: any) {
     });
     return unsub;
   }, [tier]);
+
+  // Load existing estimate if editing
+  useEffect(() => {
+    const loadExistingEstimate = async () => {
+      if (editEstimateId && materials.length > 0 && !fetchedRef.current) {
+        fetchedRef.current = true;
+        try {
+          const docSnap = await getDoc(doc(db, 'estimates', editEstimateId));
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            if (data.foundationType) {
+              setFoundationType(data.foundationType as FoundationType);
+            }
+            if (data.specifications) {
+              const { hasPCC, includePlinth, footingCount, footingLength, footingWidth, wallPerimeter, trenchWidth } = data.specifications;
+              if (hasPCC !== undefined) setHasPCC(hasPCC);
+              if (includePlinth !== undefined) setIncludePlinth(includePlinth);
+              if (footingCount) setFootingCount(String(footingCount));
+              if (footingLength) setFootingLength(String(footingLength));
+              if (footingWidth) setFootingWidth(String(footingWidth));
+              if (wallPerimeter) setWallPerimeter(String(wallPerimeter));
+              if (trenchWidth) setTrenchWidth(String(trenchWidth));
+            }
+            if (data.lineItems && Array.isArray(data.lineItems)) {
+              const restored: Record<string, any> = { ...selections };
+              data.lineItems.forEach((item: any) => {
+                if (item.materialId) {
+                  const mat = materials.find((m: any) => m.id === item.materialId);
+                  if (mat && item.type) {
+                    restored[`${item.type}_${item.materialType || item.type}`] = mat;
+                  }
+                }
+              });
+              if (Object.keys(restored).length > 0) setSelections(restored);
+            }
+          }
+        } catch (e) {
+          console.error('Error loading existing foundation estimate:', e);
+        }
+      }
+    };
+    loadExistingEstimate();
+  }, [editEstimateId, materials.length]);
 
   const activeLayers = useMemo(() => {
     const layers: string[] = [];
@@ -201,7 +246,7 @@ export default function FoundationSelection({ route, navigation }: any) {
   };
 
   const handleNext = () => {
-    const common = { projectId, area, tier, selections: { ...selections, ...aggSelections } };
+    const common = { projectId, area, tier, selections: { ...selections, ...aggSelections }, ...(editEstimateId && { editEstimateId }) };
     if (foundationType === 'RCC') {
       navigation.navigate('FoundationCost', { ...common, foundationType: 'RCC', foundationConfig: { hasPCC, includePlinth, footingCount: parseInt(footingCount) || 0, footingLength: parseFloat(footingLength), footingWidth: parseFloat(footingWidth), pccThickness: parseFloat(pccThickness), rccExcavationDepth: parseFloat(rccExcavationDepth) } });
     } else {

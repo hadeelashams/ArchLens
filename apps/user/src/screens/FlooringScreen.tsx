@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   Dimensions, Image, ActivityIndicator, Alert
@@ -13,7 +13,7 @@ import {
   extractStructuredData,
   CONSTRUCTION_HIERARCHY
 } from '@archlens/shared';
-import { collection, query, onSnapshot, serverTimestamp, doc, getDoc } from 'firebase/firestore';
+import { collection, query, onSnapshot, serverTimestamp, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { getProjectById } from '../services/projectService';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -28,11 +28,14 @@ const formatUnit = (unit?: string) => {
 };
 
 export default function FlooringScreen({ route, navigation }: any) {
-  const { projectId, tier = 'Standard' } = route.params || {};
+  const { projectId, tier = 'Standard', editEstimateId } = route.params || {};
 
   // Debug logging
   console.log('FlooringScreen - Route params:', route.params);
   console.log('FlooringScreen - Project ID:', projectId);
+
+  // --- REFS ---
+  const fetchedRef = useRef(false);
 
   // --- DATA STATE ---
   const [loading, setLoading] = useState(true);
@@ -200,6 +203,34 @@ export default function FlooringScreen({ route, navigation }: any) {
       }
     }
   }, [loading, materials.length, roomsData.length, tier]);
+
+  // Load existing estimate if editing
+  useEffect(() => {
+    const loadExistingEstimate = async () => {
+      if (editEstimateId && materials.length > 0 && roomsData.length > 0 && !fetchedRef.current) {
+        fetchedRef.current = true;
+        try {
+          const docSnap = await getDoc(doc(db, 'estimates', editEstimateId));
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            if (data.lineItems && Array.isArray(data.lineItems)) {
+              setRoomsData(prev => prev.map((room: any) => {
+                const roomItems = data.lineItems.filter((item: any) => item.roomId === room.id);
+                if (roomItems.length > 0) {
+                  const mat = materials.find((m: any) => m.id === roomItems[0].materialId);
+                  return { ...room, flooringMaterial: mat || room.flooringMaterial };
+                }
+                return room;
+              }));
+            }
+          }
+        } catch (e) {
+          console.error('Error loading existing flooring estimate:', e);
+        }
+      }
+    };
+    loadExistingEstimate();
+  }, [editEstimateId, materials.length, roomsData.length]);
 
   // Helper: Find which category a material belongs to
   const findMaterialCategory = (material: any, availableCategories: string[]): string | null => {
@@ -539,10 +570,16 @@ Return ONLY a JSON object in this exact format:
         createdAt: serverTimestamp()
       };
 
-      await createDocument('estimates', estimateData);
-
-      Alert.alert("Success", "Flooring Estimate saved successfully to project summary.");
-      navigation.navigate('ProjectSummary', { projectId });
+      if (editEstimateId) {
+        const { createdAt: _c, ...updateData } = estimateData as any;
+        await updateDoc(doc(db, 'estimates', editEstimateId), { ...updateData, updatedAt: serverTimestamp() });
+        Alert.alert("Updated", "Flooring estimate updated successfully.");
+        navigation.navigate('EstimateResult', { projectId });
+      } else {
+        await createDocument('estimates', estimateData);
+        Alert.alert("Success", "Flooring Estimate saved successfully to project summary.");
+        navigation.navigate('ProjectSummary', { projectId });
+      }
     } catch (e: any) {
       Alert.alert("Error", e.message);
     } finally {

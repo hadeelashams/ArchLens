@@ -50,9 +50,10 @@ export default function EstimateResultScreen({ route, navigation }: any) {
     'Foundation': 'home',
     'Wall': 'view-grid-plus',
     'Roofing': 'home-roof',
+    'Openings': 'door-open',
+    'Plastering': 'texture',
     'Flooring': 'view-module',
     'Painting': 'format-paint',
-    'Plastering': 'texture',
   };
 
   useEffect(() => {
@@ -154,9 +155,10 @@ export default function EstimateResultScreen({ route, navigation }: any) {
       'Foundation': ['#4F46E5', '#818cf8'],
       'Wall': ['#3b82f6', '#60a5fa'],
       'Roofing': ['#0ea5e9', '#38bdf8'],
+      'Openings': ['#f59e0b', '#fbbf24'],
+      'Plastering': ['#64748B', '#94a3b8'],
       'Flooring': ['#14b8a6', '#2dd4bf'],
       'Painting': ['#10b981', '#34d399'],
-      'Plastering': ['#64748B', '#94a3b8'],
     };
     return colors[category] || ['#6b7280', '#9ca3af'];
   };
@@ -166,6 +168,36 @@ export default function EstimateResultScreen({ route, navigation }: any) {
       { text: "Cancel", style: "cancel" },
       { text: "Delete", style: "destructive", onPress: async () => await deleteDoc(doc(db, 'estimates', id)) }
     ]);
+  };
+
+  const handleEditEstimate = (item: any) => {
+    const totalArea = activeProject?.totalArea || 0;
+    const rooms = activeProject?.rooms || [];
+    const tier = item.tier || 'Standard';
+    const wallComposition = activeProject?.wallComposition || null;
+
+    const categoryRouteMap: any = {
+      'Foundation': 'FoundationSelection',
+      'Wall': 'WallDetails',
+      'Roofing': 'RoofingScreen',
+      'Roof': 'RoofingScreen', // Backwards compatibility for old estimates
+      'Flooring': 'FlooringScreen',
+      'Plastering': 'PlasteringScreen',
+      'Finishing': 'PlasteringScreen', // Wall finishing estimates
+      'Painting': 'PaintingScreen',
+      'Openings': 'OpeningsScreen',
+    };
+
+    const targetRoute = categoryRouteMap[item.category] || 'ConstructionLevel';
+
+    navigation.navigate(targetRoute, {
+      totalArea,
+      projectId: activeProjectId,
+      tier,
+      rooms,
+      wallComposition,
+      editEstimateId: item.id,
+    });
   };
 
   const handleDeleteProject = async (id: string, name: string) => {
@@ -264,7 +296,17 @@ export default function EstimateResultScreen({ route, navigation }: any) {
           ` : ''}
 
           <div class="section-label">MATERIAL BREAKDOWN</div>
-          ${Object.entries(categoryBreakdown).map(([category, data]: [string, any]) => {
+          ${Object.entries(categoryBreakdown)
+        .sort(([catA], [catB]) => {
+          const order = ['Foundation', 'Wall', 'Roofing', 'Openings', 'Plastering', 'Flooring', 'Painting'];
+          const indexA = order.indexOf(catA);
+          const indexB = order.indexOf(catB);
+          if (indexA === -1 && indexB === -1) return catA.localeCompare(catB);
+          if (indexA === -1) return 1;
+          if (indexB === -1) return -1;
+          return indexA - indexB;
+        })
+        .map(([category, data]: [string, any]) => {
         const categoryEstimates = estimates.filter(e => e.category === category);
         return `
               <div class="category-card">
@@ -368,9 +410,14 @@ export default function EstimateResultScreen({ route, navigation }: any) {
                     <Text style={styles.itemName}>{item.itemName}</Text>
                     {item.notes && <Text style={styles.itemNotes}>{item.notes}</Text>}
                   </View>
-                  <TouchableOpacity onPress={() => handleDelete(item.id)} style={{ padding: 8 }}>
-                    <Ionicons name="trash-outline" size={16} color="#ef4444" />
-                  </TouchableOpacity>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <TouchableOpacity onPress={() => handleEditEstimate(item)} style={styles.editButton}>
+                      <Ionicons name="pencil-outline" size={16} color="#315b76" />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => handleDelete(item.id)} style={{ padding: 8 }}>
+                      <Ionicons name="trash-outline" size={16} color="#ef4444" />
+                    </TouchableOpacity>
+                  </View>
                 </View>
 
                 {/* Budget Level & Type Badge */}
@@ -667,9 +714,20 @@ export default function EstimateResultScreen({ route, navigation }: any) {
             </View>
 
             <View style={styles.cardsContainer}>
-              {Object.entries(categoryBreakdown).map(([category, data]: [string, any]) => (
-                <CategoryCard key={category} category={category} data={data} />
-              ))}
+              {Object.entries(categoryBreakdown)
+                .sort(([catA], [catB]) => {
+                  const order = ['Foundation', 'Wall', 'Roofing', 'Openings', 'Plastering', 'Flooring', 'Painting'];
+                  const indexA = order.indexOf(catA);
+                  const indexB = order.indexOf(catB);
+
+                  if (indexA === -1 && indexB === -1) return catA.localeCompare(catB);
+                  if (indexA === -1) return 1;
+                  if (indexB === -1) return -1;
+                  return indexA - indexB;
+                })
+                .map(([category, data]: [string, any]) => (
+                  <CategoryCard key={category} category={category} data={data} />
+                ))}
             </View>
 
             {/* FOOTER ACTIONS */}
@@ -788,6 +846,7 @@ const styles = StyleSheet.create({
 
   // Enhanced Estimate Details
   estimateItemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 10, marginBottom: 10 },
+  editButton: { padding: 8, marginRight: 4, backgroundColor: '#eef6fb', borderRadius: 8 },
 
   badgeRow: { flexDirection: 'row', gap: 8, marginBottom: 12, flexWrap: 'wrap' },
   badge: { backgroundColor: '#f0f4f8', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0' },

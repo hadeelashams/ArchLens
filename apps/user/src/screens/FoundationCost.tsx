@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { 
   View, Text, StyleSheet, TouchableOpacity, ScrollView, 
   Dimensions, Platform, Alert, ActivityIndicator 
@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons'; 
 import { StatusBar } from 'expo-status-bar';
 import { db, auth } from '@archlens/shared'; 
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, updateDoc, doc, getDoc } from 'firebase/firestore';
 
 const { width } = Dimensions.get('window');
 
@@ -61,8 +61,11 @@ export default function FoundationCost({ route, navigation }: any) {
     foundationType,
     foundationConfig, 
     selections, 
-    tier 
+    tier,
+    editEstimateId
   } = route.params;
+
+  const fetchedRef = useRef(false);
 
   const [saving, setSaving] = useState(false);
 
@@ -347,7 +350,7 @@ export default function FoundationCost({ route, navigation }: any) {
     setSaving(true);
     try {
       const systemName = foundationType === 'RCC' ? 'RCC Footing' : 'Stone Masonry';
-      await addDoc(collection(db, 'estimates'), {
+      const estimatePayload = {
         projectId,
         userId: auth.currentUser.uid,
         itemName: `Foundation Materials (${systemName})`,
@@ -356,10 +359,16 @@ export default function FoundationCost({ route, navigation }: any) {
         lineItems: calculation.items,
         area: parseFloat(area),
         foundationType,
-        createdAt: serverTimestamp()
-      });
-      Alert.alert("Success", "Estimate saved successfully.");
-      navigation.navigate('ProjectSummary', { projectId }); 
+      };
+      if (editEstimateId) {
+        await updateDoc(doc(db, 'estimates', editEstimateId), { ...estimatePayload, updatedAt: serverTimestamp() });
+        Alert.alert("Updated", "Foundation estimate updated successfully.");
+        navigation.navigate('EstimateResult', { projectId });
+      } else {
+        await addDoc(collection(db, 'estimates'), { ...estimatePayload, createdAt: serverTimestamp() });
+        Alert.alert("Success", "Estimate saved successfully.");
+        navigation.navigate('ProjectSummary', { projectId });
+      } 
     } catch (e: any) {
       Alert.alert("Error", e.message);
     } finally {

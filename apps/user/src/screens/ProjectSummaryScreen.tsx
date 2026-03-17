@@ -29,10 +29,10 @@ export default function ProjectSummaryScreen({ route, navigation }: any) {
         'Foundation': 'home',
         'Wall': 'view-grid-plus',
         'Roofing': 'home-roof',
+        'Openings': 'door-open',
+        'Plastering': 'texture',
         'Flooring': 'view-module',
         'Painting': 'format-paint',
-        'Plastering': 'texture',
-        'Openings': 'door',
     };
 
     useEffect(() => {
@@ -232,14 +232,24 @@ export default function ProjectSummaryScreen({ route, navigation }: any) {
                         <View style={styles.breakdownContainer}>
                             <Text style={styles.breakdownTitle}>Cost Breakdown by Category</Text>
                             <View style={styles.breakdownGrid}>
-                                {Object.entries(categoryBreakdown).map(([category, data]: [string, any]) => (
-                                    <View key={category} style={styles.breakdownCard}>
-                                        <MaterialCommunityIcons name={categoryIcons[category] || "calculator-variant"} size={24} color="#315b76" />
-                                        <Text style={styles.breakdownCategory}>{category}</Text>
-                                        <Text style={styles.breakdownAmount}>₹{Math.round(data.total).toLocaleString()}</Text>
-                                        <Text style={styles.breakdownCount}>{data.items} item(s)</Text>
-                                    </View>
-                                ))}
+                                {Object.entries(categoryBreakdown)
+                                    .sort(([catA], [catB]) => {
+                                        const order = ['Foundation', 'Wall', 'Roofing', 'Openings', 'Plastering', 'Flooring', 'Painting'];
+                                        const indexA = order.indexOf(catA);
+                                        const indexB = order.indexOf(catB);
+                                        if (indexA === -1 && indexB === -1) return catA.localeCompare(catB);
+                                        if (indexA === -1) return 1;
+                                        if (indexB === -1) return -1;
+                                        return indexA - indexB;
+                                    })
+                                    .map(([category, data]: [string, any]) => (
+                                        <View key={category} style={styles.breakdownCard}>
+                                            <MaterialCommunityIcons name={categoryIcons[category] || "calculator-variant"} size={24} color="#315b76" />
+                                            <Text style={styles.breakdownCategory}>{category}</Text>
+                                            <Text style={styles.breakdownAmount}>₹{Math.round(data.total).toLocaleString()}</Text>
+                                            <Text style={styles.breakdownCount}>{data.items} item(s)</Text>
+                                        </View>
+                                    ))}
                             </View>
                         </View>
 

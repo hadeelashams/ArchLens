@@ -70,18 +70,20 @@ export type RootStackParamList = {
   ConstructionLevel: { totalArea: number; projectId: string; rooms: any[] };
   ProjectSummary: { projectId: string };
   MaterialRates: undefined;
-  FoundationSelection: { totalArea: number; projectId: string };
+  FoundationSelection: { totalArea: number; projectId: string; tier?: string; editEstimateId?: string };
 
   FoundationCost: {
     projectId: string;
     area: number | string;
-    depth: string;
-    activeMethod: string;
+    tier: string;
+    foundationType: string;
+    foundationConfig: any;
     selections: any;
+    editEstimateId?: string;
   };
 
   // Other Estimates
-  WallDetails: { totalArea: number; projectId: string; rooms: any[]; tier: string };
+  WallDetails: { totalArea: number; projectId: string; rooms: any[]; tier: string; wallComposition?: any; editEstimateId?: string };
   WallCostSummary: {
     totalArea: number;
     rooms: any[];
@@ -101,7 +103,7 @@ export type RootStackParamList = {
     sand: any;
     aiInsights?: any;
   };
-  RoofingScreen: { totalArea: number; projectId: string; tier: string };
+  RoofingScreen: { totalArea: number; projectId: string; tier: string; rooms?: any[]; wallComposition?: any; editEstimateId?: string };
   RoofingCostScreen: {
     projectId: string; tier: string; roofType: string;
     roofArea: string; slabThickness: string; openingDeduction: string;
@@ -109,9 +111,9 @@ export type RootStackParamList = {
     parapetHeight: string; parapetThickness: string;
     selections: any;
   };
-  FlooringScreen: { totalArea: number; projectId: string; tier: string };
-  PaintingScreen: { totalArea: number; projectId: string; tier: string };
-  PlasteringScreen: { totalArea: number; projectId: string; tier: string; wallComposition?: any };
+  FlooringScreen: { totalArea: number; projectId: string; tier: string; editEstimateId?: string };
+  PaintingScreen: { totalArea: number; projectId: string; tier: string; rooms?: any[]; editEstimateId?: string };
+  PlasteringScreen: { totalArea: number; projectId: string; tier: string; wallComposition?: any; rooms?: any[]; editEstimateId?: string };
   OpeningsScreen: { totalArea: number; projectId: string; tier: string; rooms?: any[] };
   OpeningsCostEstimation: {
     projectId: string;

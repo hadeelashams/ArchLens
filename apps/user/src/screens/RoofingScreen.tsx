@@ -1,11 +1,11 @@
-﻿import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, TextInput, Image, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { db, getRoofingPerspectives, CONSTRUCTION_HIERARCHY } from '@archlens/shared';
 import type { RoofingPerspective } from '@archlens/shared';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, getDoc, doc } from 'firebase/firestore';
 
 const { width } = Dimensions.get('window');
 
@@ -77,7 +77,7 @@ const getPerspMeta = (type?: string) =>
   PERSP_META[type ?? ''] ?? { color: '#315b76', icon: 'star-outline', shortLabel: type ?? 'Option' };
 
 export default function RoofingScreen({ route, navigation }: any) {
-  const { totalArea: passedArea, projectId, tier = 'Standard' } = route.params || {};
+  const { totalArea: passedArea, projectId, tier = 'Standard', editEstimateId } = route.params || {};
 
   const [loading, setLoading] = useState(true);
   const [materials, setMaterials] = useState<any[]>([]);
@@ -94,6 +94,7 @@ export default function RoofingScreen({ route, navigation }: any) {
   const [roofArea, setRoofArea] = useState(String(passedArea || 1000));
   const [openingDeduction, setOpeningDeduction] = useState('5');
   const [pitchDropdownOpen, setPitchDropdownOpen] = useState(false);
+  const fetchedRef = useRef(false);
 
   // ── Tier picker helper ────────────────────────────────────────────────────
   const pickByTier = (items: any[]) => {
@@ -212,6 +213,40 @@ export default function RoofingScreen({ route, navigation }: any) {
       }));
     }
   }, [roofShape, coveringChoice]);
+
+  // ── Load existing estimate if editing ─────────────────────────────────────
+  useEffect(() => {
+    const loadExistingEstimate = async () => {
+      if (editEstimateId && materials.length > 0 && !fetchedRef.current) {
+        fetchedRef.current = true;
+        try {
+          const docSnap = await getDoc(doc(db, 'estimates', editEstimateId));
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            // Restore roof settings
+            if (data.roofType) setRoofType(data.roofType);
+            if (data.area) setRoofArea(String(data.area));
+            // Restore selections
+            if (data.lineItems && Array.isArray(data.lineItems)) {
+              const restored: Record<string, any> = {};
+              data.lineItems.forEach((item: any) => {
+                if (item.materialId) {
+                  const mat = materials.find((m: any) => m.id === item.materialId);
+                  if (mat && item.type) {
+                    restored[`${data.roofType || roofType}_${item.type}`] = mat;
+                  }
+                }
+              });
+              if (Object.keys(restored).length > 0) setSelections(restored);
+            }
+          }
+        } catch (e) {
+          console.error('Error loading existing estimate:', e);
+        }
+      }
+    };
+    loadExistingEstimate();
+  }, [editEstimateId, materials.length]);
 
   // ── Derive structural group name and options for the current roofType ─────
   const structuralGroupName = roofShape === 'flat' ? 'Structural Support' : 'Truss Structure';
@@ -378,6 +413,7 @@ export default function RoofingScreen({ route, navigation }: any) {
       pitchRatio: roofShape === 'flat' ? '0' : pitchRatio,
       selectedCovering,
       selections: cleaned,
+      editEstimateId,
     });
   };
 

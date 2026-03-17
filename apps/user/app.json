@@ -6,6 +6,7 @@
     "version": "1.0.0",
     "scheme": "archlens",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
@@ -14,11 +15,13 @@
     },
     "ios": {
       "supportsTabletMode": true,
-      "bundleIdentifier": "com.archlens.user"
+      "bundleIdentifier": "com.archlens.user",
+      "icon": "./assets/icon.png"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#001B3D"
       },
       "package": "com.archlens.user"
     },

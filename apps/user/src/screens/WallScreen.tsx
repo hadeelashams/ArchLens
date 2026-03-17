@@ -11,7 +11,7 @@ import { useWallCalculations } from '../hooks/useWallCalculations';
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export default function WallScreen({ route, navigation }: any) {
-  const { totalArea = 1000, rooms = [], projectId, tier = 'Standard', wallComposition } = route.params || {};
+  const { totalArea = 1000, rooms = [], projectId, tier = 'Standard', wallComposition, editEstimateId } = route.params || {};
 
   //  All business logic lives in the hook 
   const {
@@ -33,7 +33,7 @@ export default function WallScreen({ route, navigation }: any) {
     compositionDetected,
     materialSelectionMode,
     calculation, systemCosts, budgetViolations,
-  } = useWallCalculations({ totalArea, rooms, tier, wallComposition, projectId });
+  } = useWallCalculations({ totalArea, rooms, tier, wallComposition, projectId, editEstimateId });
 
   //  Pure UI state (never drives calculations) 
   const [wallThicknessError, setWallThicknessError] = useState<string | null>(null);
@@ -532,6 +532,7 @@ export default function WallScreen({ route, navigation }: any) {
               sand: selections['Sand'],
               finishPreference, materialSelectionMode,
               systemCosts, budgetViolations,
+              editEstimateId,
             });
           }}
         >

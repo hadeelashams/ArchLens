@@ -11,7 +11,7 @@ import {
   WALL_TYPE_SPECS,
   auth
 } from '@archlens/shared';
-import { collection, serverTimestamp, addDoc } from 'firebase/firestore';
+import { collection, serverTimestamp, addDoc, updateDoc, doc } from 'firebase/firestore';
 
 const { width } = Dimensions.get('window');
 
@@ -47,7 +47,8 @@ export default function WallCostSummaryScreen({ route, navigation }: any) {
     finishPreference = null,
     materialSelectionMode = { loadBearing: 'manual', partition: 'manual' },
     systemCosts = { loadBearing: 0, partition: 0 },
-    budgetViolations = { loadBearing: { violated: false, difference: 0 }, partition: { violated: false, difference: 0 } }
+    budgetViolations = { loadBearing: { violated: false, difference: 0 }, partition: { violated: false, difference: 0 } },
+    editEstimateId
   } = route.params || {};
 
   const [saving, setSaving] = useState(false);
@@ -273,10 +274,7 @@ export default function WallCostSummaryScreen({ route, navigation }: any) {
           jointThickness: `${jointThickness} in`,
           deduction: `${openingDeduction}%`,
         },
-        createdAt: serverTimestamp()
       };
-
-      await addDoc(collection(db, 'estimates'), estimateData);
 
       const detectedWallComposition = {
         loadBearingBrick: loadBearingBrick,
@@ -290,8 +288,15 @@ export default function WallCostSummaryScreen({ route, navigation }: any) {
         confidence: 0.95
       };
 
-      Alert.alert("Success", "Wall Estimate saved successfully.");
-      navigation.navigate('ProjectSummary', { projectId, wallComposition: detectedWallComposition });
+      if (editEstimateId) {
+        await updateDoc(doc(db, 'estimates', editEstimateId), { ...estimateData, updatedAt: serverTimestamp() });
+        Alert.alert("Updated", "Wall estimate updated successfully.");
+        navigation.navigate('EstimateResult', { projectId });
+      } else {
+        await addDoc(collection(db, 'estimates'), { ...estimateData, createdAt: serverTimestamp() });
+        Alert.alert("Success", "Wall Estimate saved successfully.");
+        navigation.navigate('ProjectSummary', { projectId, wallComposition: detectedWallComposition });
+      }
     } catch (e: any) {
       Alert.alert("Error", e.message);
     } finally {

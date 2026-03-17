@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     View, Text, StyleSheet, TouchableOpacity, ScrollView,
     Image, ActivityIndicator, Alert, Modal, FlatList
@@ -7,10 +7,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useOpeningsCalculations } from '../hooks/useOpeningsCalculations';
 import { db, auth, generateText, extractStructuredData } from '@archlens/shared';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore';
 
 export default function OpeningsScreen({ route, navigation }: any) {
-    const { totalArea = 1000, projectId, tier = 'Standard', rooms = [] } = route.params || {};
+    const { totalArea = 1000, projectId, tier = 'Standard', rooms = [], editEstimateId } = route.params || {};
     const { loading, materials } = useOpeningsCalculations({ totalArea, tier, rooms });
 
     const [selectedRoomId, setSelectedRoomId] = useState(rooms[0]?.id || null);
@@ -29,8 +29,70 @@ export default function OpeningsScreen({ route, navigation }: any) {
     );
     const [aiApplied, setAiApplied] = useState(false);
     const [aiLoading, setAiLoading] = useState(false);
+    const [loadingEstimate, setLoadingEstimate] = useState(!!editEstimateId);
+    const fetchedRef = useRef(false);
 
+    useEffect(() => {
+        const fetchExistingEstimate = async () => {
+            if (editEstimateId && materials.length > 0 && !fetchedRef.current) {
+                fetchedRef.current = true;
+                try {
+                    const docSnap = await getDoc(doc(db, 'estimates', editEstimateId));
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        
+                        setRoomsData((prev: any) => prev.map((r: any) => {
+                            let selDoorId: string | undefined;
+                            let selWindowId: string | undefined;
+                            let selDoorCount: number | undefined;
+                            let selWindowCount: number | undefined;
 
+                            if (data.roomSelections && data.roomSelections[r.id]) {
+                                const sel = data.roomSelections[r.id];
+                                selDoorId = sel.doorId;
+                                selWindowId = sel.windowId;
+                                selDoorCount = sel.doorCount;
+                                selWindowCount = sel.windowCount;
+                            } else if (data.lineItems) {
+                                // Fallback for older estimates without roomSelections
+                                const dItem = data.lineItems.find((li: any) => li.roomId === r.id && li.type === 'door');
+                                const wItem = data.lineItems.find((li: any) => li.roomId === r.id && li.type === 'window');
+                                if (dItem) {
+                                    selDoorId = dItem.materialId || dItem.id;
+                                    selDoorCount = dItem.quantity;
+                                }
+                                if (wItem) {
+                                    selWindowId = wItem.materialId || wItem.id;
+                                    selWindowCount = wItem.quantity;
+                                }
+                            }
+
+                            if (selDoorId || selWindowId || selDoorCount !== undefined || selWindowCount !== undefined) {
+                                const doorMat = selDoorId ? materials.find((m: any) => m.id === selDoorId) : undefined;
+                                const windowMat = selWindowId ? materials.find((m: any) => m.id === selWindowId) : undefined;
+                                
+                                return {
+                                    ...r,
+                                    doorCount: selDoorCount ?? r.doorCount,
+                                    windowCount: selWindowCount ?? r.windowCount,
+                                    doorMaterial: doorMat || r.doorMaterial,
+                                    windowMaterial: windowMat || r.windowMaterial,
+                                };
+                            }
+                            return r;
+                        }));
+                    }
+                } catch (error) {
+                    console.error("Error fetching existing estimate:", error);
+                } finally {
+                    setLoadingEstimate(false);
+                }
+            } else if (!editEstimateId) {
+                setLoadingEstimate(false);
+            }
+        };
+        fetchExistingEstimate();
+    }, [editEstimateId, materials.length]);
 
 
     // AI-Powered Recommendation System with Batch Processing
@@ -224,12 +286,15 @@ Return ONLY a JSON object in this exact format:
             totalArea,
             tier,
             roomsData: roomsData.filter((r: any) => r.doorMaterial || r.windowMaterial),
-            totalCost
+            totalCost,
+            editEstimateId
         });
     };
 
 
-    if (loading) {
+    const isScreenLoading = loading || loadingEstimate;
+
+    if (isScreenLoading) {
         return (
             <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' }}>
                 <ActivityIndicator size="large" color="#315b76" />
@@ -258,7 +323,14 @@ Return ONLY a JSON object in this exact format:
                         selected?.id === material.id && { backgroundColor: '#eef2f7', borderColor: accentColor, borderWidth: 2 },
                         material.id === recommendedId && { borderColor: '#0ea5e9', borderWidth: 1 }
                     ]}
-                    onPress={() => updateRoomData(field, material)}
+                    onPress={() => {
+                        // Toggle: if already selected, deselect (set to null), otherwise select
+                        if (selected?.id === material.id) {
+                            updateRoomData(field, null);
+                        } else {
+                            updateRoomData(field, material);
+                        }
+                    }}
                 >
                     {material.id === recommendedId && (
                         <View style={styles.recommendedBadge}>

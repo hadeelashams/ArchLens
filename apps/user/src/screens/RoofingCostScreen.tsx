@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { db, auth } from '@archlens/shared';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, updateDoc, doc } from 'firebase/firestore';
 
 const { width } = Dimensions.get('window');
 
@@ -106,6 +106,7 @@ export default function RoofingCostScreen({ route, navigation }: any) {
      */
     pitchRatio = '0',
     selections = {},            // Record<layerKey_type, materialObject>
+    editEstimateId,
   } = route.params || {};
 
   const [saving, setSaving] = useState(false);
@@ -510,20 +511,26 @@ export default function RoofingCostScreen({ route, navigation }: any) {
     if (!auth.currentUser) return Alert.alert('Error', 'User not authenticated.');
     setSaving(true);
     try {
-      await addDoc(collection(db, 'estimates'), {
+      const estimatePayload = {
         projectId,
         userId: auth.currentUser.uid,
         itemName: `Roofing Materials (${roofType})`,
-        category: 'Roof',
+        category: 'Roofing',
         roofType,
         totalCost: calculation.grandTotal,
         lineItems: calculation.items,
         area: parseFloat(roofArea),
         tier,
-        createdAt: serverTimestamp(),
-      });
-      Alert.alert('✅ Saved!', 'Roofing estimate saved successfully.');
-      navigation.navigate('ProjectSummary', { projectId });
+      };
+      if (editEstimateId) {
+        await updateDoc(doc(db, 'estimates', editEstimateId), { ...estimatePayload, updatedAt: serverTimestamp() });
+        Alert.alert('✅ Updated!', 'Roofing estimate updated successfully.');
+        navigation.navigate('EstimateResult', { projectId });
+      } else {
+        await addDoc(collection(db, 'estimates'), { ...estimatePayload, createdAt: serverTimestamp() });
+        Alert.alert('✅ Saved!', 'Roofing estimate saved successfully.');
+        navigation.navigate('ProjectSummary', { projectId });
+      }
     } catch (e: any) {
       Alert.alert('Error', e.message);
     } finally {

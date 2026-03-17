@@ -4,12 +4,32 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyDDg0WokHarkPcBtAtmVa6zJW7FLdTVfJg",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "arch-lens.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "arch-lens",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "arch-lens.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "931000220036",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:931000220036:web:e67468cf5f2cdf93a7c5d1",
+        "EXPO_PUBLIC_GENAI_API_KEY": "AIzaSyAqV--_gq361G3baudhL-Q6pYxR2_qviiY",
+        "EXPO_PUBLIC_AI_BACKEND": "firebase"
       }
     },
     "production": {
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyDDg0WokHarkPcBtAtmVa6zJW7FLdTVfJg",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "arch-lens.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "arch-lens",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "arch-lens.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "931000220036",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:931000220036:web:e67468cf5f2cdf93a7c5d1",
+        "EXPO_PUBLIC_GENAI_API_KEY": "AIzaSyAqV--_gq361G3baudhL-Q6pYxR2_qviiY",
+        "EXPO_PUBLIC_AI_BACKEND": "firebase"
       }
     }
   }

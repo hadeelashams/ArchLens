@@ -13,9 +13,9 @@
  * The screen itself only holds pure-UI state (dropdowns, modals, filter chips).
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Alert } from 'react-native';
-import { collection, query, onSnapshot } from 'firebase/firestore';
+import { collection, query, onSnapshot, getDoc, doc } from 'firebase/firestore';
 import {
   db,
   detectWallComposition,
@@ -56,6 +56,7 @@ interface UseWallCalculationsParams {
   tier: string;
   wallComposition: any;
   projectId?: string;
+  editEstimateId?: string;
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
@@ -66,7 +67,11 @@ export function useWallCalculations({
   tier,
   wallComposition,
   projectId,
+  editEstimateId,
 }: UseWallCalculationsParams) {
+
+  // ── Refs ────────────────────────────────────────────────────────────────────
+  const fetchedRef = useRef(false);
 
   // ── Data & loading ──────────────────────────────────────────────────────────
   const [loading, setLoading] = useState(true);
@@ -139,6 +144,48 @@ export function useWallCalculations({
     });
     return unsub;
   }, []);
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // 1.1 Load existing estimate if editing
+  // ════════════════════════════════════════════════════════════════════════════
+  useEffect(() => {
+    const loadExistingEstimate = async () => {
+      if (editEstimateId && materials.length > 0 && !fetchedRef.current) {
+        fetchedRef.current = true;
+        try {
+          const docSnap = await getDoc(doc(db, 'estimates', editEstimateId));
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            // Restore dimensions
+            if (data.specifications) {
+              const { height, wallThickness, jointThickness, openingDeduction, partitionWallThickness } = data.specifications;
+              if (height) setHeight(String(height));
+              if (wallThickness) setWallThickness(String(wallThickness));
+              if (jointThickness) setJointThickness(String(jointThickness));
+              if (openingDeduction) setOpeningDeduction(String(openingDeduction));
+              if (partitionWallThickness) setPartitionWallThickness(parseFloat(String(partitionWallThickness)));
+            }
+            // Restore material selections
+            if (data.lineItems && Array.isArray(data.lineItems)) {
+              data.lineItems.forEach((item: any) => {
+                const mat = materials.find((m: any) => m.id === item.materialId);
+                if (mat) {
+                  if (item.materialName && item.materialName.includes('Load Bearing')) {
+                    setLoadBearingBrick(mat);
+                  } else if (item.materialName && item.materialName.includes('Partition')) {
+                    setPartitionBrick(mat);
+                  }
+                }
+              });
+            }
+          }
+        } catch (e) {
+          console.error('Error loading existing wall estimate:', e);
+        }
+      }
+    };
+    loadExistingEstimate();
+  }, [editEstimateId, materials.length]);
 
   // ════════════════════════════════════════════════════════════════════════════
   // 1.5  Process wall composition (Manual or Prop-based)

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   Dimensions, TextInput, Image, ActivityIndicator,
@@ -14,7 +14,7 @@ import {
   extractStructuredData,
   CONSTRUCTION_HIERARCHY,
 } from '@archlens/shared';
-import { collection, query, onSnapshot, serverTimestamp, doc, getDoc } from 'firebase/firestore';
+import { collection, query, onSnapshot, serverTimestamp, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { getProjectById } from '../services/projectService';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -28,7 +28,10 @@ const WINDOW_AREA_SQFT = 16; // Standard window 4' x 4'
 const MATERIAL_WASTE_FACTOR = 0.10; // 10% wastage for all materials
 
 export default function PaintingScreen({ route, navigation }: any) {
-  const { totalArea, projectId, tier, rooms = [] } = route.params || {};
+  const { totalArea, projectId, tier, rooms = [], editEstimateId } = route.params || {};
+
+  // --- REFS ---
+  const fetchedRef = useRef(false);
 
   // --- DATA STATE ---
   const [loading, setLoading] = useState(true);
@@ -116,6 +119,34 @@ export default function PaintingScreen({ route, navigation }: any) {
     });
     return unsub;
   }, []);
+
+  // 1.5. Load existing estimate if editing
+  useEffect(() => {
+    const loadExistingEstimate = async () => {
+      if (editEstimateId && materials.length > 0 && roomsData.length > 0 && !fetchedRef.current) {
+        fetchedRef.current = true;
+        try {
+          const docSnap = await getDoc(doc(db, 'estimates', editEstimateId));
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            if (data.lineItems && Array.isArray(data.lineItems)) {
+              setRoomsData((prev: any) => prev.map((room: any) => {
+                const roomItems = data.lineItems.filter((item: any) => item.roomId === room.id);
+                if (roomItems.length > 0) {
+                  const mat = materials.find((m: any) => m.id === roomItems[0].materialId);
+                  return { ...room, material: mat || room.material };
+                }
+                return room;
+              }));
+            }
+          }
+        } catch (e) {
+          console.error('Error loading existing painting estimate:', e);
+        }
+      }
+    };
+    loadExistingEstimate();
+  }, [editEstimateId, materials.length, roomsData.length]);
 
   // 2. Default Selections (Tier-based + Room-type aware)
   useEffect(() => {
@@ -374,7 +405,7 @@ Return ONLY a JSON object:
         }
       });
 
-      await createDocument('estimates', {
+      const estimatePayload = {
         projectId,
         userId: auth.currentUser.uid,
         itemName: 'Painting & Finishing',
@@ -386,11 +417,16 @@ Return ONLY a JSON object:
           exteriorCost: totals.exterior,
           roomCount: roomsData.length
         },
-        createdAt: serverTimestamp()
-      });
-
-      Alert.alert("Success", "Wall finishing estimate saved.");
-      navigation.navigate('ProjectSummary', { projectId });
+      };
+      if (editEstimateId) {
+        await updateDoc(doc(db, 'estimates', editEstimateId), { ...estimatePayload, updatedAt: serverTimestamp() });
+        Alert.alert("Updated", "Wall finishing estimate updated.");
+        navigation.navigate('EstimateResult', { projectId });
+      } else {
+        await createDocument('estimates', { ...estimatePayload, createdAt: serverTimestamp() });
+        Alert.alert("Success", "Wall finishing estimate saved.");
+        navigation.navigate('ProjectSummary', { projectId });
+      }
     } catch (e: any) {
       Alert.alert("Error", e.message);
     } finally {
